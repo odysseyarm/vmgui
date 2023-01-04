@@ -15,6 +15,14 @@ mod button;
 pub use self::button::*;
 mod form;
 pub use self::form::*;
+mod checkbox;
+pub use self::checkbox::*;
+mod colorbutton;
+pub use self::colorbutton::*;
+mod combobox;
+pub use self::combobox::*;
+mod datetimepicker;
+pub use self::datetimepicker::*;
 mod label;
 pub use self::label::*;
 mod window;
@@ -23,8 +31,14 @@ mod layout;
 pub use self::layout::*;
 mod entry;
 pub use self::entry::*;
+mod numericentry;
+pub use self::numericentry::*;
 mod progressbar;
 pub use self::progressbar::*;
+mod radiobuttons;
+pub use self::radiobuttons::*;
+mod textentry;
+pub use self::textentry::*;
 
 /// A generic UI control. Any UI control can be turned into this type.
 ///
