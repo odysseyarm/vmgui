@@ -18,6 +18,7 @@ project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 =======
 - `libui::layout!` macro for easier UI description
 - `libui::menu!` macro for main menu creation.
+- `MultilineEntry::new_nonwrapping()` constructor.
 
 ### Changed
 
