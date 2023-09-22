@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+    "libui-rs/iui",
+    "libui-rs/ui-sys",
+    "vision-module-gui"
+]
