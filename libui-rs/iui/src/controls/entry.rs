@@ -275,6 +275,13 @@ impl Combobox {
         }
     }
 
+    /// Clears the combination box.
+    pub fn clear(&self, _ctx: &UI) {
+        unsafe {
+            ui_sys::uiComboboxClear(self.uiCombobox)
+        }
+    }
+
     /// Returns the index of the currently selected option.
     pub fn selected(&self, _ctx: &UI) -> i32 {
         unsafe { ui_sys::uiComboboxSelected(self.uiCombobox) }
