@@ -1,54 +1,112 @@
-use std::time::Duration;
-
-use crate::packet::{Packet, Register, Port};
-
-mod packet;
+use iui::controls::{Button, GridAlignment, GridExpand, Group, Label, LayoutGrid, VerticalBox, Entry, HorizontalBox};
+use iui::prelude::*;
 
 fn main() {
-    let args = std::env::args().collect::<Vec<_>>();
-    let mut serial_port = serialport::new(&args[1], 115200).timeout(Duration::from_secs(3)).open().unwrap();
+    // Initialize the UI library
+    let ui = UI::init().expect("Couldn't initialize UI library");
+    // Create a window into which controls can be placed
+    let mut win = Window::new(&ui, "Test App", 200, 200, WindowType::NoMenubar);
 
-    let registers = [
-        (0x00, 0x02), // product ID
-        (0x00, 0x03), //
-        (0x00, 0x0f), // DSP noise threshold
-        (0x00, 0x0b), // DSP max area threshold
-        (0x00, 0x0c), //
-        (0x00, 0x10), // DSP orientation ratio
-        (0x00, 0x11), // DSP orientation factor
-        (0x00, 0x19), // DSP maximum object number
-        (0x01, 0x05), // sensor gain 1
-        (0x01, 0x06), // sensor gain 2
-        (0x01, 0x0e), // sensor exposure length
-        (0x01, 0x0f), //
-        (0x0c, 0x60), // interpolated resolution x
-        (0x0c, 0x61), //
-        (0x0c, 0x62), // interpolated resolution y
-        (0x0c, 0x63), //
-        (0x0c, 0x07), // frame period
-        (0x0c, 0x08), //
-        (0x0c, 0x09), //
-    ];
+    let mut grid = LayoutGrid::new(&ui);
+    grid.set_padded(&ui, true);
 
-    let mut buf = Vec::new();
-    for (bank, address) in registers {
-        println!("Reading bank {bank:x}, addr {address:x}");
-        let pkt = Packet::ReadRegister(Register {
-            port: Port::Nv,
-            bank,
-            address,
-        });
-        buf.clear();
-        buf.push(0xff);
-        pkt.serialize(&mut buf);
-        // println!("Write {buf:?}");
-        serial_port.write_all(&buf).unwrap();
-        serial_port.flush().unwrap();
-        buf.clear();
-        buf.resize(10, 0);
-        let bytes_read = serial_port.read(&mut buf).unwrap();
-        let resp = Packet::parse(&mut &buf[..bytes_read]);
-        // println!("Read {bytes_read} bytes: {:x?}", &buf[..bytes_read]);
-        println!("{resp:x?}");
-    }
+    let bank_label = Label::new(&ui, "Bank");
+    grid.append(
+        &ui,
+        bank_label.clone(),
+        0,
+        0,
+        1,
+        1,
+        GridExpand::Neither,
+        GridAlignment::End,
+        GridAlignment::Center,
+    );
+    let addr_label = Label::new(&ui, "Address");
+    grid.append(
+        &ui,
+        addr_label.clone(),
+        0,
+        1,
+        1,
+        1,
+        GridExpand::Neither,
+        GridAlignment::End,
+        GridAlignment::Center,
+    );
+    let data_label = Label::new(&ui, "Data");
+    grid.append(
+        &ui,
+        data_label.clone(),
+        0,
+        2,
+        1,
+        1,
+        GridExpand::Neither,
+        GridAlignment::End,
+        GridAlignment::Center,
+    );
+
+    let bank_input = Entry::new(&ui);
+    grid.append(
+        &ui,
+        bank_input.clone(),
+        1,
+        0,
+        1,
+        1,
+        GridExpand::Horizontal,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+    let addr_input = Entry::new(&ui);
+    grid.append(
+        &ui,
+        addr_input.clone(),
+        1,
+        1,
+        1,
+        1,
+        GridExpand::Horizontal,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+    let data_input = Entry::new(&ui);
+    grid.append(
+        &ui,
+        data_input.clone(),
+        1,
+        2,
+        1,
+        1,
+        GridExpand::Horizontal,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+
+    let mut buttons_hbox = HorizontalBox::new(&ui);
+    buttons_hbox.set_padded(&ui, true);
+    grid.append(&ui, buttons_hbox.clone(), 0, 3, 2, 1,
+        GridExpand::Horizontal,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+    let read_button = Button::new(&ui, "Read");
+    buttons_hbox.append(&ui, read_button.clone(), LayoutStrategy::Stretchy);
+    let write_button = Button::new(&ui, "Write");
+    buttons_hbox.append(&ui, write_button.clone(), LayoutStrategy::Stretchy);
+
+    // let mut loading = Label::new(&ui, "Loading");
+
+    win.set_child(&ui, grid);
+
+    win.show(&ui);
+    // Run the application
+    let mut i = 0;
+    let mut ev = ui.event_loop();
+    ev.on_tick(&ui, || {
+        println!("tick {i}");
+        i += 1;
+    });
+    ev.run(&ui);
 }
