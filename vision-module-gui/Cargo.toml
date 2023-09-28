@@ -9,3 +9,4 @@ default-run = "vision-module-gui"
 [dependencies]
 iui = { path = "../libui-rs/iui" }
 serialport = "4.2.2"
+specs = "0.20.0"
