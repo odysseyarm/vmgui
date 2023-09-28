@@ -10,3 +10,4 @@ default-run = "vision-module-gui"
 iui = { path = "../libui-rs/iui" }
 serialport = "4.2.2"
 specs = "0.20.0"
+tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync"] }

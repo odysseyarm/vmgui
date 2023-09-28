@@ -1,5 +1,7 @@
-use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::{Sender, Receiver};
+use tokio::runtime::Handle;
 use iui::controls::{Button, GridAlignment, GridExpand, Group, Label, LayoutGrid, VerticalBox, Entry, HorizontalBox, Combobox, Control};
 use iui::prelude::*;
 use specs::prelude::*;
@@ -8,16 +10,19 @@ struct Device {
     name: String,
 }
 
-struct Update(Arc<dyn Fn()+Send+Sync>);
+struct Update(Sender<()>);
 
-struct UpdateSys;
+struct UpdateSys {
+    handle: Handle,
+}
 
 impl<'a> System<'a> for UpdateSys {
     type SystemData = ReadStorage<'a, Update>;
 
     fn run(&mut self, update: Self::SystemData) {
-        for update in update.join() {
-            update.0();
+        for update in (&update).join() {
+            let tx = update.0.clone();
+            self.handle.spawn(async move { tx.send(()).await });
         }
     }
 }
@@ -26,25 +31,40 @@ impl Component for Update {
     type Storage = VecStorage<Self>;
 }
 
-struct View<T: Into<Control>> {
-    root: T,
+struct Controller {
+    channel: (Sender<()>, Receiver<()>),
+    update: Box<dyn Fn()>,
 }
 
-fn main() {
+impl Controller {
+    async fn run(&mut self) {
+        loop {
+            match self.channel.1.recv().await {
+                Some(()) => { (*(self.update))(); },
+                None => todo!(),
+            }
+        }
+    }
+}
+
+#[tokio::main]
+pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the UI library
     let ui = UI::init().expect("Couldn't initialize UI library");
+
     // Create a window into which controls can be placed
     let mut win = Window::new(&ui, "Test App", 200, 200, WindowType::NoMenubar);
 
     let mut grid = LayoutGrid::new(&ui);
     grid.set_padded(&ui, true);
 
-    let device_combobox_view = View {
-        root: Combobox::new(&ui),
-    };
+    let device_list = Arc::new(Mutex::new(Vec::<Device>::new()));
+
+    let device_combobox = Combobox::new(&ui);
+
     grid.append(
         &ui,
-        device_combobox_view.root.clone(),
+        device_combobox.clone(),
         0,
         0,
         1,
@@ -153,29 +173,44 @@ fn main() {
 
     // let mut loading = Label::new(&ui, "Loading");
 
-    let mut device_list: Vec<Device> = vec![];
-
     let mut world = World::new();
     world.register::<Update>();
 
-    world.create_entity().with(Update(Arc::new(|| {
-        // todo
-        // device_combobox_view.root.clear(&ui);
-        // for device in device_list {
-        //     device_combobox_view.root.append(&ui, device.name.as_str());
-        // }
-    }))).build();
+    {
+        let ui2 = ui.clone();
+        let device_combobox = device_combobox.clone();
+        let device_list_clone = device_list.clone();
 
-    let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys, "update_sys", &[]).build();
+        let device_combobox_controller = Arc::new(tokio::sync::Mutex::new(Controller {
+            channel: mpsc::channel(10),
+            update: Box::new(move || {
+                device_combobox.clear(&ui2);
+                for device in &(*device_list_clone.lock().unwrap()) {
+                    device_combobox.append(&ui2, device.name.as_str());
+                }
+            }),
+        }));
 
-    refresh_button.on_clicked(&ui, move |_| {
-        device_list = vec![
-            Device{name: String::from("Device 1")},
-            Device{name: String::from("Device 2")},
-            Device{name: String::from("Device 3")},
-        ];
-        update_dispatcher.dispatch(&mut world);
-    });
+        let view = device_combobox_controller.clone();
+        ui.spawn(async move { view.lock().await.run().await });
+
+        world.create_entity().with(Update(device_combobox_controller.clone().lock().await.channel.0.clone())).build();
+    }
+
+    let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys{handle: Handle::current()}, "update_sys", &[]).build();
+
+    {
+        let device_list = device_list.clone();
+
+        refresh_button.on_clicked(&ui, move |_| {
+            *device_list.lock().unwrap() = vec![
+                Device { name: String::from("Device 1") },
+                Device { name: String::from("Device 2") },
+                Device { name: String::from("Device 3") },
+            ];
+            update_dispatcher.dispatch(&mut world);
+        });
+    }
 
     win.set_child(&ui, grid);
 
@@ -188,4 +223,6 @@ fn main() {
         i += 1;
     });
     ev.run(&ui);
+
+    Ok(())
 }
