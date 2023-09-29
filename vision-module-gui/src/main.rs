@@ -65,7 +65,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     grid.append(
         &ui,
         device_combobox.clone(),
-        0,
+        1,
         0,
         1,
         1,
@@ -77,7 +77,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     grid.append(
         &ui,
         refresh_button.clone(),
-        1,
+        2,
         0,
         1,
         1,
@@ -222,7 +222,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("tick {i}");
         i += 1;
     });
-    ev.run(&ui);
+    async {
+        ev.run(&ui);
+    }.await;
 
     Ok(())
 }
