@@ -2,9 +2,11 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Sender, Receiver};
 use tokio::runtime::Handle;
-use iui::controls::{Button, GridAlignment, GridExpand, Group, Label, LayoutGrid, VerticalBox, Entry, HorizontalBox, Combobox, Control};
+use iui::controls::{Button, GridAlignment, GridExpand, Group, Label, LayoutGrid, VerticalBox, Entry, HorizontalBox, HorizontalSeparator, Combobox, Control, Spacer};
 use iui::prelude::*;
 use specs::prelude::*;
+use iui::controls::GridExpand::Vertical;
+use iui::menus::Menu;
 
 struct Device {
     name: String,
@@ -54,9 +56,50 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a window into which controls can be placed
     let mut win = Window::new(&ui, "Test App", 200, 200, WindowType::NoMenubar);
+    win.set_margined(&ui, false);
+
+    let mut vert_box = VerticalBox::new(&ui);
+    vert_box.set_padded(&ui, false);
+
+    let btn = Button::new(&ui, "");
+
+    let button_1 = Button::new(&ui, "Menu Button 1");
+    let button_2 = Button::new(&ui, "Menu Button 2");
+
+    let mut grid = LayoutGrid::new(&ui);
+    grid.set_padded(&ui, false);
+    grid.append(
+        &ui,
+        button_1.clone(),
+        0,
+        0,
+        1,
+        1,
+        GridExpand::Vertical,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+    grid.append(
+        &ui,
+        button_2.clone(),
+        1,
+        0,
+        1,
+        1,
+        GridExpand::Vertical,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+
+    vert_box.append(&ui, grid.clone(), LayoutStrategy::Compact);
+
+    vert_box.append(&ui, HorizontalSeparator::new(&ui), LayoutStrategy::Compact);
+    vert_box.append(&ui, Spacer::new(&ui), LayoutStrategy::Compact);
 
     let mut grid = LayoutGrid::new(&ui);
     grid.set_padded(&ui, true);
+
+    vert_box.append(&ui, grid.clone(), LayoutStrategy::Stretchy);
 
     let device_list = Arc::new(Mutex::new(Vec::<Device>::new()));
 
@@ -212,7 +255,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    win.set_child(&ui, grid);
+    win.set_child(&ui, vert_box);
 
     win.show(&ui);
     // Run the application
