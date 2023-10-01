@@ -24,6 +24,7 @@ extern crate failure;
 extern crate libc;
 extern crate ui_sys;
 
+mod builder;
 mod callback_helpers;
 mod compile_tests;
 pub mod controls;
