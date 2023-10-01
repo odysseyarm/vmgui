@@ -55,23 +55,29 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the UI library
     let ui = UI::init().expect("Couldn't initialize UI library");
 
-    // Create a window into which controls can be placed
-    let mut win = Window::new(&ui, "Test App", 200, 200, WindowType::NoMenubar);
-    win.set_margined(&ui, false);
+    // Create a main_window into which controls can be placed
+    let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
+
+    let mut config_win = Window::new(&ui, "Config", 100, 100, WindowType::NoMenubar);
+    {
+        let ui2 = ui.clone();
+        config_win.on_closing(&ui, move |config_win| {
+            config_win.hide(&ui2);
+        });
+    }
 
     let mut vert_box = VerticalBox::new(&ui);
-    vert_box.set_padded(&ui, false);
+    vert_box.set_padded(&ui, true);
 
-    let btn = Button::new(&ui, "");
-
-    let button_1 = Button::new(&ui, "Menu Button 1");
-    let button_2 = Button::new(&ui, "Menu Button 2");
+    let mut config_button = Button::new(&ui, "Config");
+    let track_button = Button::new(&ui, "Start Tracking");
+    let test_button = Button::new(&ui, "Run Test");
 
     let mut grid = LayoutGrid::new(&ui);
     grid.set_padded(&ui, false);
     grid.append(
         &ui,
-        button_1.clone(),
+        config_button.clone(),
         0,
         0,
         1,
@@ -82,8 +88,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     grid.append(
         &ui,
-        button_2.clone(),
+        track_button.clone(),
         1,
+        0,
+        1,
+        1,
+        GridExpand::Vertical,
+        GridAlignment::Fill,
+        GridAlignment::Fill,
+    );
+    grid.append(
+        &ui,
+        test_button.clone(),
+        2,
         0,
         1,
         1,
@@ -97,10 +114,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     vert_box.append(&ui, HorizontalSeparator::new(&ui), LayoutStrategy::Compact);
     vert_box.append(&ui, Spacer::new(&ui), LayoutStrategy::Compact);
 
+    main_win.set_child(&ui, vert_box);
+
     let mut grid = LayoutGrid::new(&ui);
     grid.set_padded(&ui, true);
-
-    vert_box.append(&ui, grid.clone(), LayoutStrategy::Stretchy);
 
     let device_list = Arc::new(Mutex::new(Vec::<Device>::new()));
 
@@ -215,7 +232,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let write_button = Button::new(&ui, "Write");
     buttons_hbox.append(&ui, write_button.clone(), LayoutStrategy::Stretchy);
 
-    // let mut loading = Label::new(&ui, "Loading");
+    config_win.set_child(&ui, grid);
 
     let mut world = World::new();
     world.register::<Update>();
@@ -243,6 +260,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys{handle}, "update_sys", &[]).build();
 
     {
+        let ui2 = ui.clone();
+        config_button.on_clicked(&ui, move |_| {
+            config_win.show(&ui2);
+        });
+    }
+
+    {
         let device_list = device_list.clone();
 
         refresh_button.on_clicked(&ui, move |_| {
@@ -255,9 +279,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    win.set_child(&ui, vert_box);
+    main_win.show(&ui);
 
-    win.show(&ui);
     // Run the application
     let mut i = 0;
     let mut ev = ui.event_loop();
