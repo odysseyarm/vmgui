@@ -1,12 +1,15 @@
 use std::thread;
+use std::time::Duration;
 
-use iui::controls::{
-    Button, Combobox, Control, Entry, GridAlignment as GA, GridExpand as GE, Group, HorizontalBox,
-    HorizontalSeparator, Label, LayoutGrid, Spacer, VerticalBox,
-};
 use iui::menus::Menu;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith};
+
+// Things to avoid doing
+// * Accessing signals outside of the main thread
+//     * Getting panics, setting fails silently
+//     * by extension, don't access signals from tokio::spawn, use ui.spawn
+// * Blocking in the main thread or in callbacks
 
 #[derive(Clone, Debug)]
 struct Device {
@@ -23,10 +26,16 @@ trait CloneButShorter: Clone {
 impl<T: Clone> CloneButShorter for T {}
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let tokio_rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let tokio_handle = tokio_rt.handle();
+    let _enter = tokio_handle.enter();
     let leptos_rt = leptos_reactive::create_runtime();
     // Initialize the UI library
     let ui = UI::init().expect("Couldn't initialize UI library");
+    let ui_ctx = ui.async_context();
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
@@ -70,33 +79,92 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    let device_list_loading = create_rw_signal(false);
     let device_list = create_rw_signal(Vec::<Device>::new());
-
     create_effect({
         let device_combobox = device_combobox.c();
         let ui = ui.c();
         move |_| {
+            let mut device_combobox = device_combobox.c();
             device_combobox.clear(&ui);
-            device_list.with(|device_list| {
-                for device in device_list {
-                    device_combobox.append(&ui, device.name.as_str());
-                }
-            });
+            if device_list_loading.get() {
+                device_combobox.append(&ui, "Loading...");
+                device_combobox.disable(&ui);
+                device_combobox.set_selected(&ui, 0)
+            } else {
+                device_list.with(|device_list| {
+                    for device in device_list {
+                        device_combobox.append(&ui, device.name.as_str());
+                    }
+                });
+                device_combobox.enable(&ui);
+            }
         }
     });
 
-    refresh_button.on_clicked(&ui, move |_| {
-        device_list.set(vec![
-            Device {
-                name: String::from("Device 1"),
-            },
-            Device {
-                name: String::from("Device 2"),
-            },
-            Device {
-                name: String::from("Device 3"),
-            },
-        ]);
+    // Blocking threaded example
+    let refresh_device_list = move || {
+        device_list_loading.set(true);
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(1));
+            ui_ctx.queue_main(move || {
+                device_list_loading.set(false);
+                device_list.set(vec![
+                    Device {
+                        name: String::from("Device 1"),
+                    },
+                    Device {
+                        name: String::from("Device 2"),
+                    },
+                    Device {
+                        name: String::from("Device 3"),
+                    },
+                ]);
+            });
+        });
+    };
+    refresh_device_list();
+    refresh_button.on_clicked(&ui, move |_| refresh_device_list());
+
+    let read_button_text = create_rw_signal("Read");
+    let read_button_enabled = create_rw_signal(true);
+    create_effect({
+        let read_button = read_button.c();
+        let ui = ui.c();
+        move |_| {
+            let mut read_button = read_button.c();
+            read_button.set_text(&ui, read_button_text.get());
+        }
+    });
+    create_effect({
+        let read_button = read_button.c();
+        let ui = ui.c();
+        move |_| {
+            let mut read_button = read_button.c();
+            match read_button_enabled.get() {
+                true => read_button.enable(&ui),
+                false => read_button.disable(&ui),
+            }
+        }
+    });
+    // Async with tokio timers example
+    read_button.on_clicked(&ui, {
+        let ui = ui.c();
+        move |_| {
+            read_button_enabled.set(false);
+            read_button_text.set("Reading.");
+            ui.spawn(async move {
+                // the timers happen to work using ui.spawn but it might be necessary to do
+                // tokio::spawn from within ui.spawn
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                read_button_text.set("Reading..");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                read_button_text.set("Reading...");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                read_button_enabled.set(true);
+                read_button_text.set("Read");
+            });
+        }
     });
 
     config_win.set_child(&ui, grid);
@@ -113,7 +181,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut i = 0;
     let mut ev = ui.event_loop();
     ev.on_tick(&ui, || {
-        println!("tick {i}");
+        // println!("tick {i}");
         i += 1;
     });
     ev.run(&ui);
