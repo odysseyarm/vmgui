@@ -42,15 +42,16 @@ impl Controller {
     async fn run(&mut self) {
         loop {
             match self.channel.1.recv().await {
-                Some(()) => { (*(self.update))(); },
+                Some(()) => { (self.update)(); },
                 None => todo!(),
             }
         }
     }
 }
 
-#[tokio::main]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let handle = rt.handle().clone();
     // Initialize the UI library
     let ui = UI::init().expect("Couldn't initialize UI library");
 
@@ -224,23 +225,22 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let device_combobox = device_combobox.clone();
         let device_list_clone = device_list.clone();
 
-        let device_combobox_controller = Arc::new(tokio::sync::Mutex::new(Controller {
+        let mut device_combobox_controller = Controller {
             channel: mpsc::channel(10),
             update: Box::new(move || {
                 device_combobox.clear(&ui2);
-                for device in &(*device_list_clone.lock().unwrap()) {
+                for device in &*device_list_clone.lock().unwrap() {
                     device_combobox.append(&ui2, device.name.as_str());
                 }
             }),
-        }));
+        };
 
-        let view = device_combobox_controller.clone();
-        ui.spawn(async move { view.lock().await.run().await });
+        world.create_entity().with(Update(device_combobox_controller.channel.0.clone())).build();
+        ui.spawn(async move { device_combobox_controller.run().await });
 
-        world.create_entity().with(Update(device_combobox_controller.clone().lock().await.channel.0.clone())).build();
     }
 
-    let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys{handle: Handle::current()}, "update_sys", &[]).build();
+    let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys{handle}, "update_sys", &[]).build();
 
     {
         let device_list = device_list.clone();
@@ -265,9 +265,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("tick {i}");
         i += 1;
     });
-    async {
-        ev.run(&ui);
-    }.await;
+    ev.run(&ui);
 
     Ok(())
 }
