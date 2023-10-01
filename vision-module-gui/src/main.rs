@@ -1,56 +1,19 @@
-use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{Sender, Receiver};
-use tokio::runtime::Handle;
+use std::thread;
+
+use leptos_reactive::{create_rw_signal, SignalSet, create_effect, SignalWith, SignalGet};
 use iui::controls::{Button, GridAlignment, GridExpand, Group, Label, LayoutGrid, VerticalBox, Entry, HorizontalBox, HorizontalSeparator, Combobox, Control, Spacer};
 use iui::prelude::*;
-use specs::prelude::*;
 use iui::controls::GridExpand::Vertical;
 use iui::menus::Menu;
 
+#[derive(Clone, Debug)]
 struct Device {
     name: String,
 }
 
-struct Update(Sender<()>);
-
-struct UpdateSys {
-    handle: Handle,
-}
-
-impl<'a> System<'a> for UpdateSys {
-    type SystemData = ReadStorage<'a, Update>;
-
-    fn run(&mut self, update: Self::SystemData) {
-        for update in (&update).join() {
-            let tx = update.0.clone();
-            self.handle.spawn(async move { tx.send(()).await });
-        }
-    }
-}
-
-impl Component for Update {
-    type Storage = VecStorage<Self>;
-}
-
-struct Controller {
-    channel: (Sender<()>, Receiver<()>),
-    update: Box<dyn Fn()>,
-}
-
-impl Controller {
-    async fn run(&mut self) {
-        loop {
-            match self.channel.1.recv().await {
-                Some(()) => { (self.update)(); },
-                None => todo!(),
-            }
-        }
-    }
-}
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    let leptos_rt = leptos_reactive::create_runtime();
     let handle = rt.handle().clone();
     // Initialize the UI library
     let ui = UI::init().expect("Couldn't initialize UI library");
@@ -119,9 +82,25 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut grid = LayoutGrid::new(&ui);
     grid.set_padded(&ui, true);
 
-    let device_list = Arc::new(Mutex::new(Vec::<Device>::new()));
+    let device_list = create_rw_signal(Vec::<Device>::new());
 
     let device_combobox = Combobox::new(&ui);
+    create_effect({
+        let device_combobox = device_combobox.clone();
+        let ui = ui.clone();
+        move |_| {
+            device_combobox.clear(&ui);
+            device_list.with(|device_list| {
+                for device in device_list {
+                    device_combobox.append(&ui, device.name.as_str());
+                }
+            });
+        }
+    });
+    thread::spawn(move || {
+        // don't do this
+        println!("{:?}", device_list.get());
+    });
 
     grid.append(
         &ui,
@@ -135,6 +114,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         GridAlignment::Center,
     );
     let mut refresh_button = Button::new(&ui, "Refresh");
+    refresh_button.on_clicked(&ui, move |_| {
+        device_list.set(vec![
+            Device { name: String::from("Device 1") },
+            Device { name: String::from("Device 2") },
+            Device { name: String::from("Device 3") },
+        ]);
+    });
     grid.append(
         &ui,
         refresh_button.clone(),
@@ -233,49 +219,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     buttons_hbox.append(&ui, write_button.clone(), LayoutStrategy::Stretchy);
 
     config_win.set_child(&ui, grid);
-
-    let mut world = World::new();
-    world.register::<Update>();
-
-    {
-        let ui2 = ui.clone();
-        let device_combobox = device_combobox.clone();
-        let device_list_clone = device_list.clone();
-
-        let mut device_combobox_controller = Controller {
-            channel: mpsc::channel(10),
-            update: Box::new(move || {
-                device_combobox.clear(&ui2);
-                for device in &*device_list_clone.lock().unwrap() {
-                    device_combobox.append(&ui2, device.name.as_str());
-                }
-            }),
-        };
-
-        world.create_entity().with(Update(device_combobox_controller.channel.0.clone())).build();
-        ui.spawn(async move { device_combobox_controller.run().await });
-
-    }
-
-    let mut update_dispatcher = DispatcherBuilder::new().with(UpdateSys{handle}, "update_sys", &[]).build();
-
     {
         let ui2 = ui.clone();
         config_button.on_clicked(&ui, move |_| {
             config_win.show(&ui2);
-        });
-    }
-
-    {
-        let device_list = device_list.clone();
-
-        refresh_button.on_clicked(&ui, move |_| {
-            *device_list.lock().unwrap() = vec![
-                Device { name: String::from("Device 1") },
-                Device { name: String::from("Device 2") },
-                Device { name: String::from("Device 3") },
-            ];
-            update_dispatcher.dispatch(&mut world);
         });
     }
 
@@ -290,5 +237,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     ev.run(&ui);
 
+    leptos_rt.dispose();
     Ok(())
 }

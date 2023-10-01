@@ -8,6 +8,6 @@ default-run = "vision-module-gui"
 
 [dependencies]
 iui = { path = "../libui-rs/iui" }
+leptos_reactive = "0.5.0"
 serialport = "4.2.2"
-specs = "0.20.0"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync"] }
