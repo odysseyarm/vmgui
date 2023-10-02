@@ -4,12 +4,16 @@ use std::time::Duration;
 use iui::menus::Menu;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith};
+use serialport::SerialPortInfo;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
 //     * Getting panics, setting fails silently
 //     * by extension, don't access signals from tokio::spawn, use ui.spawn
-// * Blocking in the main thread or in callbacks
+// * Excessive blocking in the main thread or in callbacks
+//     * Freezes the GUI
+// * Creating libui uiControls dynamically
+//     * They are leaky
 
 #[derive(Clone, Debug)]
 struct Device {
@@ -40,7 +44,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
 
-    let mut config_win = Window::new(&ui, "Config", 100, 100, WindowType::NoMenubar);
+    let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
         let ui = ui.c();
         move |config_win| {
@@ -79,49 +83,36 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let device_list_loading = create_rw_signal(false);
-    let device_list = create_rw_signal(Vec::<Device>::new());
+    let device_list = create_rw_signal(Vec::<SerialPortInfo>::new());
     create_effect({
         let device_combobox = device_combobox.c();
         let ui = ui.c();
         move |_| {
             let mut device_combobox = device_combobox.c();
             device_combobox.clear(&ui);
-            if device_list_loading.get() {
-                device_combobox.append(&ui, "Loading...");
-                device_combobox.disable(&ui);
-                device_combobox.set_selected(&ui, 0)
-            } else {
-                device_list.with(|device_list| {
-                    for device in device_list {
-                        device_combobox.append(&ui, device.name.as_str());
-                    }
-                });
-                device_combobox.enable(&ui);
-            }
+            device_list.with(|device_list| {
+                for device in device_list {
+                    device_combobox.append(&ui, &display_for_serial_port(&device));
+                }
+            });
+            device_combobox.enable(&ui);
         }
     });
 
-    // Blocking threaded example
-    let refresh_device_list = move || {
-        device_list_loading.set(true);
-        thread::spawn(move || {
-            thread::sleep(Duration::from_secs(1));
-            ui_ctx.queue_main(move || {
-                device_list_loading.set(false);
-                device_list.set(vec![
-                    Device {
-                        name: String::from("Device 1"),
-                    },
-                    Device {
-                        name: String::from("Device 2"),
-                    },
-                    Device {
-                        name: String::from("Device 3"),
-                    },
-                ]);
-            });
-        });
+    let refresh_device_list = {
+        let config_win = config_win.c();
+        let ui = ui.c();
+        move || {
+            let ports = serialport::available_ports();
+            let ports = match ports {
+                Ok(p) => p,
+                Err(e) => {
+                    config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
+                    return;
+                }
+            };
+            device_list.set(ports);
+        }
     };
     refresh_device_list();
     refresh_button.on_clicked(&ui, move |_| refresh_device_list());
@@ -188,4 +179,27 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     leptos_rt.dispose();
     Ok(())
+}
+
+fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
+    let usb_port = match &port_info.port_type {
+        serialport::SerialPortType::UsbPort(u) => u,
+        _ => return port_info.port_name.clone(),
+    };
+
+    let mut out = String::new();
+    if let Some(m) = &usb_port.manufacturer {
+        out.push_str(m);
+    }
+    if let Some(p) = &usb_port.product {
+        if !out.is_empty() {
+            out.push_str(" - ");
+        }
+        out.push_str(p);
+    }
+    if !out.is_empty() {
+        out.push_str(" ");
+    }
+    out.push_str(&format!("({:4x}:{:4x})", usb_port.vid, usb_port.pid));
+    out
 }
