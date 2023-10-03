@@ -68,7 +68,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     iui::layout! { &ui,
         let grid = LayoutGrid(padded: true) {
-            (1, 0)(1, 1) Neither (End, Center) : let device_combobox = Combobox() {}
+            (1, 0)(1, 1) Horizontal (Fill, Center) : let device_combobox = Combobox() {}
             (2, 0)(1, 1) Neither (End, Center) : let refresh_button = Button("Refresh")
             (0, 1)(1, 1) Neither (End, Center) : let bank_label = Label("Bank")
             (0, 2)(1, 1) Neither (End, Center) : let address_label = Label("Address")
