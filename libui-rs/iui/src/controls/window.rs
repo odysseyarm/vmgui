@@ -108,6 +108,20 @@ impl Window {
         }
     }
 
+    pub fn set_borderless(&mut self, _ctx: &UI, borderless: bool)
+    {
+        unsafe {
+            ui_sys::uiWindowSetFullscreen(self.uiWindow, borderless as i32);
+        }
+    }
+
+    pub fn set_fullscreen(&mut self, _ctx: &UI, fullscreen: bool)
+    {
+        unsafe {
+            ui_sys::uiWindowSetFullscreen(self.uiWindow, fullscreen as i32);
+        }
+    }
+
     /// Check whether or not this window has margins around the edges.
     pub fn margined(&self, _ctx: &UI) -> bool {
         unsafe { ui_sys::uiWindowMargined(self.uiWindow) != 0 }
