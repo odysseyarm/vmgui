@@ -219,11 +219,11 @@ macro_rules! layout {
         )* }
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::Form::new();
-        $( $ctl.set_padded($padded); )?
+        let mut $ctl = iui::controls::Form::new($ui);
+        $( $ctl.set_padded($ui, $padded); )?
         $(
             iui::layout! { $ui, let $child = $type ($($opt)*) $({$($body)*})? }
-            $ctl.append($name, $child.clone(),
+            $ctl.append($ui, $name, $child.clone(),
                     iui::controls::LayoutStrategy::$strategy);
         )*
     ];
