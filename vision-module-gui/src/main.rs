@@ -1,10 +1,12 @@
 use std::thread;
 use std::time::Duration;
 
+use anyhow::Result;
 use iui::menus::Menu;
 use iui::prelude::*;
-use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith};
-use serialport::SerialPortInfo;
+use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked};
+use serialport::{SerialPortInfo, SerialPort};
+use vision_module_gui::{device::UsbDevice, packet::Port};
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -82,9 +84,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    let read_button_text = create_rw_signal(String::from("Read"));
 
     let device_list = create_rw_signal(Vec::<SerialPortInfo>::new());
-    create_effect({
+    create_effect({ // update device combobox when device_list changes
         let device_combobox = device_combobox.c();
         let ui = ui.c();
         move |_| {
@@ -96,6 +99,27 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
             device_combobox.enable(&ui);
+        }
+    });
+    device_combobox.on_selected(&ui, {
+        let tokio_handle = tokio_handle.clone();
+        move |i| {
+            let Ok(i) = usize::try_from(i) else { return };
+            let path = device_list.with_untracked(|d| d[i].port_name.clone());
+            let task = async move {
+                let device = UsbDevice::connect(path)?;
+                let nv_pid = device.product_id(Port::Nv).await?;
+                let fv_pid = device.product_id(Port::Fv).await?;
+                println!("nv pid: {:04x}", nv_pid);
+                println!("fv pid: {:04x}", fv_pid);
+                ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nv_pid)));
+                Result::<()>::Ok(())
+            };
+            tokio_handle.spawn(async move {
+                if let Err(e) = task.await {
+                    eprintln!("{e}");
+                }
+            });
         }
     });
 
@@ -117,14 +141,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     refresh_device_list();
     refresh_button.on_clicked(&ui, move |_| refresh_device_list());
 
-    let read_button_text = create_rw_signal("Read");
     let read_button_enabled = create_rw_signal(true);
     create_effect({
         let read_button = read_button.c();
         let ui = ui.c();
         move |_| {
             let mut read_button = read_button.c();
-            read_button.set_text(&ui, read_button_text.get());
+            read_button.set_text(&ui, &read_button_text.get());
         }
     });
     create_effect({
@@ -143,17 +166,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui = ui.c();
         move |_| {
             read_button_enabled.set(false);
-            read_button_text.set("Reading.");
+            read_button_text.set("Reading.".into());
             ui.spawn(async move {
                 // the timers happen to work using ui.spawn but it might be necessary to do
                 // tokio::spawn from within ui.spawn
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                read_button_text.set("Reading..");
+                read_button_text.set("Reading..".into());
                 tokio::time::sleep(Duration::from_millis(500)).await;
-                read_button_text.set("Reading...");
+                read_button_text.set("Reading...".into());
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 read_button_enabled.set(true);
-                read_button_text.set("Read");
+                read_button_text.set("Read".into());
             });
         }
     });
