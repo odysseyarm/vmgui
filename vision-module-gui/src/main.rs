@@ -171,11 +171,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let path = device_list.with_untracked(|d| d[i].port_name.clone());
             let task = async move {
                 let device = UsbDevice::connect(path)?;
-                let nv_pid = device.product_id(Port::Nv).await?;
-                let fv_pid = device.product_id(Port::Fv).await?;
-                println!("nv pid: {:04x}", nv_pid);
-                println!("fv pid: {:04x}", fv_pid);
-                ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nv_pid)));
+                let nf_pid = device.product_id(Port::Nf).await?;
+                let wf_pid = device.product_id(Port::Wf).await?;
+                println!("nf pid: {:04x}", nf_pid);
+                println!("wf pid: {:04x}", wf_pid);
+                ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nf_pid)));
                 Result::<()>::Ok(())
             };
             tokio_handle.spawn(async move {

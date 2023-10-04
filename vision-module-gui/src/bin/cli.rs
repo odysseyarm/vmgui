@@ -32,7 +32,7 @@ fn main() {
     for (bank, address) in registers {
         println!("Reading bank {bank:x}, addr {address:x}");
         let pkt = Packet::ReadRegister(Register {
-            port: Port::Nv,
+            port: Port::Nf,
             bank,
             address,
         });

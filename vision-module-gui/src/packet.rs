@@ -46,15 +46,15 @@ impl StdError for Error {}
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Port {
-    Nv,
-    Fv,
+    Nf,
+    Wf,
 }
 impl TryFrom<u8> for Port {
     type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
         match n {
-            0 => Ok(Self::Nv),
-            1 => Ok(Self::Fv),
+            0 => Ok(Self::Nf),
+            1 => Ok(Self::Wf),
             _ => Err(Error::UnrecognizedPort),
         }
     }
