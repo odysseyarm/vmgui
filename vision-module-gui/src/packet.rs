@@ -1,4 +1,6 @@
 #![allow(unused)]
+
+use std::{fmt::Display, error::Error as StdError};
 #[derive(Clone, Debug)]
 pub enum Packet {
     WriteRegister(Register), // a.k.a. Poke
@@ -22,11 +24,24 @@ pub struct ReadRegisterResponse {
 
 
 #[derive(Clone, Copy, Debug)]
-pub enum PacketParseError {
+pub enum Error {
     UnexpectedEof,
     UnrecognizedPacketId,
     UnrecognizedPort,
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Error as S;
+        match self {
+            S::UnexpectedEof => write!(f, "unexpected eof"),
+            S::UnrecognizedPacketId => write!(f, "unrecognized packet id"),
+            S::UnrecognizedPort => write!(f, "unrecognized port"),
+        }
+    }
+}
+
+impl StdError for Error {}
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
@@ -35,12 +50,12 @@ pub enum Port {
     Fv,
 }
 impl TryFrom<u8> for Port {
-    type Error = PacketParseError;
+    type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
         match n {
             0 => Ok(Self::Nv),
             1 => Ok(Self::Fv),
-            _ => Err(PacketParseError::UnrecognizedPort),
+            _ => Err(Error::UnrecognizedPort),
         }
     }
 }
@@ -53,13 +68,13 @@ pub enum PacketId {
 }
 
 impl TryFrom<u8> for PacketId {
-    type Error = PacketParseError;
+    type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
         match n {
             0 => Ok(Self::WriteRegister),
             1 => Ok(Self::ReadRegister),
             2 => Ok(Self::ReadRegisterResponse),
-            _ => Err(PacketParseError::UnrecognizedPacketId),
+            _ => Err(Error::UnrecognizedPacketId),
         }
     }
 }
@@ -75,8 +90,8 @@ impl Packet {
         }
     }
 
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, PacketParseError> {
-        use PacketParseError as E;
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
         let [words1, words2, id, _, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
@@ -113,11 +128,18 @@ impl Packet {
             Packet::ReadRegisterResponse(x) => x.serialize(buf),
         };
     }
+
+    pub fn read_register_response(self) -> Option<ReadRegisterResponse> {
+        match self {
+            Self::ReadRegisterResponse(x) => Some(x),
+            _ => None,
+        }
+    }
 }
 
 impl Register {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, PacketParseError> {
-        use PacketParseError as E;
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
         let [port, bank, address, _, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
@@ -132,8 +154,8 @@ impl Register {
 }
 
 impl ReadRegisterResponse {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, PacketParseError> {
-        use PacketParseError as E;
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
         let [bank, address, data, _, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
