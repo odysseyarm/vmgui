@@ -1,3 +1,5 @@
+mod test_procedure_view;
+
 use std::f64::consts::PI;
 use std::thread;
 use std::time::Duration;
@@ -8,8 +10,7 @@ use iui::prelude::*;
 use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked};
 use serialport::{SerialPortInfo, SerialPort};
 use vision_module_gui::{device::UsbDevice, packet::Port};
-use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent};
-use iui::draw::{Brush, FillMode, Path, SolidBrush};
+use crate::test_procedure_view::TestProcedureView;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -34,57 +35,6 @@ trait CloneButShorter: Clone {
 
 impl<T: Clone> CloneButShorter for T {}
 
-struct TestCanvas {
-    ctx: UI,
-    window: Window,
-}
-impl AreaHandler for TestCanvas {
-    fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
-        let ctx = &draw_params.context;
-
-        let path = Path::new(ctx, FillMode::Winding);
-        path.add_rectangle(ctx, 0., 0., draw_params.area_width, draw_params.area_height);
-        path.end(ctx);
-
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.2,
-            g: 0.6,
-            b: 0.8,
-            a: 1.,
-        });
-
-        draw_params.context.fill(&path, &brush);
-
-        let path = Path::new(ctx, FillMode::Winding);
-        for i in 0..100 {
-            let x = i as f64 / 100.;
-            let y = ((x * PI * 2.).sin() + 1.) / 2.;
-            path.add_rectangle(
-                ctx,
-                x * draw_params.area_width,
-                0.,
-                draw_params.area_width / 100.,
-                y * draw_params.area_height,
-            );
-        }
-        path.end(ctx);
-
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.2,
-            g: 0.,
-            b: 0.3,
-            a: 1.,
-        });
-
-        draw_params.context.fill(&path, &brush);
-    }
-
-    fn key_event(&mut self, _area: &Area, _area_key_event: &AreaKeyEvent) -> bool {
-        self.window.hide(&self.ctx);
-        true
-    }
-}
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokio_rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -101,21 +51,34 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
 
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
+
     config_win.on_closing(&ui, {
         let ui = ui.c();
-        move |config_win| {
-            config_win.hide(&ui);
+        move |win:&mut Window| {
+            win.hide(&ui);
         }
     });
 
+    iui::layout! { &ui,
+        let form = Form(padded: true) {
+            (Compact, "Points collected:"): let collected_text = Label("")
+        }
+    }
+
+    form.hide(&ui);
+
+    let test_win_on_closing = {
+        let ui = ui.c();
+        let mut form = form.c();
+        move |win:&mut Window| {
+            form.hide(&ui);
+            win.hide(&ui);
+        }
+    };
+
     let mut test_win = Window::new(&ui, "Aimpoint Test", 10, 10, WindowType::NoMenubar);
     test_win.set_borderless(&ui, true);
-    test_win.on_closing(&ui, {
-        let ui = ui.c();
-        move |test_win| {
-            test_win.hide(&ui);
-        }
-    });
+    test_win.on_closing(&ui, test_win_on_closing.c());
 
     iui::layout! { &ui,
         let vert_box = VerticalBox(padded: true) {
@@ -129,7 +92,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    main_win.set_child(&ui, vert_box);
+    main_win.set_child(&ui, vert_box.clone());
 
     iui::layout! { &ui,
         let grid = LayoutGrid(padded: true) {
@@ -252,14 +215,16 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let area_handler: Box<dyn AreaHandler> = Box::new(TestCanvas { ctx: ui.clone(), window: test_win.clone() });
-    let area = Area::new(&ui, area_handler);
+    vert_box.append(&ui, form.c(), LayoutStrategy::Compact);
 
-    test_win.set_child(&ui, area);
+    let view = TestProcedureView::new(ui.c(), test_win.c(), Box::new(test_win_on_closing));
+    test_win.set_child(&ui, view.area);
 
     test_button.on_clicked(&ui, {
         let ui = ui.c();
+        let mut form = form.c();
         move |_| {
+            form.show(&ui);
             test_win.show(&ui);
         }
     });
