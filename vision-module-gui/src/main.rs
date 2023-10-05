@@ -44,7 +44,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
-    let mut config_win = config_window(&ui, tokio_handle);
+    let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
 
     iui::layout! { &ui,
         let form = Form(padded: true) {
@@ -84,6 +84,29 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             Compact: let spacer = Spacer()
         }
     }
+
+    create_effect({
+        let ui = ui.c();
+        let test_win = test_win.c();
+        let track_button = track_button.c();
+        let test_button = test_button.c();
+        let test_win_on_closing = test_win_on_closing.c();
+        move |_| {
+            let mut test_win = test_win.c();
+            let mut track_button = track_button.c();
+            let mut test_button = test_button.c();
+            device_rs.with(|device| {
+                if device.is_none() {
+                    test_win_on_closing.c()(&mut test_win);
+                    track_button.disable(&ui);
+                    test_button.disable(&ui);
+                } else {
+                    track_button.enable(&ui);
+                    test_button.enable(&ui);
+                }
+            });
+        }
+    });
 
     main_win.set_child(&ui, vert_box.clone());
 
