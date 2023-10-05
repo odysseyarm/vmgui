@@ -54,7 +54,6 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
         }
     });
     device_combobox.on_selected(&ui, {
-        let tokio_handle = tokio_handle.clone();
         move |i| {
             device_ws.set(None);
             let Ok(i) = usize::try_from(i) else { return };
@@ -65,11 +64,11 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
                 let wf_pid = device.product_id(Port::Wf).await?;
                 println!("nf pid: {:04x}", nf_pid);
                 println!("wf pid: {:04x}", wf_pid);
-                ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nf_pid)));
-                ui_ctx.queue_main(move || { device_ws.set(Some(device.c())) });
+                read_button_text.set(format!("{:04x}", nf_pid));
+                device_ws.set(Some(device.c()));
                 Result::<()>::Ok(())
             };
-            tokio_handle.spawn(async move {
+            ui_ctx.spawn(async move {
                 if let Err(e) = task.await {
                     eprintln!("{e}");
                 }
