@@ -15,7 +15,9 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
             win.hide(&ui);
         }
     });
-    iui::layout! { &ui,
+
+    let read_button_enabled = create_rw_signal(true);
+    crate::layout! { &ui,
         let grid = LayoutGrid(padded: true) {
             (1, 0)(1, 1) Horizontal (Fill, Center) : let device_combobox = Combobox() {}
             (2, 0)(1, 1) Neither (End, Center) : let refresh_button = Button("Refresh")
@@ -26,7 +28,7 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
             (1, 2)(1, 1) Horizontal (Fill, Fill) : let address_input = Entry()
             (1, 3)(1, 1) Horizontal (Fill, Fill) : let data_input = Entry()
             (0, 4)(2, 1) Horizontal (Fill, Fill) : let buttons_hbox = HorizontalBox(padded: true) {
-                Stretchy: let read_button = Button("Read")
+                Stretchy: let read_button = Button("Read", enabled: read_button_enabled)
                 Stretchy: let write_button = Button("Write")
             }
         }
@@ -92,7 +94,6 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
     refresh_device_list();
     refresh_button.on_clicked(&ui, move |_| refresh_device_list());
 
-    let read_button_enabled = create_rw_signal(true);
     create_effect({
         let read_button = read_button.c();
         let ui = ui.c();
@@ -101,17 +102,17 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
             read_button.set_text(&ui, &read_button_text.get());
         }
     });
-    create_effect({
-        let read_button = read_button.c();
-        let ui = ui.c();
-        move |_| {
-            let mut read_button = read_button.c();
-            match read_button_enabled.get() {
-                true => read_button.enable(&ui),
-                false => read_button.disable(&ui),
-            }
-        }
-    });
+    // create_effect({
+    //     let read_button = read_button.c();
+    //     let ui = ui.c();
+    //     move |_| {
+    //         let mut read_button = read_button.c();
+    //         match read_button_enabled.get() {
+    //             true => read_button.enable(&ui),
+    //             false => read_button.disable(&ui),
+    //         }
+    //     }
+    // });
     // Async with tokio timers example
     read_button.on_clicked(&ui, {
         let ui = ui.c();
