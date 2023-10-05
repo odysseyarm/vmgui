@@ -69,6 +69,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let mut test_win = Window::new(&ui, "Aimpoint Test", 10, 10, WindowType::NoMenubar);
+    test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
     test_win.on_closing(&ui, test_win_on_closing.c());
 
