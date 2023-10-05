@@ -47,20 +47,30 @@ impl Context {
 pub(crate) fn queue_main_unsafe<F: FnMut() + 'static>(callback: F) {
     extern "C" fn c_callback<G: FnMut()>(data: *mut c_void) {
         unsafe {
-            from_void_ptr::<G>(data)();
+            Box::<G>::from_raw(data as *mut G)();
         }
     }
 
     unsafe {
-        ui_sys::uiQueueMain(Some(c_callback::<F>), to_heap_ptr(callback));
+        ui_sys::uiQueueMain(
+            Some(c_callback::<F>),
+            Box::into_raw(Box::new(callback)) as *mut c_void,
+        );
     }
 }
 
-pub(crate) unsafe fn spawn_unsafe<F: Future<Output = ()> + 'static>(mut arc: Arc<F>) {
+/// The provided arc must be newly created or only held by wakers.
+pub(crate) unsafe fn spawn_unsafe<F: Future<Output = ()> + 'static>(arc: Arc<F>) {
     queue_main_unsafe(move || {
-        let waker = waker::make_waker(&arc.clone());
+        let waker = waker::make_waker(arc.clone());
         let mut ctx = std::task::Context::from_waker(&waker);
-        match F::poll(std::pin::Pin::new_unchecked(Arc::get_mut(&mut arc).unwrap()), &mut ctx) {
+        // SAFETY:
+        // The arc can only be held by wakers as pointers. So the only possibility for two &muts to
+        // be created is F::poll immediately calls wake or wake_by_ref. However, this doesn't
+        // immediately create a &mut, it only queues a function to run on the GUI thread. And since
+        // there is only one GUI thread, the lifetime of the current &mut will end before the next
+        // &mut is created.
+        match F::poll(std::pin::Pin::new_unchecked(&mut *(Arc::as_ptr(&arc) as *mut F)), &mut ctx) {
             _ => ()
         }
     })
@@ -72,9 +82,9 @@ mod waker {
     use std::task::{RawWaker, RawWakerVTable};
     use std::future::Future;
 
-    pub(super) unsafe fn make_waker<F: Future<Output = ()> + 'static>(arc: &Arc<F>) -> std::task::Waker {
+    pub(super) unsafe fn make_waker<F: Future<Output = ()> + 'static>(arc: Arc<F>) -> std::task::Waker {
         std::task::Waker::from_raw(
-            RawWaker::new(Arc::as_ptr(&arc) as *const (), waker_vtable::<F>())
+            RawWaker::new(Arc::into_raw(arc) as *const (), waker_vtable::<F>())
             )
     }
 
