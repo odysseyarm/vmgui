@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use iui::{UI, prelude::{Window, WindowType}};
-use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, SignalGet};
+use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, SignalGet, create_signal};
 use serialport::SerialPortInfo;
 use crate::{CloneButShorter, device::UsbDevice, packet::Port};
 use anyhow::Result;
@@ -33,6 +33,8 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
     }
     config_win.set_child(&ui, grid);
 
+    let (device_rs, device_ws) = create_signal(None);
+
     let read_button_text = create_rw_signal(String::from("Read"));
     let device_list = create_rw_signal(Vec::<SerialPortInfo>::new());
     create_effect({ // update device combobox when device_list changes
@@ -61,6 +63,7 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
                 println!("nf pid: {:04x}", nf_pid);
                 println!("wf pid: {:04x}", wf_pid);
                 ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nf_pid)));
+                ui_ctx.queue_main(move || { device_ws.set(Some(device.c())) });
                 Result::<()>::Ok(())
             };
             tokio_handle.spawn(async move {
