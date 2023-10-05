@@ -56,6 +56,7 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
     device_combobox.on_selected(&ui, {
         let tokio_handle = tokio_handle.clone();
         move |i| {
+            device_ws.set(None);
             let Ok(i) = usize::try_from(i) else { return };
             let path = device_list.with_untracked(|d| d[i].port_name.clone());
             let task = async move {
