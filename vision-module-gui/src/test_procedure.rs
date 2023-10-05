@@ -1,24 +1,30 @@
 use std::f64::consts::PI;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush};
 use iui::UI;
 
 pub struct TestProcedureView {
-    pub area: Area,
+    pub state: Arc<Mutex<TestCanvasState>>,
 }
 
 impl TestProcedureView {
-    pub fn new(ui: UI, window: Window, on_closing: Box<dyn FnMut(&mut Window)>) -> Self {
-        TestProcedureView {
-            area: Area::new(&ui, Box::new(TestCanvas { ctx: ui.clone(), window, on_closing })),
-        }
+    pub async fn run(&self) {
+        //
     }
 }
 
-struct TestCanvas {
-    ctx: UI,
-    window: Window,
-    on_closing: Box<dyn FnMut(&mut Window)>,
+#[derive(Default)]
+pub struct TestCanvasState {
+    //
+}
+
+pub struct TestCanvas {
+    pub ctx: UI,
+    pub window: Window,
+    pub on_closing: Box<dyn FnMut(&mut Window)>,
+    pub state: Arc<Mutex<TestCanvasState>>,
 }
 
 impl AreaHandler for TestCanvas {

@@ -1,16 +1,20 @@
-mod test_procedure_view;
+mod test_procedure;
 
 use std::f64::consts::PI;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use anyhow::Result;
 use iui::menus::Menu;
 use iui::prelude::*;
-use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked};
+use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked, create_signal};
 use serialport::{SerialPortInfo, SerialPort};
 use vision_module_gui::{device::UsbDevice, packet::Port, config_window::config_window, CloneButShorter};
-use crate::test_procedure_view::TestProcedureView;
+use tokio::sync::Mutex;
+use tokio::task::{AbortHandle};
+use iui::controls::Area;
+use crate::test_procedure::{TestCanvas, TestCanvasState, TestProcedureView};
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -50,12 +54,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     form.hide(&ui);
 
+    let mut test_run_abort_handle = None::<AbortHandle>;
+
     let test_win_on_closing = {
         let ui = ui.c();
         let mut form = form.c();
+        if test_run_abort_handle.is_some() {
+            test_run_abort_handle.as_mut().expect("Test run abort handle is None").abort();
+        }
         move |win:&mut Window| {
-            form.hide(&ui);
             win.hide(&ui);
+            form.hide(&ui);
         }
     };
 
@@ -86,8 +95,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     vert_box.append(&ui, form.c(), LayoutStrategy::Compact);
 
-    let view = TestProcedureView::new(ui.c(), test_win.c(), Box::new(test_win_on_closing));
-    test_win.set_child(&ui, view.area);
+    let state: Arc<Mutex<TestCanvasState>> = Default::default();
+    let area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing), state: state.c() }));
+
+    let view = Arc::new(TestProcedureView { state: state.c() });
+
+    test_win.set_child(&ui, area);
 
     test_button.on_clicked(&ui, {
         let ui = ui.c();
@@ -95,6 +108,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             form.show(&ui);
             test_win.show(&ui);
+            let view = view.c();
+            if test_run_abort_handle.is_none() {
+                test_run_abort_handle = Some(tokio::spawn(async move { view.run().await; }).abort_handle());
+            }
         }
     });
 
