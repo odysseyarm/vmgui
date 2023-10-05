@@ -9,7 +9,7 @@ use iui::menus::Menu;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked};
 use serialport::{SerialPortInfo, SerialPort};
-use vision_module_gui::{device::UsbDevice, packet::Port};
+use vision_module_gui::{device::UsbDevice, packet::Port, config_window::config_window, CloneButShorter};
 use crate::test_procedure_view::TestProcedureView;
 
 // Things to avoid doing
@@ -26,15 +26,6 @@ struct Device {
     name: String,
 }
 
-trait CloneButShorter: Clone {
-    /// Use mainly for GUI code.
-    fn c(&self) -> Self {
-        self.clone()
-    }
-}
-
-impl<T: Clone> CloneButShorter for T {}
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokio_rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -49,15 +40,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 250, 100, WindowType::NoMenubar);
-
-    let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
-
-    config_win.on_closing(&ui, {
-        let ui = ui.c();
-        move |win:&mut Window| {
-            win.hide(&ui);
-        }
-    });
+    let mut config_win = config_window(&ui, tokio_handle);
 
     iui::layout! { &ui,
         let form = Form(padded: true) {
@@ -94,120 +77,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     main_win.set_child(&ui, vert_box.clone());
 
-    iui::layout! { &ui,
-        let grid = LayoutGrid(padded: true) {
-            (1, 0)(1, 1) Horizontal (Fill, Center) : let device_combobox = Combobox() {}
-            (2, 0)(1, 1) Neither (End, Center) : let refresh_button = Button("Refresh")
-            (0, 1)(1, 1) Neither (End, Center) : let bank_label = Label("Bank")
-            (0, 2)(1, 1) Neither (End, Center) : let address_label = Label("Address")
-            (0, 3)(1, 1) Neither (End, Center) : let data_label = Label("Data")
-            (1, 1)(1, 1) Horizontal (Fill, Fill) : let bank_input = Entry()
-            (1, 2)(1, 1) Horizontal (Fill, Fill) : let address_input = Entry()
-            (1, 3)(1, 1) Horizontal (Fill, Fill) : let data_input = Entry()
-            (0, 4)(2, 1) Horizontal (Fill, Fill) : let buttons_hbox = HorizontalBox(padded: true) {
-                Stretchy: let read_button = Button("Read")
-                Stretchy: let write_button = Button("Write")
-            }
-        }
-    }
-    let read_button_text = create_rw_signal(String::from("Read"));
-
-    let device_list = create_rw_signal(Vec::<SerialPortInfo>::new());
-    create_effect({ // update device combobox when device_list changes
-        let device_combobox = device_combobox.c();
-        let ui = ui.c();
-        move |_| {
-            let mut device_combobox = device_combobox.c();
-            device_combobox.clear(&ui);
-            device_list.with(|device_list| {
-                for device in device_list {
-                    device_combobox.append(&ui, &display_for_serial_port(&device));
-                }
-            });
-            device_combobox.enable(&ui);
-        }
-    });
-    device_combobox.on_selected(&ui, {
-        let tokio_handle = tokio_handle.clone();
-        move |i| {
-            let Ok(i) = usize::try_from(i) else { return };
-            let path = device_list.with_untracked(|d| d[i].port_name.clone());
-            let task = async move {
-                let device = UsbDevice::connect(path)?;
-                let nf_pid = device.product_id(Port::Nf).await?;
-                let wf_pid = device.product_id(Port::Wf).await?;
-                println!("nf pid: {:04x}", nf_pid);
-                println!("wf pid: {:04x}", wf_pid);
-                ui_ctx.queue_main(move || read_button_text.set(format!("{:04x}", nf_pid)));
-                Result::<()>::Ok(())
-            };
-            tokio_handle.spawn(async move {
-                if let Err(e) = task.await {
-                    eprintln!("{e}");
-                }
-            });
-        }
-    });
-
-    let refresh_device_list = {
-        let config_win = config_win.c();
-        let ui = ui.c();
-        move || {
-            let ports = serialport::available_ports();
-            let ports = match ports {
-                Ok(p) => p,
-                Err(e) => {
-                    config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
-                    return;
-                }
-            };
-            device_list.set(ports);
-        }
-    };
-    refresh_device_list();
-    refresh_button.on_clicked(&ui, move |_| refresh_device_list());
-
-    let read_button_enabled = create_rw_signal(true);
-    create_effect({
-        let read_button = read_button.c();
-        let ui = ui.c();
-        move |_| {
-            let mut read_button = read_button.c();
-            read_button.set_text(&ui, &read_button_text.get());
-        }
-    });
-    create_effect({
-        let read_button = read_button.c();
-        let ui = ui.c();
-        move |_| {
-            let mut read_button = read_button.c();
-            match read_button_enabled.get() {
-                true => read_button.enable(&ui),
-                false => read_button.disable(&ui),
-            }
-        }
-    });
-    // Async with tokio timers example
-    read_button.on_clicked(&ui, {
-        let ui = ui.c();
-        move |_| {
-            read_button_enabled.set(false);
-            read_button_text.set("Reading.".into());
-            ui.spawn(async move {
-                // the timers happen to work using ui.spawn but it might be necessary to do
-                // tokio::spawn from within ui.spawn
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                read_button_text.set("Reading..".into());
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                read_button_text.set("Reading...".into());
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                read_button_enabled.set(true);
-                read_button_text.set("Read".into());
-            });
-        }
-    });
-
-    config_win.set_child(&ui, grid);
     config_button.on_clicked(&ui, {
         let ui = ui.c();
         move |_| {
@@ -242,27 +111,4 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     leptos_rt.dispose();
     Ok(())
-}
-
-fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
-    let usb_port = match &port_info.port_type {
-        serialport::SerialPortType::UsbPort(u) => u,
-        _ => return port_info.port_name.clone(),
-    };
-
-    let mut out = String::new();
-    if let Some(m) = &usb_port.manufacturer {
-        out.push_str(m);
-    }
-    if let Some(p) = &usb_port.product {
-        if !out.is_empty() {
-            out.push_str(" - ");
-        }
-        out.push_str(p);
-    }
-    if !out.is_empty() {
-        out.push_str(" ");
-    }
-    out.push_str(&format!("({:4x}:{:4x})", usb_port.vid, usb_port.pid));
-    out
 }
