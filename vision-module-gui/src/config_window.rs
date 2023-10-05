@@ -6,7 +6,7 @@ use serialport::SerialPortInfo;
 use crate::{CloneButShorter, device::UsbDevice, packet::Port};
 use anyhow::Result;
 
-pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
+pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -134,7 +134,7 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> Window {
     });
 
 
-    config_win
+    (config_win, device_rs.clone())
 }
 
 fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
