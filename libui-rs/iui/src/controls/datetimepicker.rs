@@ -1,6 +1,6 @@
 use super::Control;
 use callback_helpers::{from_void_ptr, to_heap_ptr};
-use std::mem;
+use std::{alloc, mem};
 use std::os::raw::c_void;
 use ui::UI;
 use ui_sys::{self, uiControl, uiDateTimePicker};
@@ -33,22 +33,10 @@ impl DateTimePicker {
     /// Warning: The `struct tm` members `tm_wday` and `tm_yday` are undefined
     pub fn datetime(&self, _ctx: &UI) -> libc::tm {
         unsafe {
-            let mut datetime = libc::tm {
-                tm_sec: 0,
-                tm_min: 0,
-                tm_hour: 0,
-                tm_mday: 0,
-                tm_mon: 0,
-                tm_year: 0,
-                tm_wday: 0,
-                tm_yday: 0,
-                tm_isdst: 0,
-                tm_gmtoff: 0,
-                tm_zone: std::ptr::null(),
-            };
-            let ptr = &mut datetime as *mut libc::tm;
+            let layout = alloc::Layout::new::<libc::tm>();
+            let ptr = alloc::alloc(layout) as *mut libc::tm;
             ui_sys::uiDateTimePickerTime(self.uiDateTimePicker, ptr as *mut ui_sys::tm);
-            datetime
+            *Box::from_raw(ptr)
         }
     }
 
