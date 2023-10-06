@@ -6,6 +6,8 @@ pub enum Packet {
     WriteRegister(Register), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
+    ObjectReportRequest(ObjectReportRequest),
+    ObjectReport(ObjectReport),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -20,6 +22,33 @@ pub struct ReadRegisterResponse {
     pub bank: u8,
     pub address: u8,
     pub data: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ObjectReportRequest {}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MotData {
+    pub area: u16,
+    pub cx: u16,
+    pub cy: u16,
+    pub avg_brightness: u8,
+    pub max_brightness: u8,
+    pub range: u8,
+    pub radius: u8,
+    pub boundary_left: u8,
+    pub boundary_right: u8,
+    pub boundary_up: u8,
+    pub boundary_down: u8,
+    pub aspect_ratio: u8,
+    pub vx: u8,
+    pub vy: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ObjectReport {
+    pub mot_data_nf: MotData,
+    pub mot_data_wf: MotData,
 }
 
 
@@ -65,6 +94,8 @@ pub enum PacketId {
     WriteRegister, // a.k.a. Poke
     ReadRegister,  // a.k.a. Peek
     ReadRegisterResponse,
+    ObjectReportRequest,
+    ObjectReport,
 }
 
 impl TryFrom<u8> for PacketId {
@@ -74,6 +105,8 @@ impl TryFrom<u8> for PacketId {
             0 => Ok(Self::WriteRegister),
             1 => Ok(Self::ReadRegister),
             2 => Ok(Self::ReadRegisterResponse),
+            3 => Ok(Self::ObjectReportRequest),
+            4 => Ok(Self::ObjectReport),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -87,6 +120,8 @@ impl Packet {
             Self::WriteRegister(_) => P::WriteRegister,
             Self::ReadRegister(_) => P::ReadRegister,
             Self::ReadRegisterResponse(_) => P::ReadRegisterResponse,
+            Self::ObjectReportRequest(_) => P::ObjectReportRequest,
+            Self::ObjectReport(_) => P::ObjectReport,
         }
     }
 
@@ -108,6 +143,8 @@ impl Packet {
             PacketId::WriteRegister => Self::WriteRegister(Register::parse(bytes)?),
             PacketId::ReadRegister => Self::ReadRegister(Register::parse(bytes)?),
             PacketId::ReadRegisterResponse => Self::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
+            PacketId::ObjectReportRequest => Self::ObjectReportRequest(ObjectReportRequest{}),
+            PacketId::ObjectReport => Self::ObjectReport(ObjectReport::parse(bytes)?),
         })
     }
 
@@ -117,6 +154,8 @@ impl Packet {
             Packet::WriteRegister(_) => 4,
             Packet::ReadRegister(_) => 4,
             Packet::ReadRegisterResponse(_) => 4,
+            Packet::ObjectReportRequest(_) => 0,
+            Packet::ObjectReport(_) => 514,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let id = self.id();
@@ -126,6 +165,8 @@ impl Packet {
             Packet::WriteRegister(x) => x.serialize(buf),
             Packet::ReadRegister(x) => x.serialize(buf),
             Packet::ReadRegisterResponse(x) => x.serialize(buf),
+            Packet::ObjectReportRequest(_) => (),
+            Packet::ObjectReport(x) => x.serialize(buf),
         };
     }
 
@@ -165,5 +206,68 @@ impl ReadRegisterResponse {
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&[self.bank, self.address, self.data, 0]);
+    }
+}
+
+impl MotData {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let mot_data = MotData {
+            area: bytes[0] as u16 | ((bytes[1] as u16) << 8),
+            cx: bytes[2] as u16 | ((bytes[3] & 0x0f) as u16) << 8,
+            cy: bytes[4] as u16 | ((bytes[5] & 0x0f) as u16) << 8,
+            avg_brightness: bytes[6],
+            max_brightness: bytes[7],
+            radius: bytes[8] & 0x0f,
+            range: bytes[8] >> 4,
+            boundary_left: bytes[9] & 0x7f,
+            boundary_right: bytes[10] & 0x7f,
+            boundary_up: bytes[11] & 0x7f,
+            boundary_down: bytes[12] & 0x7f,
+            aspect_ratio: bytes[13],
+            vx: bytes[14],
+            vy: bytes[15],
+        };
+        *bytes = &bytes[256..];
+        Ok(mot_data)
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[
+            self.area as u8,
+            (self.area >> 8) as u8,
+            self.cx as u8,
+            (self.cx >> 8) as u8,
+            self.cy as u8,
+            (self.cy >> 8) as u8,
+            self.avg_brightness,
+            self.max_brightness,
+            self.radius | self.range << 4,
+            self.boundary_left,
+            self.boundary_right,
+            self.boundary_up,
+            self.boundary_down,
+            self.aspect_ratio,
+            self.vx,
+            self.vy,
+        ]);
+    }
+}
+
+impl ObjectReport {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
+        let mut data = &mut &bytes[..512];
+        *bytes = &bytes[512..];
+        let [format, _, ..] = **bytes else {
+            return Err(E::UnexpectedEof);
+        };
+        *bytes = &bytes[2..];
+        Ok(Self { mot_data_nf: MotData::parse(data)?, mot_data_wf: MotData::parse(data)? })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        self.mot_data_nf.serialize(buf);
+        self.mot_data_wf.serialize(buf);
+        buf.extend_from_slice(&[1, 0]);
     }
 }
