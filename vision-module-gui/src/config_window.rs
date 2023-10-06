@@ -74,7 +74,11 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
                     (Compact, "Frame rate") : let x = Entry()
                 }
             }
-            Compact : let save_button = Button("Save", enabled: move || with!(|device_rs| device_rs.is_some()))
+            Compact : let buttons_hbox = HorizontalBox(padded: true) {
+                Compact : let save_button = Button("Apply", enabled: move || with!(|device_rs| device_rs.is_some()))
+                Compact : let save_button = Button("Save", enabled: move || with!(|device_rs| device_rs.is_some()))
+                Compact : let save_button = Button("Load defaults", enabled: move || with!(|device_rs| device_rs.is_some()))
+            }
         }
     }
     config_win.set_child(&ui, vbox);
