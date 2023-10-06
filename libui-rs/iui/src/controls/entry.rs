@@ -12,8 +12,8 @@ use std::os::raw::c_void;
 use str_tools::{from_toolkit_string, to_toolkit_string};
 use ui::UI;
 use ui_sys::{
-    self, uiCheckbox, uiCombobox, uiControl, uiEntry, uiMultilineEntry, uiRadioButtons, uiSlider,
-    uiSpinbox,
+    self, uiCheckbox, uiCombobox, uiControl, uiEditableCombobox, uiEntry, uiMultilineEntry,
+    uiRadioButtons, uiSlider, uiSpinbox,
 };
 
 pub trait NumericEntry {
@@ -134,6 +134,12 @@ define_control! {
 }
 
 define_control! {
+    /// A text buffer suitable for searching.
+    rust_type: SearchEntry,
+    sys_type: uiEntry
+}
+
+define_control! {
     /// Multi-line editable text buffer.
     rust_type: MultilineEntry,
     sys_type: uiMultilineEntry
@@ -148,6 +154,12 @@ impl Entry {
 impl PasswordEntry {
     pub fn new(_ctx: &UI) -> PasswordEntry {
         unsafe { PasswordEntry::from_raw(ui_sys::uiNewPasswordEntry()) }
+    }
+}
+
+impl SearchEntry {
+    pub fn new(_ctx: &UI) -> SearchEntry {
+        unsafe { SearchEntry::from_raw(ui_sys::uiNewSearchEntry()) }
     }
 }
 
@@ -217,6 +229,37 @@ impl TextEntry for PasswordEntry {
                 mem::transmute::<*mut c_void, &mut Box<dyn FnMut(String)>>(data)(string);
                 mem::forget(entry);
             }
+        }
+    }
+}
+
+impl TextEntry for SearchEntry {
+    fn value(&self, _ctx: &UI) -> String {
+        unsafe { from_toolkit_string(ui_sys::uiEntryText(self.uiEntry)) }
+    }
+
+    fn set_value(&mut self, _ctx: &UI, value: &str) {
+        let cstring = to_toolkit_string(value);
+        unsafe { ui_sys::uiEntrySetText(self.uiEntry, cstring.as_ptr()) }
+    }
+
+    /// Some systems will deliberately delay the callback for a more natural feel.
+    fn on_changed<'ctx, F>(&mut self, _ctx: &UI, callback: F)
+        where
+            F: FnMut(String) + 'static,
+    {
+        extern "C" fn c_callback<G>(entry: *mut uiEntry, data: *mut c_void)
+            where
+                G: FnMut(String),
+        {
+            let string = unsafe { CStr::from_ptr(ui_sys::uiEntryText(entry)) }
+                .to_string_lossy()
+                .into_owned();
+            unsafe { from_void_ptr::<G>(data)(string) }
+        }
+
+        unsafe {
+            ui_sys::uiEntryOnChanged(self.uiEntry, Some(c_callback::<F>), to_heap_ptr(callback));
         }
     }
 }
@@ -306,6 +349,75 @@ impl Combobox {
         unsafe {
             ui_sys::uiComboboxOnSelected(
                 self.uiCombobox,
+                Some(c_callback::<F>),
+                to_heap_ptr(callback),
+            );
+        }
+    }
+}
+
+define_control! {
+    /// A control to select one item from a predefined list of items or enter ones own.
+    rust_type: EditableCombobox,
+    sys_type: uiEditableCombobox
+}
+
+impl EditableCombobox {
+    /// Creates a new editable combobox.
+    pub fn new(_ctx: &UI) -> EditableCombobox {
+        unsafe { EditableCombobox::from_raw(ui_sys::uiNewEditableCombobox()) }
+    }
+
+    /// Adds a new option to the combobox.
+    pub fn append(&self, _ctx: &UI, name: &str) {
+        unsafe {
+            let c_string = to_toolkit_string(name);
+            ui_sys::uiEditableComboboxAppend(self.uiEditableCombobox, c_string.as_ptr())
+        }
+    }
+
+    // Returns the text of the editable combobox.
+    //
+    // This text is either the text of one of the predefined
+    // list items or the text manually entered by the user.
+    pub fn value(&self, _ctx: &UI) -> String {
+        let ptr = unsafe { ui_sys::uiEditableComboboxText(self.uiEditableCombobox) };
+        let text: String = unsafe { CStr::from_ptr(ptr).to_string_lossy().into() };
+        unsafe {
+            ui_sys::uiFreeText(ptr);
+        }
+        text
+    }
+
+    // Sets the editable combobox text.
+    pub fn set_value(&mut self, _ctx: &UI, value: &str) {
+        let cstring = to_toolkit_string(value);
+        unsafe { ui_sys::uiEditableComboboxSetText(self.uiEditableCombobox, cstring.as_ptr()) }
+    }
+
+    /// Registers a callback for when an editable combobox item is selected or user text changed.
+    ///
+    /// Note: The callback is not triggered when calling set_value().
+    /// Note: Only one callback can be registered at a time.
+    pub fn on_changed<'ctx, F>(&mut self, _ctx: &'ctx UI, callback: F)
+        where
+            F: FnMut(String) + 'static,
+    {
+        extern "C" fn c_callback<G>(combobox: *mut uiEditableCombobox, data: *mut c_void)
+            where
+                G: FnMut(String),
+        {
+            let ptr = unsafe { ui_sys::uiEditableComboboxText(combobox) };
+            let text: String = unsafe { CStr::from_ptr(ptr).to_string_lossy().into() };
+            unsafe {
+                ui_sys::uiFreeText(ptr);
+            }
+            unsafe { from_void_ptr::<G>(data)(text) }
+        }
+
+        unsafe {
+            ui_sys::uiEditableComboboxOnChanged(
+                self.uiEditableCombobox,
                 Some(c_callback::<F>),
                 to_heap_ptr(callback),
             );
