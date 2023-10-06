@@ -47,7 +47,7 @@ macro_rules! layout {
         let $ctl:ident = Checkbox ( $text:expr $( , checked: $checked:expr )? )
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::Checkbox::new($text);
+        let mut $ctl = iui::controls::Checkbox::new($ui, $text);
         $( $ctl.set_checked($checked); )?
     ];
 
@@ -56,7 +56,7 @@ macro_rules! layout {
         let $ctl:ident = ColorButton ()
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::ColorButton::new();
+        let mut $ctl = iui::controls::ColorButton::new($ui);
     ];
 
     // Combobox
@@ -75,7 +75,7 @@ macro_rules! layout {
         let $ctl:ident = DateTimePicker ( $kind:ident )
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::DateTimePicker::new(
+        let mut $ctl = iui::controls::DateTimePicker::new($ui,
             iui::controls::DateTimePickerKind::$kind);
     ];
 
@@ -156,8 +156,8 @@ macro_rules! layout {
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::RadioButtons::new($ui);
-        $( $ctl.append($option); )*
-        $( $ctl.set_selected($selected); )?
+        $( $ctl.append($ui, $option); )*
+        $( $ctl.set_selected($ui, $selected); )?
     ];
 
     // SearchEntry
@@ -205,7 +205,7 @@ macro_rules! layout {
         let $ctl:ident = ProgressBar ()
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::ProgressBar::new($ui);
+        let mut $ctl = iui::controls::ProgressBar::new();
     ];
 
     // ----------------- Controls with children (Containers) ------------------
@@ -236,11 +236,11 @@ macro_rules! layout {
         )? }
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::Group::new($title);
+        let mut $ctl = iui::controls::Group::new($ui, $title);
         $( $ctl.set_margined($margined); )?
         $(
             iui::layout! { $ui, let $child = $type ($($opt)*) $({$($body)*})? }
-            $ctl.set_child($child.clone());
+            $ctl.set_child($ui, $child.clone());
         )?
     ];
 
@@ -296,7 +296,7 @@ macro_rules! layout {
         $(
             iui::layout! { $ui, let $child = $type ($($opt)*) $({$($body)*})? }
             let __tab_n = $ctl.append($ui, $name, $child.clone());
-            $( $ctl.set_margined(__tab_n - 1, $margined); )?
+            $( $ctl.set_margined($ui, __tab_n - 1, $margined); )?
         )*
     ];
 
