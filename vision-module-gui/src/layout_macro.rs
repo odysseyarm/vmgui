@@ -2,6 +2,8 @@
 //! Changes:
 //! * enabled property on Entry
 
+use leptos_reactive::{MaybeSignal, ReadSignal, RwSignal, Memo, Signal};
+
 /// Creates layout code from a compact, declarative and hierarchical UI description.
 ///
 /// # Example
@@ -47,7 +49,7 @@ macro_rules! layout {
         leptos_reactive::create_effect({
             let ui = iui::UI::clone($ui);
             let ctl = $ctl.clone();
-            let text = leptos_reactive::MaybeSignal::<String>::from($text);
+            let text = $crate::layout_macro::IntoMaybeSignal::<String>::from($text);
             move |_| {
                 let mut ctl = ctl.clone();
                 leptos_reactive::SignalWith::with(&text, |text| {
@@ -59,10 +61,10 @@ macro_rules! layout {
             leptos_reactive::create_effect({
                 let ui = iui::UI::clone($ui);
                 let ctl = $ctl.clone();
-                let enabled = leptos_reactive::Signal::from($enabled);
+                let enabled = $crate::layout_macro::IntoMaybeSignal::<bool>::from($enabled);
                 move |_| {
                     let mut ctl = ctl.clone();
-                    match leptos_reactive::Signal::get(&enabled) {
+                    match leptos_reactive::SignalGet::get(&enabled) {
                         true => ctl.enable(&ui),
                         false => ctl.disable(&ui),
                     }
@@ -120,25 +122,37 @@ macro_rules! layout {
 
     // Entry
     [ $ui:expr ,
-        let $ctl:ident = Entry ( $( enabled: $enabled:expr )? )
+        let $ctl:ident = Entry ( $( $prop:ident: $value:expr ),* )
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Entry::new($ui);
-        $(
-            leptos_reactive::create_effect({
-                let ui = $ui.clone();
-                let ctl = $ctl.clone();
-                let enabled = leptos_reactive::Signal::from($enabled);
-                move |_| {
-                    let mut ctl = ctl.clone();
-                    if leptos_reactive::Signal::get(&enabled) {
-                        ctl.enable(&ui);
-                    } else {
-                        ctl.disable(&ui);
-                    }
+        $($crate::layout!(@Entry_args $ui; $ctl $prop $value);)*
+    ];
+    [ @Entry_args $ui:expr; $ctl:ident value $value:expr] => [
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let value = $crate::layout_macro::IntoMaybeSignal::from($value);
+            move |_| {
+                let mut ctl = ctl.clone();
+                leptos_reactive::SignalWith::with(&value, |v| iui::controls::TextEntry::set_value(&mut ctl, &ui, v));
+            }
+        })
+    ];
+    [ @Entry_args $ui:expr; $ctl:ident enabled $enabled:expr] => [
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let enabled = $crate::layout_macro::IntoMaybeSignal::from($enabled);
+            move |_| {
+                let mut ctl = ctl.clone();
+                if leptos_reactive::SignalGet::get(&enabled) {
+                    ctl.enable(&ui);
+                } else {
+                    ctl.disable(&ui);
                 }
-            });
-        )?
+            }
+        });
     ];
 
     // FontButton
@@ -340,7 +354,7 @@ macro_rules! layout {
         $(
             $crate::layout! { $ui, let $child = $type ($($opt)*) $({$($body)*})? }
             let __tab_n = $ctl.append($ui, $name, $child.clone());
-            $( $ctl.set_margined(__tab_n - 1, $margined); )?
+            $( $ctl.set_margined($ui, __tab_n - 1, $margined); )?
         )*
     ];
 
@@ -361,4 +375,55 @@ macro_rules! layout {
                         iui::controls::LayoutStrategy::$strategy);
         )*
     ];
+}
+
+/// An alternate set of impls of From<...> for MaybeSignal<T>
+pub trait IntoMaybeSignal<T> {
+    fn from(self) -> MaybeSignal<T>;
+}
+
+impl IntoMaybeSignal<bool> for bool {
+    fn from(self) -> MaybeSignal<bool> {
+        MaybeSignal::Static(self)
+    }
+}
+
+
+impl<T> IntoMaybeSignal<T> for ReadSignal<T> {
+    fn from(self) -> MaybeSignal<T> {
+        MaybeSignal::Dynamic(self.into())
+    }
+}
+
+impl<T> IntoMaybeSignal<T> for RwSignal<T> {
+    fn from(self) -> MaybeSignal<T> {
+        MaybeSignal::Dynamic(self.into())
+    }
+}
+
+impl<T> IntoMaybeSignal<T> for Memo<T> {
+    fn from(self) -> MaybeSignal<T> {
+        MaybeSignal::Dynamic(self.into())
+    }
+}
+
+impl<T> IntoMaybeSignal<T> for Signal<T> {
+    fn from(self) -> MaybeSignal<T> {
+        MaybeSignal::Dynamic(self)
+    }
+}
+
+impl IntoMaybeSignal<String> for &str {
+    fn from(self) -> MaybeSignal<String> {
+        MaybeSignal::Static(self.to_string())
+    }
+}
+
+impl<F, T> IntoMaybeSignal<T> for F
+where
+    F: Fn() -> T + 'static,
+{
+    fn from(self) -> MaybeSignal<T> {
+        MaybeSignal::derive(self)
+    }
 }
