@@ -1,6 +1,6 @@
-extern crate libui;
+extern crate iui;
 
-use libui::prelude::*;
+use iui::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,7 +11,7 @@ fn main() {
     // The macro based builder vastly reduces the amount of code required
     // to build complex user interfaces. Compare this example to the "controlgallery".
     // It creates mostly the same UI in a fraction of lines.
-    libui::layout! { &ui,
+    iui::layout! { &ui,
         let layout = HorizontalBox() {
             Stretchy: let tabs = TabGroup() {
                 // TAB PAGE 1
@@ -89,58 +89,63 @@ fn main() {
         480,
         WindowType::NoMenubar,
     )));
-    window.borrow_mut().set_child(layout);
+    window.borrow_mut().set_child(&ui, layout);
 
-    // You can easily reference the controls declared in the `libui::build!` macro.
+    // You can easily reference the controls declared in the `iui::build!` macro.
     // Note that all controls are created mutable, contrary to what the macro syntax
     // suggests. This is because most control will be mutated in user code anyways.
-    bt_open_file.on_clicked({
+    bt_open_file.on_clicked(&ui, {
         let window = window.clone();
         let mut tb_open_file = tb_open_file.clone();
+        let ui = ui.clone();
         move |_| -> () {
-            match window.borrow_mut().open_file() {
-                Some(path) => tb_open_file.set_value(path.to_str().unwrap()),
+            match window.borrow_mut().open_file(&ui) {
+                Some(path) => tb_open_file.set_value(&ui, path.to_str().unwrap()),
                 None => (),
             }
         }
     });
 
-    bt_open_folder_pwd.on_clicked({
+    bt_open_folder_pwd.on_clicked(&ui, {
         let window = window.clone();
         let mut tb_open_folder = tb_open_folder.clone();
+        let ui = ui.clone();
         move |_| -> () {
-            match window.borrow_mut().open_folder() {
-                Some(path) => tb_open_folder.set_value(path.to_str().unwrap()),
+            match window.borrow_mut().open_folder(&ui) {
+                Some(path) => tb_open_folder.set_value(&ui, path.to_str().unwrap()),
                 None => (),
             }
         }
     });
 
-    bt_save_file.on_clicked({
+    bt_save_file.on_clicked(&ui, {
         let window = window.clone();
         let mut tb_save_file = tb_save_file.clone();
+        let ui = ui.clone();
         move |_| -> () {
-            match window.borrow_mut().save_file() {
-                Some(path) => tb_save_file.set_value(path.to_str().unwrap()),
+            match window.borrow_mut().save_file(&ui) {
+                Some(path) => tb_save_file.set_value(&ui, path.to_str().unwrap()),
                 None => (),
             }
         }
     });
 
-    bt_msgbox.on_clicked({
+    bt_msgbox.on_clicked(&ui, {
         let window = window.clone();
+        let ui = ui.clone();
         move |_| -> () {
-            window.borrow_mut().modal_msg(
+            window.borrow_mut().modal_msg(&ui,
                 "This is a normal message box.",
                 "More detailed information can be shown here.",
             );
         }
     });
 
-    bt_msgbox_error.on_clicked({
+    bt_msgbox_error.on_clicked(&ui, {
         let window = window.clone();
+        let ui = ui.clone();
         move |_| -> () {
-            window.borrow_mut().modal_err(
+            window.borrow_mut().modal_err(&ui,
                 "This message box describes an error.",
                 "More detailed information can be shown here.",
             );
@@ -148,6 +153,6 @@ fn main() {
     });
 
     // Display and run
-    window.borrow_mut().show();
+    window.borrow_mut().show(&ui);
     ui.main();
 }

@@ -11,6 +11,7 @@ use std::mem;
 use std::os::raw::c_void;
 use str_tools::{from_toolkit_string, to_toolkit_string};
 use ui::UI;
+use std::os::raw::c_int;
 use ui_sys::{
     self, uiCheckbox, uiCombobox, uiControl, uiEditableCombobox, uiEntry, uiMultilineEntry,
     uiRadioButtons, uiSlider, uiSpinbox,
@@ -166,6 +167,24 @@ impl SearchEntry {
 impl MultilineEntry {
     pub fn new(_ctx: &UI) -> MultilineEntry {
         unsafe { MultilineEntry::from_raw(ui_sys::uiNewMultilineEntry()) }
+    }
+
+    /// Creates an entry that doesn't wrap the text or resize, but has horizontal scrollbars instead.
+    pub fn new_nonwrapping(_ctx: &UI) -> MultilineEntry {
+        unsafe { MultilineEntry::from_raw(ui_sys::uiNewNonWrappingMultilineEntry()) }
+    }
+
+    pub fn append(&mut self, _ctx: &UI, value: &str) {
+        let cstring = to_toolkit_string(value);
+        unsafe { ui_sys::uiMultilineEntryAppend(self.uiMultilineEntry, cstring.as_ptr()) }
+    }
+
+    pub fn readonly(&self, _ctx: &UI) -> bool {
+        unsafe { ui_sys::uiMultilineEntryReadOnly(self.uiMultilineEntry) != 0 }
+    }
+
+    pub fn set_readonly(&mut self, _ctx: &UI, readonly: bool) {
+        unsafe { ui_sys::uiMultilineEntrySetReadOnly(self.uiMultilineEntry, readonly as c_int) }
     }
 }
 
