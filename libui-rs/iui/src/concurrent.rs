@@ -76,10 +76,14 @@ pub(crate) unsafe fn spawn_unsafe<F: Future<Output = ()> + 'static>(arc: Arc<F>)
     })
 }
 
-pub(crate) fn ui_timer_unsafe<F: FnMut()->i32 + 'static>(milliseconds: i32, callback: F) {
-    extern "C" fn c_callback<G: FnMut()->i32>(data: *mut c_void) -> i32 {
+pub(crate) fn ui_timer_unsafe<F: FnMut()->bool + 'static>(milliseconds: i32, callback: F) {
+    extern "C" fn c_callback<G: FnMut()->bool>(data: *mut c_void) -> i32 {
         unsafe {
-            Box::<G>::from_raw(data as *mut G)()
+            if !(*(data as *mut G))() {
+                let _ = Box::<G>::from_raw(data as *mut G);
+                return 0
+            }
+            1
         }
     }
 

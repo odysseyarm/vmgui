@@ -156,7 +156,7 @@ impl UI {
         unsafe { crate::concurrent::spawn_unsafe(arc) }
     }
 
-    pub fn ui_timer<F: FnMut()->i32 + 'static>(&self, milliseconds: i32, callback: F) {
+    pub fn ui_timer<F: FnMut()->bool + 'static>(&self, milliseconds: i32, callback: F) {
         crate::concurrent::ui_timer_unsafe(milliseconds, callback);
     }
 
