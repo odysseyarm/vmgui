@@ -145,7 +145,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut i = 0;
     let mut ev = ui.event_loop();
     ev.on_tick(&ui, || {
-        println!("tick {i}");
+        // println!("tick {i}");
         i += 1;
     });
     ev.run(&ui);
