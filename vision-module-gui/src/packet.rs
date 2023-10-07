@@ -176,6 +176,13 @@ impl Packet {
             _ => None,
         }
     }
+
+    pub fn object_report(self) -> Option<ObjectReport> {
+        match self {
+            Self::ObjectReport(x) => Some(x),
+            _ => None,
+        }
+    }
 }
 
 impl Register {
