@@ -152,7 +152,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !test_run_abort_handle.blocking_lock().is_none() {
                 area.queue_redraw_all(&ui);
             }
-            1
+            true
         }
     });
 
