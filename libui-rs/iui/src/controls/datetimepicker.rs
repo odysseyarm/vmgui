@@ -1,6 +1,6 @@
 use super::Control;
 use callback_helpers::{from_void_ptr, to_heap_ptr};
-use std::{alloc, mem};
+use std::mem;
 use std::mem::MaybeUninit;
 use std::os::raw::c_void;
 use ui::UI;
@@ -32,10 +32,10 @@ impl DateTimePicker {
     /// Returns date and time stored in the DateTimePicker.
     ///
     /// Warning: The `struct tm` members `tm_wday` and `tm_yday` are undefined
-    pub fn datetime(&self, _ctx: &UI) -> libc::tm {
+    pub fn datetime(&self, _ctx: &UI) -> ui_sys::tm {
         unsafe {
-            let datetime = MaybeUninit::<libc::tm>::uninit();
-            ui_sys::uiDateTimePickerTime(self.uiDateTimePicker, datetime.as_ptr() as *mut ui_sys::tm);
+            let mut datetime = MaybeUninit::<ui_sys::tm>::uninit();
+            ui_sys::uiDateTimePickerTime(self.uiDateTimePicker, datetime.as_mut_ptr());
             datetime.assume_init()
         }
     }
@@ -43,9 +43,9 @@ impl DateTimePicker {
     /// Sets date and time of the DateTimePicker.
     ///
     /// Warning: The `struct tm` member `tm_isdst` is ignored on Windows and should be set to `-1`
-    pub fn set_datetime(&self, _ctx: &UI, datetime: libc::tm) {
+    pub fn set_datetime(&self, _ctx: &UI, datetime: ui_sys::tm) {
         unsafe {
-            let ptr = &datetime as *const libc::tm;
+            let ptr = &datetime as *const ui_sys::tm;
             ui_sys::uiDateTimePickerSetTime(self.uiDateTimePicker, ptr as *const ui_sys::tm);
         }
     }

@@ -88,10 +88,27 @@ impl UsbDevice {
             .with_context(|| "unexpected response")?;
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
+}
 
-    pub async fn product_id(&self, port: Port) -> Result<u16> {
-        let a = self.read_register(port, 0x00, 0x02).await?;
-        let b = self.read_register(port, 0x00, 0x03).await?;
-        Ok(u16::from_le_bytes([a, b]))
+macro_rules! register_spec {
+    ($name:ident $(, $set_name:ident)? : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
+        pub async fn $name(&self, port: Port) -> Result<$ty> {
+            Ok(<$ty>::from_le_bytes([
+                $( self.read_register(port, $bank, $addr).await? ),*
+            ]))
+        }
+        $(
+            pub fn $set_name(&self, _port: Port) -> ! {
+                todo!()
+            }
+        )?
     }
+}
+
+impl UsbDevice {
+    register_spec!(product_id: u16 = 0x00; [0x02, 0x03]);
+    register_spec!(resolution_x, set_resolution_x: u16 = 0x0c; [0x60, 0x61]);
+    register_spec!(resolution_y, set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
+    register_spec!(sensor_gain_1, set_sensor_gain_1: u8 = 0x01; [0x05]);
+    register_spec!(sensor_gain_2, set_sensor_gain_2: u8 = 0x01; [0x06]);
 }
