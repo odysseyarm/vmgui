@@ -76,6 +76,22 @@ pub(crate) unsafe fn spawn_unsafe<F: Future<Output = ()> + 'static>(arc: Arc<F>)
     })
 }
 
+pub(crate) fn ui_timer_unsafe<F: FnMut()->i32 + 'static>(milliseconds: i32, callback: F) {
+    extern "C" fn c_callback<G: FnMut()->i32>(data: *mut c_void) -> i32 {
+        unsafe {
+            Box::<G>::from_raw(data as *mut G)()
+        }
+    }
+
+    unsafe {
+        ui_sys::uiTimer(
+            milliseconds,
+            Some(c_callback::<F>),
+            Box::into_raw(Box::new(callback)) as *mut c_void,
+        );
+    }
+}
+
 mod waker {
     use std::mem::ManuallyDrop;
     use std::sync::Arc;
