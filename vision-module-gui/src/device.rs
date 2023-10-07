@@ -1,9 +1,10 @@
 use std::{borrow::Cow, time::Duration};
 
 use anyhow::{Context, Result};
+use serialport::ClearBuffer::Input;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::packet::{Packet, Port, Register};
+use crate::packet::{MotData, ObjectReportRequest, Packet, Port, Register};
 
 type Message = (Packet, oneshot::Sender<Result<Packet>>);
 
@@ -17,6 +18,10 @@ impl UsbDevice {
         let mut port = serialport::new(path, 115200)
             .timeout(Duration::from_secs(3))
             .open()?;
+
+        port.clear(Input)?;
+
+        port.write_data_terminal_ready(true)?;
 
         let (sender, mut receiver) = mpsc::channel::<Message>(16);
         std::thread::spawn(move || {
@@ -73,6 +78,15 @@ impl UsbDevice {
         assert_eq!(r.bank, bank);
         assert_eq!(r.address, address);
         Ok(r.data)
+    }
+
+    pub async fn get_frame(&self) -> Result<(MotData, MotData)> {
+        let r = self
+            .request(Packet::ObjectReportRequest(ObjectReportRequest{}))
+            .await?
+            .object_report()
+            .with_context(|| "unexpected response")?;
+        Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
     pub async fn product_id(&self, port: Port) -> Result<u16> {
