@@ -156,6 +156,10 @@ impl UI {
         unsafe { crate::concurrent::spawn_unsafe(arc) }
     }
 
+    pub fn ui_timer<F: FnMut()->i32 + 'static>(&self, milliseconds: i32, callback: F) {
+        crate::concurrent::ui_timer_unsafe(milliseconds, callback);
+    }
+
     /// Set a callback to be run when the application quits.
     pub fn on_should_quit<F: FnMut() + 'static>(&self, callback: F) {
         extern "C" fn c_callback<G: FnMut()>(data: *mut c_void) -> i32 {
