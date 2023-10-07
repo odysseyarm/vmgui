@@ -54,17 +54,20 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     form.hide(&ui);
 
-    let mut test_run_abort_handle = None::<AbortHandle>;
+    let mut test_run_abort_handle = Arc::new(Mutex::new(None::<AbortHandle>));
 
     let test_win_on_closing = {
         let ui = ui.c();
-        let mut form = form.c();
-        if test_run_abort_handle.is_some() {
-            test_run_abort_handle.as_mut().expect("Test run abort handle is None").abort();
-        }
+        let form = form.c();
+        let test_run_abort_handle = test_run_abort_handle.c();
         move |win:&mut Window| {
+            let mut form = form.c();
             win.hide(&ui);
             form.hide(&ui);
+            let test_run_abort_handle = &test_run_abort_handle.blocking_lock().take();
+            if test_run_abort_handle.is_some() {
+                test_run_abort_handle.as_ref().expect("Test run abort handle is None").abort();
+            }
         }
     };
 
@@ -124,22 +127,34 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let view = Arc::new(TestProcedureView { state: state.c() });
 
-    test_win.set_child(&ui, area);
+    test_win.set_child(&ui, area.c());
 
     test_button.on_clicked(&ui, {
         let ui = ui.c();
         let mut form = form.c();
+        let mut test_run_abort_handle = test_run_abort_handle.c();
         move |_| {
             form.show(&ui);
             test_win.show(&ui);
             let view = view.c();
-            if test_run_abort_handle.is_none() {
-                test_run_abort_handle = Some(tokio::spawn(async move { view.run().await; }).abort_handle());
+            if test_run_abort_handle.blocking_lock().is_none() {
+                *(test_run_abort_handle.blocking_lock()) = Some(tokio::spawn(async move { view.run().await; }).abort_handle());
             }
         }
     });
 
     main_win.show(&ui);
+
+    ui.ui_timer(5, {
+        let ui = ui.c();
+        let area = area.c();
+        move || {
+            if !test_run_abort_handle.blocking_lock().is_none() {
+                area.queue_redraw_all(&ui);
+            }
+            1
+        }
+    });
 
     // Run the application
     let mut i = 0;
