@@ -111,4 +111,5 @@ impl UsbDevice {
     register_spec!(resolution_y, set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
     register_spec!(sensor_gain_1, set_sensor_gain_1: u8 = 0x01; [0x05]);
     register_spec!(sensor_gain_2, set_sensor_gain_2: u8 = 0x01; [0x06]);
+    register_spec!(sensor_exposure, set_sensor_exposure: u16 = 0x01; [0x0e, 0x0f]);
 }

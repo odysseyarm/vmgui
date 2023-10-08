@@ -122,7 +122,7 @@ macro_rules! layout {
 
     // Entry
     [ $ui:expr ,
-        let $ctl:ident = Entry ( $( $prop:ident: $value:expr ),* )
+        let $ctl:ident = Entry ( $( $prop:ident: $value:expr ),* $(,)? )
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Entry::new($ui);
@@ -154,6 +154,9 @@ macro_rules! layout {
             }
         });
     ];
+    [ @Entry_args $ui:expr; $ctl:ident onchange $signal:expr] => [
+        iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
+    ];
 
     // FontButton
     [ $ui:expr ,
@@ -176,7 +179,18 @@ macro_rules! layout {
         let $ctl:ident = Label ( $text:expr )
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::Label::new($ui, $text);
+        let mut $ctl = iui::controls::Label::new($ui, "");
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let text = $crate::layout_macro::IntoMaybeSignal::<String>::from($text);
+            move |_| {
+                let mut ctl = ctl.clone();
+                leptos_reactive::SignalWith::with(&text, |text| {
+                    ctl.set_text(&ui, &text);
+                });
+            }
+        });
     ];
 
     // MultilineEntry

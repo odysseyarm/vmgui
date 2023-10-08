@@ -28,6 +28,9 @@ impl TestProcedureView {
             let mut state = self.state.lock().await;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
+            if state.wf_data.unwrap()[0].area > 0 {
+                println!("{:?}", state.wf_data.unwrap()[0]);
+            }
             sleep(Duration::from_millis(5)).await;
         }
     }
