@@ -61,11 +61,13 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
                 device.set(Some(usb_device.c()));
                 Result::<()>::Ok(())
             };
-            let ui2 = ui.c();
-            let config_win = config_win.c();
-            ui.spawn(async move {
-                if let Err(e) = task.await {
-                    config_win.modal_err(&ui2, "Failed to connect", &e.to_string());
+            ui.spawn({
+                let ui = ui.c();
+                let config_win = config_win.c();
+                async move {
+                    if let Err(e) = task.await {
+                        config_win.modal_err(&ui, "Failed to connect", &e.to_string());
+                    }
                 }
             });
         }
