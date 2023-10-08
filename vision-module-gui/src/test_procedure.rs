@@ -53,41 +53,63 @@ impl AreaHandler for TestCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
 
-        let path = Path::new(ctx, FillMode::Winding);
-        path.add_rectangle(ctx, 0., 0., draw_params.area_width, draw_params.area_height);
-        path.end(ctx);
-
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.2,
-            g: 0.6,
-            b: 0.8,
-            a: 1.,
-        });
-
-        draw_params.context.fill(&path, &brush);
-
-        let path = Path::new(ctx, FillMode::Winding);
-        for i in 0..100 {
-            let x = i as f64 / 100.;
-            let y = ((x * PI * 2.).sin() + 1.) / 2.;
-            path.add_rectangle(
-                ctx,
-                x * draw_params.area_width,
-                0.,
-                draw_params.area_width / 100.,
-                y * draw_params.area_height,
-            );
+        let nf_path = Path::new(ctx, FillMode::Winding);
+        let wf_path = Path::new(ctx, FillMode::Winding);
+        let mut state = self.state.blocking_lock();
+        if state.nf_data.is_some() {
+            for mot_data in state.nf_data.expect("Nf data is None") {
+                if mot_data.area == 0 {
+                    break;
+                }
+                // todo don't use hardcoded 4096x4096 res assumption
+                let x = mot_data.cx as f64 / 4096.;
+                let y = mot_data.cy as f64 / 4096.;
+                nf_path.add_rectangle(
+                    ctx,
+                    x * draw_params.area_width,
+                    y * draw_params.area_height,
+                    draw_params.area_width / 100.,
+                    draw_params.area_width / 100.,
+                );
+            }
         }
-        path.end(ctx);
+        nf_path.end(ctx);
+        if state.wf_data.is_some() {
+            for mot_data in state.wf_data.expect("Wf data is None") {
+                if mot_data.area == 0 {
+                    break;
+                }
+                // todo don't use hardcoded 4096x4096 res assumption
+                let x = mot_data.cx as f64 / 4096.;
+                let y = mot_data.cy as f64 / 4096.;
+                wf_path.add_rectangle(
+                    ctx,
+                    x * draw_params.area_width,
+                    y * draw_params.area_height,
+                    draw_params.area_width / 100.,
+                    draw_params.area_width / 100.,
+                );
+            }
+        }
+        wf_path.end(ctx);
 
         let brush = Brush::Solid(SolidBrush {
-            r: 0.2,
+            r: 1.,
             g: 0.,
-            b: 0.3,
+            b: 0.,
             a: 1.,
         });
 
-        draw_params.context.fill(&path, &brush);
+        draw_params.context.fill(&nf_path, &brush);
+
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.,
+            g: 0.,
+            b: 1.,
+            a: 1.,
+        });
+
+        draw_params.context.fill(&wf_path, &brush);
     }
 
     fn key_event(&mut self, _area: &Area, _area_key_event: &AreaKeyEvent) -> bool {
