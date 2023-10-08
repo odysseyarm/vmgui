@@ -1,20 +1,14 @@
-mod test_procedure;
-
-use std::f64::consts::PI;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
 use anyhow::Result;
-use iui::menus::Menu;
 use iui::prelude::*;
-use leptos_reactive::{create_effect, create_rw_signal, SignalGet, SignalSet, SignalWith, with, SignalWithUntracked, create_signal};
-use serialport::{SerialPortInfo, SerialPort};
-use vision_module_gui::{device::UsbDevice, packet::Port, config_window::config_window, CloneButShorter};
+use leptos_reactive::{create_effect, SignalGet, SignalWith};
+use vision_module_gui::{config_window::config_window, CloneButShorter};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
 use iui::controls::Area;
-use crate::test_procedure::{TestCanvas, TestCanvasState, TestProcedureView};
+use vision_module_gui::mot_runner::MotRunner;
+use vision_module_gui::test_procedure::{MotState, TestCanvas};
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -54,7 +48,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     form.hide(&ui);
 
-    let mut test_run_abort_handle = Arc::new(Mutex::new(None::<AbortHandle>));
+    let test_run_abort_handle = Arc::new(Mutex::new(None::<AbortHandle>));
 
     let test_win_on_closing = {
         let ui = ui.c();
@@ -122,15 +116,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     vert_box.append(&ui, form.c(), LayoutStrategy::Compact);
 
-    let state: Arc<Mutex<TestCanvasState>> = Default::default();
+    let state: Arc<Mutex<MotState>> = Default::default();
     let area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing), state: state.c() }));
 
-    let mut view = Arc::new(Mutex::new(TestProcedureView { state: state.c(), device: None }));
+    let view = Arc::new(Mutex::new(MotRunner { state: state.c(), device: None }));
 
     create_effect({
         let view = view.c();
         move |_| {
-            let mut view = view.c();
+            let view = view.c();
             view.blocking_lock().device = device_rs.get();
         }
     });
@@ -140,7 +134,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_button.on_clicked(&ui, {
         let ui = ui.c();
         let mut form = form.c();
-        let mut test_run_abort_handle = test_run_abort_handle.c();
+        let test_run_abort_handle = test_run_abort_handle.c();
         move |_| {
             form.show(&ui);
             test_win.show(&ui);

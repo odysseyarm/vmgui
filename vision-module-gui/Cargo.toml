@@ -2,7 +2,7 @@
 name = "vision-module-gui"
 version = "0.1.0"
 edition = "2021"
-default-run = "vision-module-gui"
+default-run = "gui"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
