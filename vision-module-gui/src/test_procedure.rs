@@ -26,7 +26,6 @@ impl TestProcedureView {
             let device = self.device.c().unwrap();
             let (nf_data, wf_data) = device.get_frame().await.expect("Problem getting frame from device");
             let mut state = self.state.lock().await;
-            let state = state.deref_mut();
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
             sleep(Duration::from_millis(5)).await;
