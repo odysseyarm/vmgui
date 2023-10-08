@@ -6,7 +6,7 @@ use leptos_reactive::{create_effect, SignalGet, SignalWith};
 use vision_module_gui::{config_window::config_window, CloneButShorter};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
-use iui::controls::Area;
+use iui::controls::{Area, HorizontalBox};
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::test_procedure::{MotState, TestCanvas};
 
@@ -129,7 +129,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    test_win.set_child(&ui, area.c());
+    let mut test_hbox = HorizontalBox::new(&ui);
+    test_hbox.append(&ui, area.c(), LayoutStrategy::Stretchy);
+    test_win.set_child(&ui, test_hbox);
 
     test_button.on_clicked(&ui, {
         let ui = ui.c();
