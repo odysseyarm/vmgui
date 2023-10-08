@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use iui::{UI, prelude::{Window, WindowType, TextEntry}, controls::{Form, Button}};
-use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, SignalGet, SignalUpdate, ReadSignal, RwSignal};
+use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, SignalGet, SignalUpdate, ReadSignal, RwSignal, SignalGetUntracked};
 use serialport::SerialPortInfo;
 use crate::{CloneButShorter, device::UsbDevice, packet::Port};
 use anyhow::Result;
@@ -116,8 +116,20 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
     };
     apply_button.on_clicked(&ui, show_todo_modal.c());
     save_button.on_clicked(&ui, show_todo_modal.c());
-    reload_button.on_clicked(&ui, show_todo_modal.c());
     load_defaults_button.on_clicked(&ui, show_todo_modal.c());
+
+    reload_button.on_clicked(&ui, {
+        move |_| {
+            if let Some(device) = device.get_untracked() {
+                ui_ctx.spawn(async move {
+                    let _ = tokio::join!(
+                        nf_settings.load_from_device(&device),
+                        wf_settings.load_from_device(&device),
+                    );
+                });
+            }
+        }
+    });
 
     (config_win, device.read_only())
 }
