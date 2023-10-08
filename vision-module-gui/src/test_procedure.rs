@@ -1,23 +1,44 @@
 use std::f64::consts::PI;
+use std::ops::DerefMut;
 use std::sync::Arc;
+use std::time::Duration;
+use leptos_reactive::{ReadSignal, SignalGetUntracked};
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush};
 use iui::UI;
+use vision_module_gui::CloneButShorter;
+use vision_module_gui::device::UsbDevice;
+use vision_module_gui::packet::MotData;
 
 pub struct TestProcedureView {
     pub state: Arc<Mutex<TestCanvasState>>,
+    pub device: Option<UsbDevice>,
 }
 
 impl TestProcedureView {
     pub async fn run(&self) {
-        //
+        loop {
+            if self.device.is_none() {
+                return;
+            }
+            let device = self.device.c().unwrap();
+            let (nf_data, wf_data) = device.get_frame().await.expect("Problem getting frame from device");
+            let mut state = self.state.lock().await;
+            let state = state.deref_mut();
+            state.nf_data = Some(nf_data);
+            state.wf_data = Some(wf_data);
+            println!("{:?}", state.wf_data);
+            sleep(Duration::from_millis(5)).await;
+        }
     }
 }
 
 #[derive(Default)]
 pub struct TestCanvasState {
-    //
+    pub nf_data: Option<MotData>,
+    pub wf_data: Option<MotData>,
 }
 
 pub struct TestCanvas {

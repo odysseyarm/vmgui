@@ -125,7 +125,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state: Arc<Mutex<TestCanvasState>> = Default::default();
     let area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing), state: state.c() }));
 
-    let view = Arc::new(TestProcedureView { state: state.c() });
+    let mut view = Arc::new(Mutex::new(TestProcedureView { state: state.c(), device: None }));
+
+    create_effect({
+        let view = view.c();
+        move |_| {
+            let mut view = view.c();
+            view.blocking_lock().device = device_rs.get();
+        }
+    });
 
     test_win.set_child(&ui, area.c());
 
@@ -138,7 +146,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             test_win.show(&ui);
             let view = view.c();
             if test_run_abort_handle.blocking_lock().is_none() {
-                *(test_run_abort_handle.blocking_lock()) = Some(tokio::spawn(async move { view.run().await; }).abort_handle());
+                *(test_run_abort_handle.blocking_lock()) = Some(tokio::spawn(async move { view.lock().await.run().await; }).abort_handle());
             }
         }
     });
