@@ -39,4 +39,4 @@ maintenance = { status = "actively-developed" }
 bitflags = "1"
 failure = "0.1"
 ui-sys = { path = "../ui-sys", version = "0.2.1" }
-
+futures = "0.3"

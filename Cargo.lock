@@ -368,6 +368,7 @@ version = "0.3.0"
 dependencies = [
  "bitflags 1.3.2",
  "failure",
+ "futures",
  "ui-sys",
 ]
 
