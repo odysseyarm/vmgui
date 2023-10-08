@@ -130,6 +130,7 @@ struct SensorSettingsForm {
     resolution_y: RwSignal<String>,
     sensor_gain_1: RwSignal<String>,
     sensor_gain_2: RwSignal<String>,
+    sensor_exposure: RwSignal<String>,
 }
 
 impl SensorSettingsForm {
@@ -140,6 +141,13 @@ impl SensorSettingsForm {
         let resolution_y = create_rw_signal(String::new());
         let sensor_gain_1 = create_rw_signal(String::new());
         let sensor_gain_2 = create_rw_signal(String::new());
+        let sensor_exposure = create_rw_signal(String::new());
+        let sensor_exposure_ms = move || {
+            match sensor_exposure.with(|s| u16::from_str_radix(s, 10)) {
+                Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
+                Err(_) => format!("???"),
+            }
+        };
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Product ID")                    : let product_id = Entry(value: pid, enabled: false)
@@ -150,7 +158,16 @@ impl SensorSettingsForm {
                 (Compact, "DSP maximum number of objects") : let x = Entry(enabled: connected)
                 (Compact, "Sensor gain 1")                 : let x = Entry(enabled: connected, value: sensor_gain_1)
                 (Compact, "Sensor gain 2")                 : let x = Entry(enabled: connected, value: sensor_gain_2)
-                (Compact, "Sensor exposure length")        : let x = Entry(enabled: connected)
+                (Compact, "Sensor exposure length")        : let x = HorizontalBox(padded: true) {
+                    Stretchy : let e = Entry(
+                        enabled: connected,
+                        onchange: sensor_exposure,
+                        value: sensor_exposure,
+                    )
+                    Compact : let x1 = LayoutGrid() {
+                        (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", sensor_exposure_ms()))
+                    }
+                }
                 (Compact, "Scale resolution X")            : let x = Entry(enabled: connected, value: resolution_x)
                 (Compact, "Scale resolution Y")            : let x = Entry(enabled: connected, value: resolution_y)
                 (Compact, "Frame period")                  : let x = Entry(enabled: connected)
@@ -166,24 +183,27 @@ impl SensorSettingsForm {
                 resolution_y,
                 sensor_gain_1,
                 sensor_gain_2,
+                sensor_exposure,
             }
         )
     }
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let (pid, res_x, res_y, gain_1, gain_2) = tokio::try_join!(
+        let (pid, res_x, res_y, gain_1, gain_2, expo) = tokio::try_join!(
             device.product_id(self.port),
             device.resolution_x(self.port),
             device.resolution_y(self.port),
             device.sensor_gain_1(self.port),
             device.sensor_gain_2(self.port),
+            device.sensor_exposure(self.port),
         )?;
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
         self.resolution_y.set(res_y.to_string());
         self.sensor_gain_1.set(gain_1.to_string());
         self.sensor_gain_2.set(gain_2.to_string());
+        self.sensor_exposure.set(expo.to_string());
         Ok(())
     }
 
@@ -193,6 +213,7 @@ impl SensorSettingsForm {
         self.resolution_y.set(String::new());
         self.sensor_gain_1.set(String::new());
         self.sensor_gain_2.set(String::new());
+        self.sensor_exposure.set(String::new());
     }
 }
 
