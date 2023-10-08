@@ -80,7 +80,7 @@ impl UsbDevice {
         Ok(r.data)
     }
 
-    pub async fn get_frame(&self) -> Result<(MotData, MotData)> {
+    pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
         let r = self
             .request(Packet::ObjectReportRequest(ObjectReportRequest{}))
             .await?

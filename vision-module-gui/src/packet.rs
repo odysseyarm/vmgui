@@ -47,8 +47,8 @@ pub struct MotData {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectReport {
-    pub mot_data_nf: MotData,
-    pub mot_data_wf: MotData,
+    pub mot_data_nf: [MotData; 16],
+    pub mot_data_wf: [MotData; 16],
 }
 
 
@@ -234,7 +234,7 @@ impl MotData {
             vx: bytes[14],
             vy: bytes[15],
         };
-        *bytes = &bytes[256..];
+        *bytes = &bytes[16..];
         Ok(mot_data)
     }
 
@@ -269,12 +269,16 @@ impl ObjectReport {
             return Err(E::UnexpectedEof);
         };
         *bytes = &bytes[2..];
-        Ok(Self { mot_data_nf: MotData::parse(data)?, mot_data_wf: MotData::parse(data)? })
+        Ok(Self { mot_data_nf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")), mot_data_wf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")) })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        self.mot_data_nf.serialize(buf);
-        self.mot_data_wf.serialize(buf);
+        for i in 0..16 {
+            self.mot_data_nf[i].serialize(buf);
+        }
+        for i in 0..16 {
+            self.mot_data_wf[i].serialize(buf);
+        }
         buf.extend_from_slice(&[1, 0]);
     }
 }
