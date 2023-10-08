@@ -22,6 +22,7 @@ extern crate bitflags;
 #[macro_use]
 extern crate failure;
 extern crate ui_sys;
+extern crate futures;
 
 mod builder;
 mod callback_helpers;

@@ -3,6 +3,7 @@ use std::os::raw::c_void;
 use std::sync::Arc;
 use std::future::Future;
 use std::marker::PhantomData;
+use futures::future::FutureExt;
 
 /// Evidence that it's safe to call `ui_sys:uiQueueMain`; ie that `UI:init()`
 /// has been run.
@@ -37,7 +38,7 @@ impl Context {
     /// The `Send` restriction lets us safely use this function from
     /// other threads.
     pub fn spawn<F: Future<Output = ()> + Send + 'static>(self, future: F) {
-        let arc = std::sync::Arc::new(future);
+        let arc = std::sync::Arc::new(future.fuse());
         unsafe { spawn_unsafe(arc) }
     }
 }
