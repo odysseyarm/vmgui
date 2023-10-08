@@ -29,7 +29,6 @@ impl TestProcedureView {
             let state = state.deref_mut();
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
-            println!("{:?}", state.wf_data);
             sleep(Duration::from_millis(5)).await;
         }
     }
@@ -37,8 +36,8 @@ impl TestProcedureView {
 
 #[derive(Default)]
 pub struct TestCanvasState {
-    pub nf_data: Option<MotData>,
-    pub wf_data: Option<MotData>,
+    pub nf_data: Option<[MotData; 16]>,
+    pub wf_data: Option<[MotData; 16]>,
 }
 
 pub struct TestCanvas {
