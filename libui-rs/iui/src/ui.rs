@@ -1,6 +1,7 @@
 use callback_helpers::{from_void_ptr, to_heap_ptr};
 use error::UIError;
 use ffi_tools;
+use futures::FutureExt;
 use std::os::raw::{c_int, c_void};
 use ui_sys;
 
@@ -152,7 +153,7 @@ impl UI {
     /// This version doesn't require the future to be `Send`, but can only
     /// be run in the main thread.
     pub fn spawn<F: std::future::Future<Output = ()> + 'static>(&self, future: F) {
-        let arc = std::sync::Arc::new(future);
+        let arc = std::sync::Arc::new(future.fuse());
         unsafe { crate::concurrent::spawn_unsafe(arc) }
     }
 
