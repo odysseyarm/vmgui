@@ -2,9 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use crate::CloneButShorter;
+use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
-use crate::test_procedure::MotState;
 
 pub struct MotRunner {
     pub state: Arc<Mutex<MotState>>,
