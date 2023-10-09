@@ -68,6 +68,11 @@ macro_rules! define_control {
                 unsafe { ui_sys::uiControlDisable(control.ui_control) }
             }
 
+            pub fn visible(&self, _ctx: &UI) -> bool {
+                let control: Control = self.clone().into();
+                unsafe { ui_sys::uiControlVisible(control.ui_control) != 0 }
+            }
+
             /// Create an `iui` struct for this control from the raw pointer for it.
             ///
             /// # Unsafety
