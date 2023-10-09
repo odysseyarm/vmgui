@@ -5,8 +5,8 @@ pub mod device;
 pub mod config_window;
 pub mod layout_macro;
 pub mod mot_runner;
+pub mod run_canvas;
 pub mod test_canvas;
-mod run_canvas;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
