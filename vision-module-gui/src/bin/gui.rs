@@ -3,12 +3,13 @@ use std::sync::Arc;
 use anyhow::Result;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, SignalGet, SignalWith};
-use vision_module_gui::{config_window::config_window, CloneButShorter};
+use vision_module_gui::{config_window::config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
 use iui::controls::{Area, HorizontalBox};
 use vision_module_gui::mot_runner::MotRunner;
-use vision_module_gui::test_procedure::{MotState, TestCanvas};
+use vision_module_gui::packet::MotData;
+use vision_module_gui::test_canvas::{TestCanvas};
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread

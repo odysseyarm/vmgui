@@ -3,13 +3,7 @@ use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush};
 use iui::UI;
-use crate::packet::MotData;
-
-#[derive(Default)]
-pub struct MotState {
-    pub nf_data: Option<[MotData; 16]>,
-    pub wf_data: Option<[MotData; 16]>,
-}
+use crate::MotState;
 
 pub struct TestCanvas {
     pub ctx: UI,

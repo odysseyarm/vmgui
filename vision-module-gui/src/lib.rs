@@ -1,9 +1,12 @@
+use crate::packet::MotData;
+
 pub mod packet;
 pub mod device;
 pub mod config_window;
 pub mod layout_macro;
 pub mod mot_runner;
-pub mod test_procedure;
+pub mod test_canvas;
+mod run_canvas;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
@@ -13,3 +16,9 @@ pub trait CloneButShorter: Clone {
 }
 
 impl<T: Clone> CloneButShorter for T {}
+
+#[derive(Default)]
+pub struct MotState {
+    pub nf_data: Option<[MotData; 16]>,
+    pub wf_data: Option<[MotData; 16]>,
+}
