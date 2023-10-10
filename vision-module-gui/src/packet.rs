@@ -3,7 +3,7 @@
 use std::{fmt::Display, error::Error as StdError};
 #[derive(Clone, Debug)]
 pub enum Packet {
-    WriteRegister(Register), // a.k.a. Poke
+    WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
     ObjectReportRequest(ObjectReportRequest),
@@ -15,6 +15,14 @@ pub struct Register {
     pub port: Port,
     pub bank: u8,
     pub address: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WriteRegister {
+    pub port: Port,
+    pub bank: u8,
+    pub address: u8,
+    pub data: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -140,7 +148,7 @@ impl Packet {
         }
         *bytes = &bytes[4..];
         Ok(match id {
-            PacketId::WriteRegister => Self::WriteRegister(Register::parse(bytes)?),
+            PacketId::WriteRegister => Self::WriteRegister(WriteRegister::parse(bytes)?),
             PacketId::ReadRegister => Self::ReadRegister(Register::parse(bytes)?),
             PacketId::ReadRegisterResponse => Self::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
             PacketId::ObjectReportRequest => Self::ObjectReportRequest(ObjectReportRequest{}),
@@ -213,6 +221,22 @@ impl ReadRegisterResponse {
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&[self.bank, self.address, self.data, 0]);
+    }
+}
+
+impl WriteRegister {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
+        let [port, bank, address, data, ..] = **bytes else {
+            return Err(E::UnexpectedEof);
+        };
+        let port = port.try_into()?;
+        *bytes = &bytes[4..];
+        Ok(Self { port, bank, address, data })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[self.port as u8, self.bank, self.address, self.data]);
     }
 }
 
