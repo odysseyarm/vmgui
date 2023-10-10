@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use nalgebra::Point2;
 use crate::packet::MotData;
 
@@ -23,6 +24,6 @@ impl<T: Clone> CloneButShorter for T {}
 pub struct MotState {
     pub nf_aim_point: Option<Point2<f64>>,
     pub wf_aim_point: Option<Point2<f64>>,
-    pub nf_data: Option<[MotData; 16]>,
-    pub wf_data: Option<[MotData; 16]>,
+    pub nf_data: Option<ArrayVec<MotData, 16>>,
+    pub wf_data: Option<ArrayVec<MotData, 16>>,
 }

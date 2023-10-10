@@ -1,10 +1,13 @@
+use std::mem::swap;
 use std::sync::Arc;
 use std::time::Duration;
+use arrayvec::ArrayVec;
 use nalgebra::{Matrix3, Point2, SMatrix, SVector};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
+use crate::packet::MotData;
 
 fn transform_aim_point(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>,
              np1: Point2<f64>, np2: Point2<f64>, np3: Point2<f64>, np4: Point2<f64>) -> Point2<f64> {
@@ -36,6 +39,14 @@ fn transform_aim_point_to_identity(aim_point: Point2<f64>, p1: Point2<f64>, p2: 
                         Point2::new(0.5, 1.), Point2::new(0., 0.5))
 }
 
+fn sort_clockwise(a: &mut [MotData]) {
+    if a[0].cy < a[1].cy { a.swap(0, 1); }
+    if a[2].cy > a[3].cy { a.swap(2, 3); }
+    if a[0].cy < a[3].cy { a.swap(0, 3); }
+    if a[2].cy > a[1].cy { a.swap(2, 1); }
+    if a[1].cx > a[3].cx { a.swap(1, 3); }
+}
+
 pub struct MotRunner {
     pub state: Arc<Mutex<MotState>>,
     pub device: Option<UsbDevice>,
@@ -50,22 +61,21 @@ impl MotRunner {
             let device = self.device.c().unwrap();
             let (nf_data, wf_data) = device.get_frame().await.expect("Problem getting frame from device");
 
-            let mut nf_aim_point = None::<Point2<f64>>;
-            if nf_data[3].area > 0 {
-                nf_aim_point = Some(transform_aim_point_to_identity(Point2::new(2048.0,2048.0),
-                                              Point2::new(nf_data[0].cx as f64, nf_data[0].cy as f64),
-                                              Point2::new(nf_data[1].cx as f64, nf_data[1].cy as f64),
-                                              Point2::new(nf_data[2].cx as f64, nf_data[2].cy as f64),
-                                              Point2::new(nf_data[3].cx as f64, nf_data[3].cy as f64)));
-            }
+            let mut nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
+            let mut wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
 
+            let mut nf_aim_point = None::<Point2<f64>>;
             let mut wf_aim_point = None::<Point2<f64>>;
-            if wf_data[3].area > 0 {
-                wf_aim_point = Some(transform_aim_point_to_identity(Point2::new(2048.0,2048.0),
-                                                Point2::new(wf_data[0].cx as f64, wf_data[0].cy as f64),
-                                                Point2::new(wf_data[1].cx as f64, wf_data[1].cy as f64),
-                                                Point2::new(wf_data[2].cx as f64, wf_data[2].cy as f64),
-                                                Point2::new(wf_data[3].cx as f64, wf_data[3].cy as f64)));
+
+            for (data, aim_point) in [(&mut nf_data, &mut nf_aim_point), (&mut wf_data, &mut wf_aim_point)] {
+                if data.len() > 3 {
+                    sort_clockwise(&mut data[0..4]);
+                    *aim_point = Some(transform_aim_point_to_identity(Point2::new(2048.0, 2048.0),
+                                                                        Point2::new(data[0].cx as f64, data[0].cy as f64),
+                                                                        Point2::new(data[1].cx as f64, data[1].cy as f64),
+                                                                        Point2::new(data[2].cx as f64, data[2].cy as f64),
+                                                                        Point2::new(data[3].cx as f64, data[3].cy as f64)));
+                }
             }
 
             let mut state = self.state.lock().await;
