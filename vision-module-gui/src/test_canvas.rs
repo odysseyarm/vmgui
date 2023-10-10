@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
-use iui::draw::{Brush, FillMode, Path, SolidBrush};
+use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
+use crate::custom_shapes::draw_crosshair;
 use crate::MotState;
 
 pub struct TestCanvas {
@@ -16,45 +17,26 @@ impl AreaHandler for TestCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
 
-        let nf_path = Path::new(ctx, FillMode::Winding);
-        let wf_path = Path::new(ctx, FillMode::Winding);
+        let nf_ch_path = Path::new(ctx, FillMode::Winding);
+        let wf_ch_path = Path::new(ctx, FillMode::Winding);
         let state = self.state.blocking_lock();
-        if state.nf_data.is_some() {
-            for mot_data in state.nf_data.expect("Nf data is None") {
-                if mot_data.area == 0 {
-                    break;
-                }
-                // todo don't use hardcoded 4096x4096 res assumption
-                let x = mot_data.cx as f64 / 4096.;
-                let y = mot_data.cy as f64 / 4096.;
-                nf_path.add_rectangle(
-                    ctx,
-                    x * draw_params.area_width,
-                    y * draw_params.area_height,
-                    draw_params.area_width / 100.,
-                    draw_params.area_width / 100.,
-                );
-            }
+        if let Some(aim_point) = state.nf_aim_point {
+            draw_crosshair(&ctx, &nf_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height);
         }
-        nf_path.end(ctx);
-        if state.wf_data.is_some() {
-            for mot_data in state.wf_data.expect("Wf data is None") {
-                if mot_data.area == 0 {
-                    break;
-                }
-                // todo don't use hardcoded 4096x4096 res assumption
-                let x = mot_data.cx as f64 / 4096.;
-                let y = mot_data.cy as f64 / 4096.;
-                wf_path.add_rectangle(
-                    ctx,
-                    x * draw_params.area_width,
-                    y * draw_params.area_height,
-                    draw_params.area_width / 100.,
-                    draw_params.area_width / 100.,
-                );
-            }
+        nf_ch_path.end(ctx);
+        if let Some(aim_point) = state.wf_aim_point {
+            draw_crosshair(&ctx, &wf_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height);
         }
-        wf_path.end(ctx);
+        wf_ch_path.end(ctx);
+
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 2.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
 
         let brush = Brush::Solid(SolidBrush {
             r: 1.,
@@ -63,7 +45,7 @@ impl AreaHandler for TestCanvas {
             a: 1.,
         });
 
-        draw_params.context.fill(&nf_path, &brush);
+        ctx.stroke(&nf_ch_path, &brush, &stroke);
 
         let brush = Brush::Solid(SolidBrush {
             r: 0.,
@@ -72,7 +54,7 @@ impl AreaHandler for TestCanvas {
             a: 1.,
         });
 
-        draw_params.context.fill(&wf_path, &brush);
+        ctx.stroke(&wf_ch_path, &brush, &stroke);
     }
 
     fn key_event(&mut self, _area: &Area, _area_key_event: &AreaKeyEvent) -> bool {
