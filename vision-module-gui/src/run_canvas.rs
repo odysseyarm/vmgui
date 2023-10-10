@@ -20,7 +20,7 @@ impl AreaHandler for RunCanvas {
         let wf_path = Path::new(ctx, FillMode::Winding);
         let state = self.state.blocking_lock();
         if state.nf_data.is_some() {
-            for mot_data in state.nf_data.expect("Nf data is None") {
+            for mot_data in state.nf_data.as_ref().expect("Nf data is None") {
                 if mot_data.area == 0 {
                     break;
                 }
@@ -46,7 +46,7 @@ impl AreaHandler for RunCanvas {
         }
         nf_path.end(ctx);
         if state.wf_data.is_some() {
-            for mot_data in state.wf_data.expect("Wf data is None") {
+            for mot_data in state.wf_data.as_ref().expect("Wf data is None") {
                 if mot_data.area == 0 {
                     break;
                 }
