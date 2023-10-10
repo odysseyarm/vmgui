@@ -32,8 +32,8 @@ fn transform_aim_point(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>,
 
 fn transform_aim_point_to_identity(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Point2<f64> {
     transform_aim_point(aim_point, p1, p2, p3, p4,
-                        Point2::new(0., 0.), Point2::new(1., 0.),
-                        Point2::new(1., 1.), Point2::new(0., 1.))
+                        Point2::new(0.5, 0.), Point2::new(1., 0.5),
+                        Point2::new(0.5, 1.), Point2::new(0., 0.5))
 }
 
 pub struct MotRunner {
