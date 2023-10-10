@@ -1,3 +1,4 @@
+use nalgebra::Point2;
 use crate::packet::MotData;
 
 pub mod packet;
@@ -7,6 +8,7 @@ pub mod layout_macro;
 pub mod mot_runner;
 pub mod run_canvas;
 pub mod test_canvas;
+mod custom_shapes;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
@@ -19,6 +21,8 @@ impl<T: Clone> CloneButShorter for T {}
 
 #[derive(Default)]
 pub struct MotState {
+    pub nf_aim_point: Option<Point2<f64>>,
+    pub wf_aim_point: Option<Point2<f64>>,
     pub nf_data: Option<[MotData; 16]>,
     pub wf_data: Option<[MotData; 16]>,
 }

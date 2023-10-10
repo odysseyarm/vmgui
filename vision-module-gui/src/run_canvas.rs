@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
-use iui::draw::{Brush, FillMode, LineCap, LineJoin, Path, SolidBrush, StrokeParams};
+use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::{draw, UI};
+use crate::custom_shapes::draw_crosshair;
 use crate::MotState;
 
 pub struct RunCanvas {
@@ -80,7 +81,7 @@ impl AreaHandler for RunCanvas {
             a: 0.5,
         });
 
-        draw_params.context.fill(&nf_path, &brush);
+        ctx.fill(&nf_path, &brush);
 
         let brush = Brush::Solid(SolidBrush {
             r: 0.,
@@ -89,7 +90,7 @@ impl AreaHandler for RunCanvas {
             a: 0.5,
         });
 
-        draw_params.context.fill(&wf_path, &brush);
+        ctx.fill(&wf_path, &brush);
 
         let brush = Brush::Solid(SolidBrush {
             r: 0.,
@@ -109,12 +110,4 @@ impl AreaHandler for RunCanvas {
 
         ctx.stroke(&ch_path, &brush, &stroke);
     }
-}
-
-fn draw_crosshair(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64) {
-    path.new_figure(ctx, x-4., y);
-    path.line_to(ctx, x+4., y);
-
-    path.new_figure(ctx, x, y-4.);
-    path.line_to(ctx, x, y+4.);
 }

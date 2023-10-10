@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use iui::{UI, prelude::{Window, WindowType, TextEntry}, controls::{Form, Button}};
-use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, SignalGet, SignalUpdate, ReadSignal, RwSignal, SignalGetUntracked};
+use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, ReadSignal, RwSignal, SignalGetUntracked};
 use serialport::SerialPortInfo;
 use crate::{CloneButShorter, device::UsbDevice, packet::Port};
 use anyhow::Result;

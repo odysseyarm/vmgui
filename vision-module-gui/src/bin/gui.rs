@@ -6,9 +6,8 @@ use leptos_reactive::{create_effect, SignalGet, SignalWith};
 use vision_module_gui::{config_window::config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
-use iui::controls::{Area, Button, HorizontalBox, HorizontalSeparator, Spacer, VerticalBox};
+use iui::controls::{Area, Button, HorizontalBox};
 use vision_module_gui::mot_runner::MotRunner;
-use vision_module_gui::packet::MotData;
 use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::test_canvas::{TestCanvas};
 
