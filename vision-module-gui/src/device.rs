@@ -4,9 +4,9 @@ use anyhow::{Context, Result};
 use serialport::ClearBuffer::Input;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::packet::{MotData, ObjectReportRequest, Packet, Port, Register};
+use crate::packet::{MotData, ObjectReportRequest, Packet, Port, Register, WriteRegister};
 
-type Message = (Packet, oneshot::Sender<Result<Packet>>);
+type Message = (Packet, Option<oneshot::Sender<Result<Packet>>>);
 
 #[derive(Clone)]
 pub struct UsbDevice(mpsc::Sender<Message>);
@@ -35,6 +35,14 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
+                let Some(reply_sender) = reply_sender else {
+                    let r = port.write_all(&buf).and_then(|_| port.flush());
+                    if let Err(e) = r {
+                        eprintln!("device thread failed to write: {e}");
+                    }
+                    continue;
+                };
+
                 let reply = (|| {
                     port.write_all(&buf)?;
                     port.flush()?;
@@ -50,8 +58,8 @@ impl UsbDevice {
                     Ok(resp)
                 })();
                 let sent = reply_sender.send(reply);
-                if sent.is_err() {
-                    eprintln!("device thread failed to send reply");
+                if let Err(e) = sent {
+                    eprintln!("device thread failed to send reply: {e:?}");
                 }
             }
             eprintln!("device thread for {:?} exiting", port.name());
@@ -61,7 +69,7 @@ impl UsbDevice {
 
     pub async fn request(&self, packet: Packet) -> Result<Packet> {
         let oneshot = oneshot::channel();
-        self.0.send((packet, oneshot.0)).await?;
+        self.0.send((packet, Some(oneshot.0))).await?;
         oneshot.1.await?
     }
 
@@ -80,6 +88,12 @@ impl UsbDevice {
         Ok(r.data)
     }
 
+    pub async fn write_register(&self, port: Port, bank: u8, address: u8, data: u8) -> Result<()> {
+        let pkt = Packet::WriteRegister(WriteRegister { port, bank, address, data });
+        self.0.send((pkt, None)).await?;
+        Ok(())
+    }
+
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
         let r = self
             .request(Packet::ObjectReportRequest(ObjectReportRequest{}))
@@ -90,26 +104,38 @@ impl UsbDevice {
     }
 }
 
-macro_rules! register_spec {
-    ($name:ident $(, $set_name:ident)? : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub async fn $name(&self, port: Port) -> Result<$ty> {
+macro_rules! read_register_spec {
+    ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
+        pub async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
             Ok(<$ty>::from_le_bytes([
                 $( self.read_register(port, $bank, $addr).await? ),*
             ]))
         }
-        $(
-            pub fn $set_name(&self, _port: Port) -> ! {
-                todo!()
+    }
+}
+
+macro_rules! write_register_spec {
+    ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
+        pub async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
+            let bytes = <$ty>::to_le_bytes(value);
+            for (byte, addr) in ::std::iter::zip(bytes, [$($addr),*]) {
+                self.write_register(port, $bank, addr, byte).await?;
             }
-        )?
+            Ok(())
+        }
     }
 }
 
 impl UsbDevice {
-    register_spec!(product_id: u16 = 0x00; [0x02, 0x03]);
-    register_spec!(resolution_x, set_resolution_x: u16 = 0x0c; [0x60, 0x61]);
-    register_spec!(resolution_y, set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
-    register_spec!(sensor_gain_1, set_sensor_gain_1: u8 = 0x01; [0x05]);
-    register_spec!(sensor_gain_2, set_sensor_gain_2: u8 = 0x01; [0x06]);
-    register_spec!(sensor_exposure, set_sensor_exposure: u16 = 0x01; [0x0e, 0x0f]);
+    read_register_spec!(product_id: u16 = 0x00; [0x02, 0x03]);
+    read_register_spec!(resolution_x: u16 = 0x0c; [0x60, 0x61]);
+    read_register_spec!(resolution_y: u16 = 0x0c; [0x62, 0x63]);
+    write_register_spec!(set_resolution_x: u16 = 0x0c; [0x60, 0x61]);
+    write_register_spec!(set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
+    read_register_spec!(sensor_gain_1: u8 = 0x01; [0x05]);
+    read_register_spec!(sensor_gain_2: u8 = 0x01; [0x06]);
+    write_register_spec!(set_sensor_gain_1: u8 = 0x0c; [0x0b]);
+    write_register_spec!(set_sensor_gain_2: u8 = 0x0c; [0x0c]);
+    read_register_spec!(sensor_exposure: u16 = 0x01; [0x0e, 0x0f]);
+    write_register_spec!(set_sensor_exposure: u16 = 0x0c; [0x0f, 0x10]);
 }

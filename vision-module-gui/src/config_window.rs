@@ -26,9 +26,9 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
             }
             Compact : let tab_group = TabGroup() {} // sensor settings go in here
             Compact : let buttons_hbox = HorizontalBox(padded: true) {
-                Compact : let apply_button = Button("Apply",                 enabled: connected)
-                Compact : let save_button = Button("Save",                   enabled: connected)
-                Compact : let reload_button = Button("Reload",               enabled: connected)
+                Compact : let apply_button = Button("Apply", enabled: connected)
+                Compact : let save_button = Button("Save", enabled: connected)
+                Compact : let reload_button = Button("Reload", enabled: connected)
                 Compact : let load_defaults_button = Button("Load defaults", enabled: connected)
             }
         }
@@ -114,7 +114,44 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
             config_win.modal_msg(&ui, "Not implemented", "");
         }
     };
-    apply_button.on_clicked(&ui, show_todo_modal.c());
+    apply_button.on_clicked(&ui, {
+        let config_win = config_win.c();
+        let ui = ui.c();
+        let device = device.c();
+        move |_| {
+            let Some(device) = device.get_untracked() else { return };
+            let wf_res_x = wf_settings.resolution_x.with_untracked(|s| s.parse::<u16>());
+            let wf_res_y = wf_settings.resolution_y.with_untracked(|s| s.parse::<u16>());
+            let nf_res_x = nf_settings.resolution_x.with_untracked(|s| s.parse::<u16>());
+            let nf_res_y = nf_settings.resolution_y.with_untracked(|s| s.parse::<u16>());
+            let mut errors = vec![];
+            if wf_res_x.is_err() { errors.push("wide field scale resolution X"); }
+            if wf_res_y.is_err() { errors.push("wide field scale resolution Y"); }
+            if nf_res_x.is_err() { errors.push("near field scale resolution X"); }
+            if nf_res_y.is_err() { errors.push("near field scale resolution Y"); }
+            if !errors.is_empty() {
+                config_win.modal_err(&ui, "Error", &errors.join("\n"));
+                return;
+            }
+            ui.spawn({
+                let ui = ui.c();
+                let config_win = config_win.c();
+                async move {
+                    println!("Writing resolution {wf_res_x:?} {wf_res_y:?} {nf_res_x:?} {nf_res_y:?}");
+                    let r = tokio::try_join!(
+                        device.set_resolution_x(Port::Wf, wf_res_x.unwrap()),
+                        device.set_resolution_y(Port::Wf, wf_res_y.unwrap()),
+                        device.set_resolution_x(Port::Nf, nf_res_x.unwrap()),
+                        device.set_resolution_y(Port::Nf, nf_res_y.unwrap()),
+                    );
+                    println!("Finished writing");
+                    if let Err(e) = r {
+                        config_win.modal_err(&ui, "Error", &e.to_string());
+                    }
+                }
+            });
+        }
+    });
     save_button.on_clicked(&ui, show_todo_modal.c());
     load_defaults_button.on_clicked(&ui, show_todo_modal.c());
 
@@ -155,7 +192,7 @@ impl SensorSettingsForm {
         let sensor_gain_2 = create_rw_signal(String::new());
         let sensor_exposure = create_rw_signal(String::new());
         let sensor_exposure_ms = move || {
-            match sensor_exposure.with(|s| u16::from_str_radix(s, 10)) {
+            match sensor_exposure.with(|s| s.parse::<u16>()) {
                 Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
                 Err(_) => format!("???"),
             }
@@ -180,8 +217,8 @@ impl SensorSettingsForm {
                         (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", sensor_exposure_ms()))
                     }
                 }
-                (Compact, "Scale resolution X")            : let x = Entry(enabled: connected, value: resolution_x)
-                (Compact, "Scale resolution Y")            : let x = Entry(enabled: connected, value: resolution_y)
+                (Compact, "Scale resolution X")            : let x = Entry(enabled: connected, value: resolution_x, onchange: resolution_x)
+                (Compact, "Scale resolution Y")            : let x = Entry(enabled: connected, value: resolution_y, onchange: resolution_y)
                 (Compact, "Frame period")                  : let x = Entry(enabled: connected)
                 (Compact, "Frame rate")                    : let x = Entry(enabled: connected)
             }
