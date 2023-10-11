@@ -38,7 +38,7 @@ impl Drop for UIToken {
 /// A handle to user interface functionality.
 #[derive(Clone)]
 pub struct UI {
-    token: Rc<UIToken>,
+    _token: Rc<UIToken>,
 }
 
 impl UI {
@@ -85,7 +85,7 @@ impl UI {
                 // Success! We can safely give the user a token allowing them to do UI things.
                 ffi_tools::set_initialized();
                 Ok(UI {
-                    token: Rc::new(UIToken { _pd: PhantomData }),
+                    _token: Rc::new(UIToken { _pd: PhantomData }),
                 })
             } else {
                 // Error occurred; copy the string describing it, then free that memory.

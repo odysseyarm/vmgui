@@ -1,4 +1,3 @@
-use callback_helpers::{from_void_ptr, to_heap_ptr};
 use std::os::raw::c_void;
 use std::sync::Arc;
 use std::future::Future;
