@@ -89,14 +89,19 @@ impl UsbDevice {
     }
 
     pub async fn write_register(&self, port: Port, bank: u8, address: u8, data: u8) -> Result<()> {
-        let pkt = Packet::WriteRegister(WriteRegister { port, bank, address, data });
+        let pkt = Packet::WriteRegister(WriteRegister {
+            port,
+            bank,
+            address,
+            data,
+        });
         self.0.send((pkt, None)).await?;
         Ok(())
     }
 
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
         let r = self
-            .request(Packet::ObjectReportRequest(ObjectReportRequest{}))
+            .request(Packet::ObjectReportRequest(ObjectReportRequest {}))
             .await?
             .object_report()
             .with_context(|| "unexpected response")?;
