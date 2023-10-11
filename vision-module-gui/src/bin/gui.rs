@@ -20,11 +20,6 @@ use vision_module_gui::test_canvas::{TestCanvas};
 // * Creating libui uiControls dynamically
 //     * They are leaky
 
-#[derive(Clone, Debug)]
-struct Device {
-    name: String,
-}
-
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tokio_rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

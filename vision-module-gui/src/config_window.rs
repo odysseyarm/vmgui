@@ -1,12 +1,20 @@
-use std::time::Duration;
-
-use iui::{UI, prelude::{Window, WindowType, TextEntry}, controls::{Form, Button}};
-use leptos_reactive::{create_rw_signal, create_effect, SignalWith, SignalWithUntracked, SignalSet, ReadSignal, RwSignal, SignalGetUntracked};
-use serialport::SerialPortInfo;
-use crate::{CloneButShorter, device::UsbDevice, packet::Port};
+use crate::{device::UsbDevice, packet::Port, CloneButShorter};
 use anyhow::Result;
+use iui::{
+    controls::Form,
+    prelude::{Window, WindowType},
+    UI,
+};
+use leptos_reactive::{
+    create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet,
+    SignalWith, SignalWithUntracked,
+};
+use serialport::SerialPortInfo;
 
-pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
+pub fn config_window(
+    ui: &UI,
+    _tokio_handle: &tokio::runtime::Handle,
+) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -74,7 +82,8 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
     };
     device_combobox.on_selected(&ui, device_combobox_on_selected.c());
 
-    create_effect({ // update device combobox when device_list changes
+    create_effect({
+        // update device combobox when device_list changes
         let device_combobox = device_combobox.c();
         let ui = ui.c();
         move |_| {
@@ -119,16 +128,34 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
         let ui = ui.c();
         let device = device.c();
         move |_| {
-            let Some(device) = device.get_untracked() else { return };
-            let wf_res_x = wf_settings.resolution_x.with_untracked(|s| s.parse::<u16>());
-            let wf_res_y = wf_settings.resolution_y.with_untracked(|s| s.parse::<u16>());
-            let nf_res_x = nf_settings.resolution_x.with_untracked(|s| s.parse::<u16>());
-            let nf_res_y = nf_settings.resolution_y.with_untracked(|s| s.parse::<u16>());
+            let Some(device) = device.get_untracked() else {
+                return;
+            };
+            let wf_res_x = wf_settings
+                .resolution_x
+                .with_untracked(|s| s.parse::<u16>());
+            let wf_res_y = wf_settings
+                .resolution_y
+                .with_untracked(|s| s.parse::<u16>());
+            let nf_res_x = nf_settings
+                .resolution_x
+                .with_untracked(|s| s.parse::<u16>());
+            let nf_res_y = nf_settings
+                .resolution_y
+                .with_untracked(|s| s.parse::<u16>());
             let mut errors = vec![];
-            if wf_res_x.is_err() { errors.push("wide field scale resolution X"); }
-            if wf_res_y.is_err() { errors.push("wide field scale resolution Y"); }
-            if nf_res_x.is_err() { errors.push("near field scale resolution X"); }
-            if nf_res_y.is_err() { errors.push("near field scale resolution Y"); }
+            if wf_res_x.is_err() {
+                errors.push("wide field scale resolution X");
+            }
+            if wf_res_y.is_err() {
+                errors.push("wide field scale resolution Y");
+            }
+            if nf_res_x.is_err() {
+                errors.push("near field scale resolution X");
+            }
+            if nf_res_y.is_err() {
+                errors.push("near field scale resolution Y");
+            }
             if !errors.is_empty() {
                 config_win.modal_err(&ui, "Error", &errors.join("\n"));
                 return;
@@ -137,7 +164,9 @@ pub fn config_window(ui: &UI, tokio_handle: &tokio::runtime::Handle) -> (Window,
                 let ui = ui.c();
                 let config_win = config_win.c();
                 async move {
-                    println!("Writing resolution {wf_res_x:?} {wf_res_y:?} {nf_res_x:?} {nf_res_y:?}");
+                    println!(
+                        "Writing resolution {wf_res_x:?} {wf_res_y:?} {nf_res_x:?} {nf_res_y:?}"
+                    );
                     let r = tokio::try_join!(
                         device.set_resolution_x(Port::Wf, wf_res_x.unwrap()),
                         device.set_resolution_y(Port::Wf, wf_res_y.unwrap()),
@@ -191,23 +220,21 @@ impl SensorSettingsForm {
         let gain_1 = create_rw_signal(String::new());
         let gain_2 = create_rw_signal(String::new());
         let exposure_time = create_rw_signal(String::new());
-        let exposure_time_ms = move || {
-            match exposure_time.with(|s| s.parse::<u16>()) {
-                Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
-                Err(_) => format!("???"),
-            }
+        let exposure_time_ms = move || match exposure_time.with(|s| s.parse::<u16>()) {
+            Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
+            Err(_) => format!("???"),
         };
         crate::layout! { &ui,
             let form = Form(padded: true) {
-                (Compact, "Product ID")                    : let product_id = Entry(value: pid, enabled: false)
-                (Compact, "DSP area max threshold")        : let x = Entry(enabled: connected)
-                (Compact, "DSP noise threshold")           : let x = Entry(enabled: connected)
-                (Compact, "DSP orientation ratio")         : let x = Entry(enabled: connected)
-                (Compact, "DSP orientation factor")        : let x = Entry(enabled: connected)
-                (Compact, "DSP maximum number of objects") : let x = Entry(enabled: connected)
-                (Compact, "Gain 1")                 : let x = Entry(enabled: connected, value: gain_1)
-                (Compact, "Gain 2")                 : let x = Entry(enabled: connected, value: gain_2)
-                (Compact, "Exposure time")        : let x = HorizontalBox(padded: true) {
+                (Compact, "Product ID")               : let product_id = Entry(value: pid, enabled: false)
+                (Compact, "DSP area max threshold")   : let x = Entry(enabled: connected)
+                (Compact, "DSP noise threshold")      : let x = Entry(enabled: connected)
+                (Compact, "DSP orientation ratio")    : let x = Entry(enabled: connected)
+                (Compact, "DSP orientation factor")   : let x = Entry(enabled: connected)
+                (Compact, "DSP maximum object count") : let x = Entry(enabled: connected)
+                (Compact, "Gain 1")                   : let x = Entry(enabled: connected, value: gain_1)
+                (Compact, "Gain 2")                   : let x = Entry(enabled: connected, value: gain_2)
+                (Compact, "Exposure time")            : let x = HorizontalBox(padded: true) {
                     Stretchy : let e = Entry(
                         enabled: connected,
                         onchange: exposure_time,
@@ -217,10 +244,10 @@ impl SensorSettingsForm {
                         (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", exposure_time_ms()))
                     }
                 }
-                (Compact, "Scale resolution X")            : let x = Entry(enabled: connected, value: resolution_x, onchange: resolution_x)
-                (Compact, "Scale resolution Y")            : let x = Entry(enabled: connected, value: resolution_y, onchange: resolution_y)
-                (Compact, "Frame period")                  : let x = Entry(enabled: connected)
-                (Compact, "Frame rate")                    : let x = Entry(enabled: connected)
+                (Compact, "Scale resolution X") : let x = Entry(enabled: connected, value: resolution_x, onchange: resolution_x)
+                (Compact, "Scale resolution Y") : let x = Entry(enabled: connected, value: resolution_y, onchange: resolution_y)
+                (Compact, "Frame period")       : let x = Entry(enabled: connected)
+                (Compact, "Frame rate")         : let x = Entry(enabled: connected)
             }
         }
         (
@@ -233,7 +260,7 @@ impl SensorSettingsForm {
                 gain_1,
                 gain_2,
                 exposure_time,
-            }
+            },
         )
     }
 
