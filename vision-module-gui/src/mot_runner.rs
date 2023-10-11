@@ -2,7 +2,7 @@ use std::mem::swap;
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
-use nalgebra::{Matrix3, Point2, SMatrix, SVector};
+use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use crate::{CloneButShorter, MotState};
@@ -10,7 +10,7 @@ use crate::device::UsbDevice;
 use crate::packet::MotData;
 
 fn transform_aim_point(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>,
-             np1: Point2<f64>, np2: Point2<f64>, np3: Point2<f64>, np4: Point2<f64>) -> Point2<f64> {
+             np1: Point2<f64>, np2: Point2<f64>, np3: Point2<f64>, np4: Point2<f64>) -> Option<Point2<f64>> {
 
     let a = SMatrix::<f64,8,8>::from_row_slice(
         &[p1.x, p1.y, 1., 0.,  0.,  0., -np1.x*p1.x, -np1.x*p1.y,
@@ -24,16 +24,16 @@ fn transform_aim_point(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>,
     );
     let axp = SVector::from_row_slice(&[np1.x, np1.y, np2.x, np2.y, np3.x, np3.y, np4.x, np4.y]);
     let decomp = a.lu();
-    let p = decomp.solve(&axp).expect("Linear resolution failed.");
+    let p = decomp.solve(&axp)?;
     let transformation = Matrix3::new(
         p[0], p[1], p[2],
         p[3], p[4], p[5],
         p[6], p[7], 1.
     );
-    transformation.transform_point(&aim_point)
+    Some(transformation.transform_point(&aim_point))
 }
 
-fn transform_aim_point_to_identity(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Point2<f64> {
+fn transform_aim_point_to_identity(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     transform_aim_point(aim_point, p1, p2, p3, p4,
                         Point2::new(0.5, 1.), Point2::new(0., 0.5),
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
@@ -70,11 +70,12 @@ impl MotRunner {
             for (data, aim_point) in [(&mut nf_data, &mut nf_aim_point), (&mut wf_data, &mut wf_aim_point)] {
                 if data.len() > 3 {
                     sort_clockwise(&mut data[0..4]);
-                    *aim_point = Some(transform_aim_point_to_identity(Point2::new(2048.0, 2048.0),
-                                                                        Point2::new(data[0].cx as f64, data[0].cy as f64),
-                                                                        Point2::new(data[1].cx as f64, data[1].cy as f64),
-                                                                        Point2::new(data[2].cx as f64, data[2].cy as f64),
-                                                                        Point2::new(data[3].cx as f64, data[3].cy as f64)));
+                    *aim_point = transform_aim_point_to_identity(Point2::new(2048.0, 2048.0),
+                                                                 Point2::new(data[0].cx as f64, data[0].cy as f64),
+                                                                 Point2::new(data[1].cx as f64, data[1].cy as f64),
+                                                                 Point2::new(data[2].cx as f64, data[2].cy as f64),
+                                                                 Point2::new(data[3].cx as f64, data[3].cy as f64));
+                    if aim_point.is_none() { println!("Linear resolution failed with points: ({},{}), ({},{}), ({},{}), ({},{})", data[0].cx, data[0].cy, data[1].cx, data[1].cy, data[2].cx, data[2].cy, data[3].cx, data[3].cy); };
                 }
             }
 
