@@ -68,7 +68,6 @@ impl RustAreaHandler {
                 (*(ui_area_handler as *mut RustAreaHandler))
                     .trait_object
                     .mouse_event(&area, &area_mouse_event);
-                mem::forget(area_mouse_event);
                 mem::forget(area);
             }
         }
@@ -108,7 +107,6 @@ impl RustAreaHandler {
                 let result = (*(ui_area_handler as *mut RustAreaHandler))
                     .trait_object
                     .key_event(&area, &area_key_event);
-                mem::forget(area_key_event);
                 mem::forget(area);
                 result as c_int
             }
