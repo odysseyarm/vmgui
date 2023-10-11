@@ -92,13 +92,13 @@ macro_rules! layout {
 
     // Combobox
     [ $ui:expr ,
-        let $ctl:ident = Combobox ( $( selected: $selected:expr )? )
+        let $ctl:ident = Combobox ( $( $prop:ident: $value:expr ),* $(,)? )
         { $( $option:expr ),* }
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Combobox::new($ui);
         $( $ctl.append($ui, $option); )*
-        $( $ctl.set_selected($ui, $selected); )?
+        $($crate::layout!(@args Combobox $ui; $ctl $prop $value);)*
     ];
 
     // DateTimePicker
@@ -112,12 +112,13 @@ macro_rules! layout {
 
     // EditableCombobox
     [ $ui:expr ,
-        let $ctl:ident = EditableCombobox ()
+        let $ctl:ident = EditableCombobox ( $( $prop:ident: $value:expr ),* $(,)? )
         { $( $option:expr ),* }
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::EditableCombobox::new($ui);
         $( $ctl.append($ui, $option); )*
+        $($crate::layout!(@args EditableCombobox $ui; $ctl $prop $value);)*
     ];
 
     // Entry
@@ -126,36 +127,7 @@ macro_rules! layout {
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Entry::new($ui);
-        $($crate::layout!(@Entry_args $ui; $ctl $prop $value);)*
-    ];
-    [ @Entry_args $ui:expr; $ctl:ident value $value:expr] => [
-        leptos_reactive::create_effect({
-            let ui = iui::UI::clone($ui);
-            let ctl = $ctl.clone();
-            let value = $crate::layout_macro::IntoMaybeSignal::from($value);
-            move |_| {
-                let mut ctl = ctl.clone();
-                leptos_reactive::SignalWith::with(&value, |v| iui::controls::TextEntry::set_value(&mut ctl, &ui, v));
-            }
-        })
-    ];
-    [ @Entry_args $ui:expr; $ctl:ident enabled $enabled:expr] => [
-        leptos_reactive::create_effect({
-            let ui = iui::UI::clone($ui);
-            let ctl = $ctl.clone();
-            let enabled = $crate::layout_macro::IntoMaybeSignal::from($enabled);
-            move |_| {
-                let mut ctl = ctl.clone();
-                if leptos_reactive::SignalGet::get(&enabled) {
-                    ctl.enable(&ui);
-                } else {
-                    ctl.disable(&ui);
-                }
-            }
-        });
-    ];
-    [ @Entry_args $ui:expr; $ctl:ident onchange $signal:expr] => [
-        iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
+        $($crate::layout!(@args Entry $ui; $ctl $prop $value);)*
     ];
 
     // FontButton
@@ -388,6 +360,39 @@ macro_rules! layout {
             $ctl.append($ui, $child.clone(),
                         iui::controls::LayoutStrategy::$strategy);
         )*
+    ];
+
+    [ @args $ty:ident $ui:expr; $ctl:ident value $value:expr] => [
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let value = $crate::layout_macro::IntoMaybeSignal::from($value);
+            move |_| {
+                let mut ctl = ctl.clone();
+                leptos_reactive::SignalWith::with(&value, |v| iui::controls::TextEntry::set_value(&mut ctl, &ui, v));
+            }
+        })
+    ];
+    [ @args $ty:ident $ui:expr; $ctl:ident enabled $enabled:expr] => [
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let enabled = $crate::layout_macro::IntoMaybeSignal::from($enabled);
+            move |_| {
+                let mut ctl = ctl.clone();
+                if leptos_reactive::SignalGet::get(&enabled) {
+                    ctl.enable(&ui);
+                } else {
+                    ctl.disable(&ui);
+                }
+            }
+        });
+    ];
+    [ @args $ty:ident $ui:expr; $ctl:ident onchange $signal:expr] => [
+        iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
+    ];
+    [ @args $ty:ident $ui:expr; $ctl:ident selected $selected:expr] => [
+        $( $ctl.set_selected($ui, $selected); )?
     ];
 }
 
