@@ -138,4 +138,18 @@ impl UsbDevice {
     write_register_spec!(set_gain_2: u8 = 0x0c; [0x0c]);
     read_register_spec!(exposure_time: u16 = 0x01; [0x0e, 0x0f]);
     write_register_spec!(set_exposure_time: u16 = 0x0c; [0x0f, 0x10]);
+    read_register_spec!(brightness_threshold: u8 = 0x0c; [0x47]);
+    write_register_spec!(set_brightness_threshold: u8 = 0x0c; [0x47]);
+    read_register_spec!(noise_threshold: u8 = 0x00; [0x0f]);
+    write_register_spec!(set_noise_threshold: u8 = 0x00; [0x0f]);
+    read_register_spec!(area_threshold_max: u16 = 0x00; [0x0b, 0x0c]);
+    write_register_spec!(set_area_threshold_max: u16 = 0x00; [0x0b, 0x0c]);
+    read_register_spec!(area_threshold_min: u8 = 0x0c; [0x46]);
+    write_register_spec!(set_area_threshold_min: u8 = 0x0c; [0x46]);
+    read_register_spec!(operation_mode: u8 = 0x00; [0x12]);
+    write_register_spec!(set_operation_mode: u8 = 0x00; [0x12]);
+    read_register_spec!(max_object_cnt: u8 = 0x00; [0x19]);
+    write_register_spec!(set_max_object_cnt: u8 = 0x00; [0x19]);
+    read_register_spec!(frame_subtraction: u8 = 0x00; [0x28]);
+    write_register_spec!(set_frame_subtraction: u8 = 0x00; [0x28]);
 }
