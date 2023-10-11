@@ -177,9 +177,9 @@ struct SensorSettingsForm {
     pid: RwSignal<String>,
     resolution_x: RwSignal<String>,
     resolution_y: RwSignal<String>,
-    sensor_gain_1: RwSignal<String>,
-    sensor_gain_2: RwSignal<String>,
-    sensor_exposure: RwSignal<String>,
+    gain_1: RwSignal<String>,
+    gain_2: RwSignal<String>,
+    exposure_time: RwSignal<String>,
 }
 
 impl SensorSettingsForm {
@@ -188,11 +188,11 @@ impl SensorSettingsForm {
         let pid = create_rw_signal(String::new());
         let resolution_x = create_rw_signal(String::new());
         let resolution_y = create_rw_signal(String::new());
-        let sensor_gain_1 = create_rw_signal(String::new());
-        let sensor_gain_2 = create_rw_signal(String::new());
-        let sensor_exposure = create_rw_signal(String::new());
-        let sensor_exposure_ms = move || {
-            match sensor_exposure.with(|s| s.parse::<u16>()) {
+        let gain_1 = create_rw_signal(String::new());
+        let gain_2 = create_rw_signal(String::new());
+        let exposure_time = create_rw_signal(String::new());
+        let exposure_time_ms = move || {
+            match exposure_time.with(|s| s.parse::<u16>()) {
                 Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
                 Err(_) => format!("???"),
             }
@@ -205,16 +205,16 @@ impl SensorSettingsForm {
                 (Compact, "DSP orientation ratio")         : let x = Entry(enabled: connected)
                 (Compact, "DSP orientation factor")        : let x = Entry(enabled: connected)
                 (Compact, "DSP maximum number of objects") : let x = Entry(enabled: connected)
-                (Compact, "Sensor gain 1")                 : let x = Entry(enabled: connected, value: sensor_gain_1)
-                (Compact, "Sensor gain 2")                 : let x = Entry(enabled: connected, value: sensor_gain_2)
-                (Compact, "Sensor exposure length")        : let x = HorizontalBox(padded: true) {
+                (Compact, "Gain 1")                 : let x = Entry(enabled: connected, value: gain_1)
+                (Compact, "Gain 2")                 : let x = Entry(enabled: connected, value: gain_2)
+                (Compact, "Exposure time")        : let x = HorizontalBox(padded: true) {
                     Stretchy : let e = Entry(
                         enabled: connected,
-                        onchange: sensor_exposure,
-                        value: sensor_exposure,
+                        onchange: exposure_time,
+                        value: exposure_time,
                     )
                     Compact : let x1 = LayoutGrid() {
-                        (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", sensor_exposure_ms()))
+                        (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", exposure_time_ms()))
                     }
                 }
                 (Compact, "Scale resolution X")            : let x = Entry(enabled: connected, value: resolution_x, onchange: resolution_x)
@@ -230,9 +230,9 @@ impl SensorSettingsForm {
                 pid,
                 resolution_x,
                 resolution_y,
-                sensor_gain_1,
-                sensor_gain_2,
-                sensor_exposure,
+                gain_1,
+                gain_2,
+                exposure_time,
             }
         )
     }
@@ -243,16 +243,16 @@ impl SensorSettingsForm {
             device.product_id(self.port),
             device.resolution_x(self.port),
             device.resolution_y(self.port),
-            device.sensor_gain_1(self.port),
-            device.sensor_gain_2(self.port),
-            device.sensor_exposure(self.port),
+            device.gain_1(self.port),
+            device.gain_2(self.port),
+            device.exposure_time(self.port),
         )?;
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
         self.resolution_y.set(res_y.to_string());
-        self.sensor_gain_1.set(gain_1.to_string());
-        self.sensor_gain_2.set(gain_2.to_string());
-        self.sensor_exposure.set(expo.to_string());
+        self.gain_1.set(gain_1.to_string());
+        self.gain_2.set(gain_2.to_string());
+        self.exposure_time.set(expo.to_string());
         Ok(())
     }
 
@@ -260,9 +260,9 @@ impl SensorSettingsForm {
         self.pid.set(String::new());
         self.resolution_x.set(String::new());
         self.resolution_y.set(String::new());
-        self.sensor_gain_1.set(String::new());
-        self.sensor_gain_2.set(String::new());
-        self.sensor_exposure.set(String::new());
+        self.gain_1.set(String::new());
+        self.gain_2.set(String::new());
+        self.exposure_time.set(String::new());
     }
 }
 
