@@ -232,8 +232,7 @@ impl SensorSettingsForm {
                 (Compact, "DSP orientation ratio")    : let x = Entry(enabled: connected)
                 (Compact, "DSP orientation factor")   : let x = Entry(enabled: connected)
                 (Compact, "DSP maximum object count") : let x = Entry(enabled: connected)
-                (Compact, "Gain 1")                   : let x = Entry(enabled: connected, value: gain_1)
-                (Compact, "Gain 2")                   : let x = Entry(enabled: connected, value: gain_2)
+                (Compact, "Gain")                     : let gain_combobox = Combobox(enabled: connected) {}
                 (Compact, "Exposure time")            : let x = HorizontalBox(padded: true) {
                     Stretchy : let e = Entry(
                         enabled: connected,
@@ -249,6 +248,13 @@ impl SensorSettingsForm {
                 (Compact, "Frame period")       : let x = Entry(enabled: connected)
                 (Compact, "Frame rate")         : let x = Entry(enabled: connected)
             }
+        }
+        for (label, _) in &GAIN_TABLE {
+            gain_combobox.append(&ui, label);
+        }
+        match port {
+            Port::Nf => gain_combobox.set_selected(&ui, 16),
+            Port::Wf => gain_combobox.set_selected(&ui, 48),
         }
         (
             form,
@@ -283,6 +289,8 @@ impl SensorSettingsForm {
         Ok(())
     }
 
+    fn validate(&self) {}
+
     fn clear(&self) {
         self.pid.set(String::new());
         self.resolution_x.set(String::new());
@@ -315,3 +323,58 @@ fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
     out.push_str(&format!("({:4x}:{:4x})", usb_port.vid, usb_port.pid));
     out
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct Gain {
+    b_global: u8,
+    b_ggh: u8,
+}
+
+impl Gain {
+    const fn new(b_global: u8, b_ggh: u8) -> Self {
+        Self { b_global, b_ggh }
+    }
+}
+
+// funny
+
+const fn n_to_bstr(n: usize) -> [u8; 6] {
+    [
+        '0' as u8 + (n / 10000) as u8,
+        '.' as u8 as u8,
+        '0' as u8 + (n / 1000 % 10) as u8,
+        '0' as u8 + (n / 100 % 10) as u8,
+        '0' as u8 + (n / 10 % 10) as u8,
+        '0' as u8 + (n % 10) as u8,
+    ]
+}
+
+pub static GAIN_TABLE: [(&str, Gain); 16*3 + 1] = {
+    static BACKING: [[u8; 6]; 16*3] = {
+        let mut v = [[0; 6]; 16*3];
+        let mut i = 0;
+        while i < 16 {
+            v[i] = n_to_bstr((10000 + i*10000/16) * 1);
+            v[i+16] = n_to_bstr((10000 + i*10000/16) * 2);
+            v[i+32] = n_to_bstr((10000 + i*10000/16) * 4);
+            i += 1;
+        }
+        v
+    };
+    let mut omegalul = [("", Gain::new(0, 0)); 16*3 + 1];
+    let mut i = 0;
+    while i < 16*3 {
+        omegalul[i].0 = unsafe { std::str::from_utf8_unchecked(&BACKING[i]) };
+        omegalul[i].1 = Gain::new((i%16) as u8, [0,2,3][i/16]);
+        i += 1;
+    }
+    omegalul[16*3] = ("8.0000", Gain::new(16, 3));
+    omegalul
+};
+
+// static GAIN_TABLE: [(&'static str, Gain); 16 * 3] = [
+// for i in range(16):
+//     for j, k in zip([0, 2, 3], [1, 2, 4]):
+//         value = (1 + i/16) * k
+//         print(f'    ("{value:.4f}", Gain::new(0x{i:02x}, 0x{j:02x})),')
+// ];
