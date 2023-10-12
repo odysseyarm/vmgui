@@ -362,6 +362,7 @@ macro_rules! layout {
         )*
     ];
 
+    // Control properties
     [ @args $ty:ident $ui:expr; $ctl:ident value $value:expr] => [
         leptos_reactive::create_effect({
             let ui = iui::UI::clone($ui);
@@ -391,8 +392,27 @@ macro_rules! layout {
     [ @args $ty:ident $ui:expr; $ctl:ident onchange $signal:expr] => [
         iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
     ];
+    [ @args Entry $ui:expr; $ctl:ident signal $signal:expr] => [
+        $crate::layout!(@args Entry $ui; $ctl value $signal);
+        $crate::layout!(@args Entry $ui; $ctl onchange $signal);
+    ];
     [ @args $ty:ident $ui:expr; $ctl:ident selected $selected:expr] => [
-        $( $ctl.set_selected($ui, $selected); )?
+        leptos_reactive::create_effect({
+            let ui = iui::UI::clone($ui);
+            let ctl = $ctl.clone();
+            let value = $crate::layout_macro::IntoMaybeSignal::from($selected);
+            move |_| {
+                let mut ctl = ctl.clone();
+                ctl.set_selected(&ui, leptos_reactive::SignalGet::get(&value));
+            }
+        })
+    ];
+    [ @args $ty:ident $ui:expr; $ctl:ident onselect $signal:expr] => [
+        $ctl.on_selected($ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
+    ];
+    [ @args Combobox $ui:expr; $ctl:ident signal $signal:expr] => [
+        $crate::layout!(@args Combobox $ui; $ctl selected $signal);
+        $crate::layout!(@args Combobox $ui; $ctl onselect $signal);
     ];
 }
 
@@ -407,6 +427,11 @@ impl IntoMaybeSignal<bool> for bool {
     }
 }
 
+impl IntoMaybeSignal<i32> for i32 {
+    fn from(self) -> MaybeSignal<i32> {
+        MaybeSignal::Static(self)
+    }
+}
 
 impl<T> IntoMaybeSignal<T> for ReadSignal<T> {
     fn from(self) -> MaybeSignal<T> {

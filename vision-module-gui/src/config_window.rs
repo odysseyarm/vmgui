@@ -7,7 +7,7 @@ use iui::{
 };
 use leptos_reactive::{
     create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet,
-    SignalWith, SignalWithUntracked,
+    SignalWith, SignalWithUntracked, SignalUpdate,
 };
 use serialport::SerialPortInfo;
 
@@ -74,7 +74,7 @@ pub fn config_window(
                 let config_win = config_win.c();
                 async move {
                     if let Err(e) = task.await {
-                        config_win.modal_err(&ui, "Failed to connect", &e.to_string());
+                        config_win.modal_err_async(&ui, "Failed to connect", &e.to_string()).await;
                     }
                 }
             });
@@ -175,7 +175,7 @@ pub fn config_window(
                     );
                     println!("Finished writing");
                     if let Err(e) = r {
-                        config_win.modal_err(&ui, "Error", &e.to_string());
+                        config_win.modal_err_async(&ui, "Error", &e.to_string()).await;
                     }
                 }
             });
@@ -206,9 +206,17 @@ struct SensorSettingsForm {
     pid: RwSignal<String>,
     resolution_x: RwSignal<String>,
     resolution_y: RwSignal<String>,
-    gain_1: RwSignal<String>,
-    gain_2: RwSignal<String>,
     exposure_time: RwSignal<String>,
+    frame_period: RwSignal<String>,
+    brightness_threshold: RwSignal<String>,
+    noise_threshold: RwSignal<String>,
+    area_threshold_min: RwSignal<String>,
+    area_threshold_max: RwSignal<String>,
+    max_object_cnt: RwSignal<String>,
+
+    operation_mode: RwSignal<i32>,
+    frame_subtraction: RwSignal<i32>,
+    gain: RwSignal<i32>,
 }
 
 impl SensorSettingsForm {
@@ -217,44 +225,64 @@ impl SensorSettingsForm {
         let pid = create_rw_signal(String::new());
         let resolution_x = create_rw_signal(String::new());
         let resolution_y = create_rw_signal(String::new());
-        let gain_1 = create_rw_signal(String::new());
-        let gain_2 = create_rw_signal(String::new());
         let exposure_time = create_rw_signal(String::new());
+        let frame_period = create_rw_signal(String::new());
+        let brightness_threshold = create_rw_signal(String::new());
+        let noise_threshold = create_rw_signal(String::new());
+        let area_threshold_min = create_rw_signal(String::new());
+        let area_threshold_max = create_rw_signal(String::new());
+        let max_object_cnt = create_rw_signal(String::new());
+        let operation_mode = create_rw_signal(0);
+        let frame_subtraction = create_rw_signal(0);
+        let gain = create_rw_signal(0);
+
         let exposure_time_ms = move || match exposure_time.with(|s| s.parse::<u16>()) {
             Ok(n) => format!("{:.4}", f64::from(n) * 200.0 / 1e6),
+            Err(_) => format!("???"),
+        };
+        let frame_period_ms = move || match frame_period.with(|s| s.parse::<u32>()) {
+            Ok(n) => format!("{:.4}", f64::from(n) / 1e4),
+            Err(_) => format!("???"),
+        };
+        let fps = move || match frame_period.with(|s| s.parse::<u32>()) {
+            Ok(n) => format!("{:.2}", 1e7 / f64::from(n)),
             Err(_) => format!("???"),
         };
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Product ID")               : let product_id = Entry(value: pid, enabled: false)
-                (Compact, "DSP area max threshold")   : let x = Entry(enabled: connected)
-                (Compact, "DSP noise threshold")      : let x = Entry(enabled: connected)
-                (Compact, "DSP orientation ratio")    : let x = Entry(enabled: connected)
-                (Compact, "DSP orientation factor")   : let x = Entry(enabled: connected)
-                (Compact, "DSP maximum object count") : let x = Entry(enabled: connected)
-                (Compact, "Gain")                     : let gain_combobox = Combobox(enabled: connected) {}
-                (Compact, "Exposure time")            : let x = HorizontalBox(padded: true) {
+                (Compact, "DSP brightness threshold") : let x = Entry(enabled: connected, signal: brightness_threshold)
+                (Compact, "DSP noise threshold")      : let x = Entry(enabled: connected, signal: noise_threshold)
+                (Compact, "DSP area threshold min")   : let x = Entry(enabled: connected, signal: area_threshold_min)
+                (Compact, "DSP area threshold max")   : let x = Entry(enabled: connected, signal: area_threshold_max)
+                (Compact, "DSP maximum object count") : let x = Entry(enabled: connected, signal: max_object_cnt)
+                (Compact, "DSP operation mode")       : let x = Combobox(enabled: connected, signal: operation_mode) { "Normal", "Tracking" }
+                (Compact, "Exposure time") : let x = HorizontalBox(padded: true) {
                     Stretchy : let e = Entry(
                         enabled: connected,
-                        onchange: exposure_time,
-                        value: exposure_time,
+                        signal: exposure_time,
                     )
-                    Compact : let x1 = LayoutGrid() {
+                    Compact : let expo_label = LayoutGrid() {
                         (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("× 200ns = {} ms", exposure_time_ms()))
                     }
                 }
-                (Compact, "Scale resolution X") : let x = Entry(enabled: connected, value: resolution_x, onchange: resolution_x)
-                (Compact, "Scale resolution Y") : let x = Entry(enabled: connected, value: resolution_y, onchange: resolution_y)
-                (Compact, "Frame period")       : let x = Entry(enabled: connected)
-                (Compact, "Frame rate")         : let x = Entry(enabled: connected)
+                (Compact, "Frame period") : let x = HorizontalBox(padded: true) {
+                    Stretchy : let e = Entry(
+                        enabled: connected,
+                        signal: frame_period,
+                    )
+                    Compact : let fps_label = LayoutGrid() {
+                        (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("{} ms ({} fps)", frame_period_ms(), fps()))
+                    }
+                }
+                (Compact, "Frame subtraction")  : let x = Combobox(enabled: connected, signal: frame_subtraction) { "Off", "On" }
+                (Compact, "Gain")               : let gain_combobox = Combobox(enabled: connected, signal: gain) {}
+                (Compact, "Scale resolution X") : let x = Entry(enabled: connected, signal: resolution_x)
+                (Compact, "Scale resolution Y") : let x = Entry(enabled: connected, signal: resolution_y)
             }
         }
         for (label, _) in &GAIN_TABLE {
             gain_combobox.append(&ui, label);
-        }
-        match port {
-            Port::Nf => gain_combobox.set_selected(&ui, 16),
-            Port::Wf => gain_combobox.set_selected(&ui, 48),
         }
         (
             form,
@@ -263,41 +291,85 @@ impl SensorSettingsForm {
                 pid,
                 resolution_x,
                 resolution_y,
-                gain_1,
-                gain_2,
                 exposure_time,
+                frame_period,
+                brightness_threshold,
+                noise_threshold,
+                area_threshold_min,
+                area_threshold_max,
+                max_object_cnt,
+                operation_mode,
+                frame_subtraction,
+                gain,
             },
         )
     }
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let (pid, res_x, res_y, gain_1, gain_2, expo) = tokio::try_join!(
+        let (
+            pid,
+            res_x,
+            res_y,
+            expo,
+            frame_period,
+            brightness_threshold,
+            noise_threshold,
+            area_threshold_min,
+            area_threshold_max,
+            max_object_cnt,
+            operation_mode,
+            frame_subtraction,
+            gain_1,
+            gain_2,
+        ) = tokio::try_join!(
             device.product_id(self.port),
             device.resolution_x(self.port),
             device.resolution_y(self.port),
+            device.exposure_time(self.port),
+            device.frame_period(self.port),
+            device.brightness_threshold(self.port),
+            device.noise_threshold(self.port),
+            device.area_threshold_min(self.port),
+            device.area_threshold_max(self.port),
+            device.max_object_cnt(self.port),
+            device.operation_mode(self.port),
+            device.frame_subtraction(self.port),
             device.gain_1(self.port),
             device.gain_2(self.port),
-            device.exposure_time(self.port),
         )?;
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
         self.resolution_y.set(res_y.to_string());
-        self.gain_1.set(gain_1.to_string());
-        self.gain_2.set(gain_2.to_string());
         self.exposure_time.set(expo.to_string());
+        self.frame_period.set(frame_period.to_string());
+        self.brightness_threshold.set(brightness_threshold.to_string());
+        self.noise_threshold.set(noise_threshold.to_string());
+        self.area_threshold_min.set(area_threshold_min.to_string());
+        self.area_threshold_max.set(area_threshold_max.to_string());
+        self.max_object_cnt.set(max_object_cnt.to_string());
+
+        self.operation_mode.set(i32::from(operation_mode));
+        self.frame_subtraction.set(i32::from(frame_subtraction));
+        self.gain.set(i32::from(Gain::index_from_reg(gain_1, gain_2)));
         Ok(())
     }
 
-    fn validate(&self) {}
-
     fn clear(&self) {
-        self.pid.set(String::new());
-        self.resolution_x.set(String::new());
-        self.resolution_y.set(String::new());
-        self.gain_1.set(String::new());
-        self.gain_2.set(String::new());
-        self.exposure_time.set(String::new());
+        self.pid.update(String::clear);
+        self.resolution_x.update(String::clear);
+        self.resolution_y.update(String::clear);
+        self.exposure_time.update(String::clear);
+        self.frame_period.update(String::clear);
+        self.brightness_threshold.update(String::clear);
+        self.noise_threshold.update(String::clear);
+        self.area_threshold_min.update(String::clear);
+        self.area_threshold_max.update(String::clear);
+        self.max_object_cnt.update(String::clear);
+
+        self.operation_mode.set(0);
+        self.frame_subtraction.set(0);
+        self.gain.set(0);
     }
 }
 
@@ -324,15 +396,27 @@ fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
     out
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Gain {
-    b_global: u8,
     b_ggh: u8,
+    b_global: u8,
 }
 
 impl Gain {
     const fn new(b_global: u8, b_ggh: u8) -> Self {
         Self { b_global, b_ggh }
+    }
+}
+
+impl Gain {
+    fn index_from_reg(b_global: u8, mut b_ggh: u8) -> i32 {
+        // change b_ggh from 0,2,3 to 0,1,2
+        if b_ggh > 0 {
+            b_ggh -= 1;
+        }
+        let b_ggh = i32::from(b_ggh);
+        let b_global = i32::from(b_global);
+        b_ggh*16 + b_global
     }
 }
 
@@ -350,7 +434,7 @@ const fn n_to_bstr(n: usize) -> [u8; 6] {
 }
 
 pub static GAIN_TABLE: [(&str, Gain); 16*3 + 1] = {
-    static BACKING: [[u8; 6]; 16*3] = {
+    const BACKING: [[u8; 6]; 16*3] = {
         let mut v = [[0; 6]; 16*3];
         let mut i = 0;
         while i < 16 {
@@ -373,8 +457,8 @@ pub static GAIN_TABLE: [(&str, Gain); 16*3 + 1] = {
 };
 
 // static GAIN_TABLE: [(&'static str, Gain); 16 * 3] = [
-// for i in range(16):
-//     for j, k in zip([0, 2, 3], [1, 2, 4]):
+// for j, k in zip([0, 2, 3], [1, 2, 4]):
+//     for i in range(16):
 //         value = (1 + i/16) * k
 //         print(f'    ("{value:.4f}", Gain::new(0x{i:02x}, 0x{j:02x})),')
 // ];

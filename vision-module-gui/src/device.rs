@@ -111,17 +111,19 @@ impl UsbDevice {
 
 macro_rules! read_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
-            Ok(<$ty>::from_le_bytes([
-                $( self.read_register(port, $bank, $addr).await? ),*
-            ]))
+        pub(crate) async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
+            let mut bytes = <$ty>::to_le_bytes(0);
+            for (byte, addr) in ::std::iter::zip(&mut bytes, [$($addr),*]) {
+                *byte = self.read_register(port, $bank, addr).await?;
+            }
+            Ok(<$ty>::from_le_bytes(bytes))
         }
     }
 }
 
 macro_rules! write_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
+        pub(crate) async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
             let bytes = <$ty>::to_le_bytes(value);
             for (byte, addr) in ::std::iter::zip(bytes, [$($addr),*]) {
                 self.write_register(port, $bank, addr, byte).await?;
@@ -157,4 +159,8 @@ impl UsbDevice {
     write_register_spec!(set_max_object_cnt: u8 = 0x00; [0x19]);
     read_register_spec!(frame_subtraction: u8 = 0x00; [0x28]);
     write_register_spec!(set_frame_subtraction: u8 = 0x00; [0x28]);
+    read_register_spec!(frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
+    write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
+    write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
+    write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
 }
