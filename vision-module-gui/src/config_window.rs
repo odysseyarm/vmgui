@@ -131,54 +131,29 @@ pub fn config_window(
             let Some(device) = device.get_untracked() else {
                 return;
             };
-            let wf_res_x = wf_settings
-                .resolution_x
-                .with_untracked(|s| s.parse::<u16>());
-            let wf_res_y = wf_settings
-                .resolution_y
-                .with_untracked(|s| s.parse::<u16>());
-            let nf_res_x = nf_settings
-                .resolution_x
-                .with_untracked(|s| s.parse::<u16>());
-            let nf_res_y = nf_settings
-                .resolution_y
-                .with_untracked(|s| s.parse::<u16>());
+
             let mut errors = vec![];
-            if wf_res_x.is_err() {
-                errors.push("wide field scale resolution X");
-            }
-            if wf_res_y.is_err() {
-                errors.push("wide field scale resolution Y");
-            }
-            if nf_res_x.is_err() {
-                errors.push("near field scale resolution X");
-            }
-            if nf_res_y.is_err() {
-                errors.push("near field scale resolution Y");
-            }
+            wf_settings.validate(&mut errors);
             if !errors.is_empty() {
-                config_win.modal_err(&ui, "Error", &errors.join("\n"));
+                let mut message = String::new();
+                for msg in &errors {
+                    message.push_str(&msg);
+                    message.push('\n');
+                }
+                config_win.modal_err(&ui, "Wide Field Validation Error", &message);
                 return;
             }
-            ui.spawn({
-                let ui = ui.c();
-                let config_win = config_win.c();
-                async move {
-                    println!(
-                        "Writing resolution {wf_res_x:?} {wf_res_y:?} {nf_res_x:?} {nf_res_y:?}"
-                    );
-                    let r = tokio::try_join!(
-                        device.set_resolution_x(Port::Wf, wf_res_x.unwrap()),
-                        device.set_resolution_y(Port::Wf, wf_res_y.unwrap()),
-                        device.set_resolution_x(Port::Nf, nf_res_x.unwrap()),
-                        device.set_resolution_y(Port::Nf, nf_res_y.unwrap()),
-                    );
-                    println!("Finished writing");
-                    if let Err(e) = r {
-                        config_win.modal_err_async(&ui, "Error", &e.to_string()).await;
-                    }
+
+            nf_settings.validate(&mut errors);
+            if !errors.is_empty() {
+                let mut message = String::new();
+                for msg in &errors {
+                    message.push_str(&msg);
+                    message.push('\n');
                 }
-            });
+                config_win.modal_err(&ui, "Near Field Validation Error", &message);
+                return;
+            }
         }
     });
     save_button.on_clicked(&ui, show_todo_modal.c());
@@ -353,6 +328,52 @@ impl SensorSettingsForm {
         self.frame_subtraction.set(i32::from(frame_subtraction));
         self.gain.set(i32::from(Gain::index_from_reg(gain_1, gain_2)));
         Ok(())
+    }
+
+    fn validate(&self, errors: &mut Vec<String>) {
+        macro_rules! validators {
+            ($($display:literal $reg:ident : $ty:ty $({ $( $check:expr ),* $(,)? })? ),* $(,)?) => {
+                $(
+                    #[allow(unused_variables)]
+                    let $reg = self.$reg.with_untracked(|s| s.parse::<$ty>());
+                    match &$reg {
+                        Ok(_) => (),
+                        Err(e) => errors.push(format!("{}: {}", $display, e)),
+                    }
+                )*
+                if !errors.is_empty() {
+                    return
+                }
+                $(
+                    // SAFETY: all the values are already checked for errors. Can convert to
+                    // unwrap_unchecked if necessary.
+                    #[allow(unused_variables)]
+                    let $reg = $reg.unwrap();
+                )*
+                $(
+                    $($(
+                        let (test_result, msg) = ($check)($reg);
+                        if !test_result {
+                            errors.push(format!("{}: {}", $display, msg));
+                        }
+                    )*)?
+                )*
+            }
+        }
+        validators! {
+            "exposure time" exposure_time: u16 {
+                |x| (x >= 100, "must be >= 20 µs"),
+                |x| ((200..=i64::from(frame_period) - 27000).contains(&(i64::from(x)*2)), "must be between 20 µs and frame period − 2.7 ms"),
+            },
+            "frame period" frame_period: u32 { |x| (x >= 49780, "must be >= 4.978 ms") },
+            "brightness threshold" brightness_threshold: u8,
+            "noise threshold" noise_threshold: u8,
+            "area threshold min" area_threshold_min: u8,
+            "area threshold max" area_threshold_max: u16 { |x| (x < (1 << 14), "must be < 16384") },
+            "max object count" max_object_cnt: u8 { |x| ((1..=16).contains(&x), "must be between 1 and 16") },
+            "scale resolution X" resolution_x: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
+            "scale resolution Y" resolution_y: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
+        }
     }
 
     fn clear(&self) {
