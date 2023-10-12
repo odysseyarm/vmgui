@@ -44,8 +44,8 @@ impl Context {
 
 /// Queues a function to be executed on the GUI thread with no evidence that
 /// it's safe to do so yet.
-pub(crate) fn queue_main_unsafe<F: FnMut() + 'static>(callback: F) {
-    extern "C" fn c_callback<G: FnMut()>(data: *mut c_void) {
+pub(crate) fn queue_main_unsafe<F: FnOnce() + 'static>(callback: F) {
+    extern "C" fn c_callback<G: FnOnce()>(data: *mut c_void) {
         unsafe {
             Box::<G>::from_raw(data as *mut G)();
         }

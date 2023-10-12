@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use ui::UI;
 use ui_sys::{self, uiControl, uiFreeText, uiWindow};
 
+use crate::concurrent::queue_main_unsafe;
+
 thread_local! {
     static WINDOWS: RefCell<Vec<Window>> = RefCell::new(Vec::new())
 }
@@ -177,7 +179,9 @@ impl Window {
     }
 
     /// Open a generic message box to show a message to the user.
-    /// Returns when the user acknowledges the message.
+    /// Returns a future that resolves when the user acknowledges the message.
+    ///
+    /// DO NOT USE IN ASYNC CODE.
     pub fn modal_msg(&self, _ctx: &UI, title: &str, description: &str) {
         unsafe {
             let c_title = CString::new(title.as_bytes().to_vec()).unwrap();
@@ -186,13 +190,37 @@ impl Window {
         }
     }
 
+    pub fn modal_msg_async(&self, _ctx: &UI, title: &str, description: &str) -> impl std::future::Future {
+        let c_title = CString::new(title.as_bytes().to_vec()).unwrap();
+        let c_description = CString::new(description.as_bytes().to_vec()).unwrap();
+        let window = self.uiWindow;
+        Modal {
+            f: Some(move || unsafe {
+                ui_sys::uiMsgBox(window, c_title.as_ptr(), c_description.as_ptr());
+            })
+        }
+    }
+
     /// Open an error-themed message box to show a message to the user.
-    /// Returns when the user acknowledges the message.
+    /// Returns a future that resolves when the user acknowledges the message.
+    ///
+    /// DO NOT USE IN ASYNC CODE.
     pub fn modal_err(&self, _ctx: &UI, title: &str, description: &str) {
         unsafe {
             let c_title = CString::new(title.as_bytes().to_vec()).unwrap();
             let c_description = CString::new(description.as_bytes().to_vec()).unwrap();
             ui_sys::uiMsgBoxError(self.uiWindow, c_title.as_ptr(), c_description.as_ptr())
+        }
+    }
+
+    pub fn modal_err_async(&self, _ctx: &UI, title: &str, description: &str) -> impl std::future::Future {
+        let c_title = CString::new(title.as_bytes().to_vec()).unwrap();
+        let c_description = CString::new(description.as_bytes().to_vec()).unwrap();
+        let window = self.uiWindow;
+        Modal {
+            f: Some(move || unsafe {
+                ui_sys::uiMsgBoxError(window, c_title.as_ptr(), c_description.as_ptr());
+            })
         }
     }
 
@@ -210,5 +238,25 @@ impl Window {
     pub unsafe fn destroy(&self) {
         // Don't check for initialization here since this can be run during deinitialization.
         ui_sys::uiControlDestroy(self.uiWindow as *mut ui_sys::uiControl)
+    }
+}
+
+/// A future designed to work with the recursive main loop that gtk creates when creating modals.
+struct Modal<F> {
+    f: Option<F>
+}
+
+impl<F: FnOnce() + Unpin + 'static> std::future::Future for Modal<F> {
+    type Output = ();
+
+    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+        if let Some(f) = self.f.take() {
+            let waker = cx.waker().clone();
+            queue_main_unsafe(move || {
+                f();
+                waker.wake();
+            });
+        }
+        std::task::Poll::Ready(())
     }
 }
