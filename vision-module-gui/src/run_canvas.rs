@@ -33,7 +33,7 @@ impl AreaHandler for RunCanvas {
                 let right = mot_data.boundary_right as f64 / 98. * draw_params.area_width;
                 let up = mot_data.boundary_up as f64 / 98. * draw_params.area_height;
 
-                draw_crosshair(&ctx, &ch_path, x, y);
+                draw_crosshair(&ctx, &ch_path, x, y, 10.);
 
                 nf_path.add_rectangle(
                     ctx,
@@ -59,7 +59,7 @@ impl AreaHandler for RunCanvas {
                 let right = mot_data.boundary_right as f64 / 98. * draw_params.area_width;
                 let up = mot_data.boundary_up as f64 / 98. * draw_params.area_height;
 
-                draw_crosshair(&ctx, &ch_path, x, y);
+                draw_crosshair(&ctx, &ch_path, x, y, 10.);
 
                 wf_path.add_rectangle(
                     ctx,
