@@ -22,6 +22,7 @@ impl<T: Clone> CloneButShorter for T {}
 
 #[derive(Default)]
 pub struct MotState {
+    pub fv_aim_point: Option<Point2<f64>>,
     pub nf_aim_point: Option<Point2<f64>>,
     pub wf_aim_point: Option<Point2<f64>>,
     pub nf_data: Option<ArrayVec<MotData, 16>>,

@@ -54,7 +54,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_win.set_borderless(&ui, true);
 
     let state: Arc<Mutex<MotState>> = Default::default();
-    let mut run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: state.c() }));
+    let run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: state.c() }));
     let mut run_hbox = HorizontalBox::new(&ui);
 
     let stop_tracking = {
