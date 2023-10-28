@@ -139,10 +139,10 @@ impl UsbDevice {
     read_register_spec!(resolution_y: u16 = 0x0c; [0x62, 0x63]);
     write_register_spec!(set_resolution_x: u16 = 0x0c; [0x60, 0x61]);
     write_register_spec!(set_resolution_y: u16 = 0x0c; [0x62, 0x63]);
-    read_register_spec!(gain_1: u8 = 0x01; [0x05]);
-    read_register_spec!(gain_2: u8 = 0x01; [0x06]);
-    write_register_spec!(set_gain_1: u8 = 0x0c; [0x0b]);
-    write_register_spec!(set_gain_2: u8 = 0x0c; [0x0c]);
+    read_register_spec!(gain_1: u8 = 0x01; [0x05]); // B_global
+    read_register_spec!(gain_2: u8 = 0x01; [0x06]); // B_ggh
+    write_register_spec!(set_gain_1: u8 = 0x0c; [0x0b]); // B_global
+    write_register_spec!(set_gain_2: u8 = 0x0c; [0x0c]); // B_ggh
     read_register_spec!(exposure_time: u16 = 0x01; [0x0e, 0x0f]);
     write_register_spec!(set_exposure_time: u16 = 0x0c; [0x0f, 0x10]);
     read_register_spec!(brightness_threshold: u8 = 0x0c; [0x47]);
