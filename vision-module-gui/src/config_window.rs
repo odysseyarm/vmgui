@@ -154,6 +154,21 @@ pub fn config_window(
                 config_win.modal_err(&ui, "Near Field Validation Error", &message);
                 return;
             }
+
+            ui.spawn({
+                let ui = ui.c();
+                let config_win = config_win.c();
+                async move {
+                    if let Err(e) = wf_settings.apply(&device).await {
+                        config_win.modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string()).await;
+                        return
+                    };
+                    if let Err(e) = nf_settings.apply(&device).await {
+                        config_win.modal_err_async(&ui, "Failed to apply near field settings", &e.to_string()).await;
+                        return
+                    };
+                }
+            })
         }
     });
     save_button.on_clicked(&ui, show_todo_modal.c());
@@ -374,6 +389,33 @@ impl SensorSettingsForm {
             "scale resolution X" resolution_x: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
             "scale resolution Y" resolution_y: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
         }
+    }
+
+    /// Make sure to call `validate()` before calling this method.
+    async fn apply(&self, device: &UsbDevice) -> Result<()> {
+        let gain = usize::try_from(self.gain.get_untracked()).unwrap();
+        let gain = GAIN_TABLE[gain].1;
+
+        tokio::try_join!(
+            device.set_resolution_x(self.port, self.resolution_x.with_untracked(|v| v.parse().unwrap())),
+            device.set_resolution_y(self.port, self.resolution_y.with_untracked(|v| v.parse().unwrap())),
+            device.set_gain_1(self.port, gain.b_global),
+            device.set_gain_2(self.port, gain.b_ggh),
+            device.set_exposure_time(self.port, self.exposure_time.with_untracked(|v| v.parse().unwrap())),
+            device.set_brightness_threshold(self.port, self.brightness_threshold.with_untracked(|v| v.parse().unwrap())),
+            device.set_noise_threshold(self.port, self.noise_threshold.with_untracked(|v| v.parse().unwrap())),
+            device.set_area_threshold_max(self.port, self.area_threshold_max.with_untracked(|v| v.parse().unwrap())),
+            device.set_area_threshold_min(self.port, self.area_threshold_min.with_untracked(|v| v.parse().unwrap())),
+            device.set_operation_mode(self.port, u8::try_from(self.operation_mode.get_untracked()).unwrap()),
+            device.set_max_object_cnt(self.port, self.max_object_cnt.with_untracked(|v| v.parse().unwrap())),
+            device.set_frame_subtraction(self.port, u8::try_from(self.frame_subtraction.get_untracked()).unwrap()),
+            device.set_frame_period(self.port, self.frame_period.with_untracked(|v| v.parse().unwrap())),
+        )?;
+        tokio::try_join!(
+            device.set_bank1_sync_updated(self.port, 1),
+            device.set_bank0_sync_updated(self.port, 1),
+        )?;
+        Ok(())
     }
 
     fn clear(&self) {
