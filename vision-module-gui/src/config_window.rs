@@ -116,22 +116,10 @@ pub fn config_window(
     refresh_device_list();
     refresh_button.on_clicked(&ui, move |_| refresh_device_list());
 
-    let show_todo_modal = {
+    let apply_button_on_click = {
         let config_win = config_win.c();
         let ui = ui.c();
-        move |_: &mut _| {
-            config_win.modal_msg(&ui, "Not implemented", "");
-        }
-    };
-    apply_button.on_clicked(&ui, {
-        let config_win = config_win.c();
-        let ui = ui.c();
-        let device = device.c();
-        move |_| {
-            let Some(device) = device.get_untracked() else {
-                return;
-            };
-
+        move |device: UsbDevice| async move {
             let mut errors = vec![];
             wf_settings.validate(&mut errors);
             if !errors.is_empty() {
@@ -140,8 +128,8 @@ pub fn config_window(
                     message.push_str(&msg);
                     message.push('\n');
                 }
-                config_win.modal_err(&ui, "Wide Field Validation Error", &message);
-                return;
+                config_win.modal_err_async(&ui, "Wide Field Validation Error", &message).await;
+                return false;
             }
 
             nf_settings.validate(&mut errors);
@@ -151,24 +139,31 @@ pub fn config_window(
                     message.push_str(&msg);
                     message.push('\n');
                 }
-                config_win.modal_err(&ui, "Near Field Validation Error", &message);
-                return;
+                config_win.modal_err_async(&ui, "Near Field Validation Error", &message).await;
+                return false;
             }
 
-            ui.spawn({
-                let ui = ui.c();
-                let config_win = config_win.c();
-                async move {
-                    if let Err(e) = wf_settings.apply(&device).await {
-                        config_win.modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string()).await;
-                        return
-                    };
-                    if let Err(e) = nf_settings.apply(&device).await {
-                        config_win.modal_err_async(&ui, "Failed to apply near field settings", &e.to_string()).await;
-                        return
-                    };
-                }
-            })
+            if let Err(e) = wf_settings.apply(&device).await {
+                config_win.modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string()).await;
+                return false;
+            };
+            if let Err(e) = nf_settings.apply(&device).await {
+                config_win.modal_err_async(&ui, "Failed to apply near field settings", &e.to_string()).await;
+                return false;
+            };
+            return true;
+        }
+    };
+    apply_button.on_clicked(&ui, {
+        let f = apply_button_on_click.clone();
+        let device = device.c();
+        let ui = ui.c();
+        move |_| {
+            let Some(device) = device.get_untracked() else {
+                return;
+            };
+            let f = f.clone();
+            ui.spawn(async move { f(device).await; });
         }
     });
     save_button.on_clicked(&ui, {
@@ -182,7 +177,12 @@ pub fn config_window(
             ui.spawn({
                 let ui = ui.c();
                 let config_win = config_win.c();
+                let apply_button_on_click = apply_button_on_click.c();
                 async move {
+                    if !apply_button_on_click(device.clone()).await {
+                        // callback should have already displayed an error modal, just return
+                        return;
+                    }
                     if let Err(e) = device.flash_settings().await {
                         config_win.modal_err_async(&ui, "Failed to request flash settings", &e.to_string()).await;
                     }
@@ -190,7 +190,14 @@ pub fn config_window(
             })
         }
     });
-    load_defaults_button.on_clicked(&ui, show_todo_modal.c());
+    load_defaults_button.on_clicked(&ui, {
+        move |_| {
+            if let Some(device) = device.get_untracked() {
+                nf_settings.load_defaults();
+                wf_settings.load_defaults();
+            }
+        }
+    });
 
     reload_button.on_clicked(&ui, {
         move |_| {
@@ -451,6 +458,26 @@ impl SensorSettingsForm {
         self.operation_mode.set(0);
         self.frame_subtraction.set(0);
         self.gain.set(0);
+    }
+
+    fn load_defaults(&self) {
+        self.resolution_x.update(|s| s.replace_range(.., "4095"));
+        self.resolution_y.update(|s| s.replace_range(.., "4095"));
+        self.exposure_time.update(|s| s.replace_range(.., "8192"));
+        self.frame_period.update(|s| s.replace_range(.., "49780"));
+        self.brightness_threshold.update(|s| s.replace_range(.., "110"));
+        self.noise_threshold.update(|s| s.replace_range(.., "10"));
+        self.area_threshold_min.update(|s| s.replace_range(.., "0"));
+        self.area_threshold_max.update(|s| s.replace_range(.., "9605"));
+        self.max_object_cnt.update(|s| s.replace_range(.., "16"));
+
+        self.operation_mode.set(0);
+        self.frame_subtraction.set(0);
+
+        match self.port {
+            Port::Nf => self.gain.set(i32::from(Gain::index_from_reg(16, 0))),
+            Port::Wf => self.gain.set(i32::from(Gain::index_from_reg(16, 3))),
+        }
     }
 }
 
