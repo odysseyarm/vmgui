@@ -171,7 +171,25 @@ pub fn config_window(
             })
         }
     });
-    save_button.on_clicked(&ui, show_todo_modal.c());
+    save_button.on_clicked(&ui, {
+        let config_win = config_win.c();
+        let ui = ui.c();
+        let device = device.c();
+        move |_| {
+            let Some(device) = device.get_untracked() else {
+                return;
+            };
+            ui.spawn({
+                let ui = ui.c();
+                let config_win = config_win.c();
+                async move {
+                    if let Err(e) = device.flash_settings().await {
+                        config_win.modal_err_async(&ui, "Failed to request flash settings", &e.to_string()).await;
+                    }
+                }
+            })
+        }
+    });
     load_defaults_button.on_clicked(&ui, show_todo_modal.c());
 
     reload_button.on_clicked(&ui, {
