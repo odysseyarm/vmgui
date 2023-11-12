@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{device::UsbDevice, packet::Port, CloneButShorter};
 use anyhow::Result;
 use iui::{
@@ -158,19 +160,26 @@ pub fn config_window(
         let f = apply_button_on_click.clone();
         let device = device.c();
         let ui = ui.c();
-        move |_| {
+        move |apply_button| {
             let Some(device) = device.get_untracked() else {
                 return;
             };
             let f = f.clone();
-            ui.spawn(async move { f(device).await; });
+            let mut apply_button = apply_button.c();
+            let ui2 = ui.c();
+            ui.spawn(async move {
+                f(device).await;
+                apply_button.set_text(&ui2, "Applied!");
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                apply_button.set_text(&ui2, "Apply");
+            });
         }
     });
     save_button.on_clicked(&ui, {
         let config_win = config_win.c();
         let ui = ui.c();
         let device = device.c();
-        move |_| {
+        move |save_button| {
             let Some(device) = device.get_untracked() else {
                 return;
             };
@@ -178,6 +187,7 @@ pub fn config_window(
                 let ui = ui.c();
                 let config_win = config_win.c();
                 let apply_button_on_click = apply_button_on_click.c();
+                let mut save_button = save_button.c();
                 async move {
                     if !apply_button_on_click(device.clone()).await {
                         // callback should have already displayed an error modal, just return
@@ -186,6 +196,9 @@ pub fn config_window(
                     if let Err(e) = device.flash_settings().await {
                         config_win.modal_err_async(&ui, "Failed to request flash settings", &e.to_string()).await;
                     }
+                    save_button.set_text(&ui, "Saved!");
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                    save_button.set_text(&ui, "Save");
                 }
             })
         }
