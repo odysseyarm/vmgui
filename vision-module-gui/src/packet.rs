@@ -8,6 +8,7 @@ pub enum Packet {
     ReadRegisterResponse(ReadRegisterResponse),
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
+    FlashSettings,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -104,6 +105,10 @@ pub enum PacketId {
     ReadRegisterResponse,
     ObjectReportRequest,
     ObjectReport,
+    StreamUpdate,
+    FlashSettings,
+    AimPointReport,
+    End,
 }
 
 impl TryFrom<u8> for PacketId {
@@ -115,6 +120,10 @@ impl TryFrom<u8> for PacketId {
             2 => Ok(Self::ReadRegisterResponse),
             3 => Ok(Self::ObjectReportRequest),
             4 => Ok(Self::ObjectReport),
+            5 => Ok(Self::StreamUpdate),
+            6 => Ok(Self::FlashSettings),
+            7 => Ok(Self::AimPointReport),
+            8 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -130,6 +139,7 @@ impl Packet {
             Self::ReadRegisterResponse(_) => P::ReadRegisterResponse,
             Self::ObjectReportRequest(_) => P::ObjectReportRequest,
             Self::ObjectReport(_) => P::ObjectReport,
+            Self::FlashSettings => P::FlashSettings,
         }
     }
 
@@ -153,6 +163,8 @@ impl Packet {
             PacketId::ReadRegisterResponse => Self::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
             PacketId::ObjectReportRequest => Self::ObjectReportRequest(ObjectReportRequest{}),
             PacketId::ObjectReport => Self::ObjectReport(ObjectReport::parse(bytes)?),
+            PacketId::FlashSettings => Self::FlashSettings,
+            _ => unimplemented!(),
         })
     }
 
@@ -164,6 +176,7 @@ impl Packet {
             Packet::ReadRegisterResponse(_) => 4,
             Packet::ObjectReportRequest(_) => 0,
             Packet::ObjectReport(_) => 514,
+            Packet::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let id = self.id();
@@ -175,6 +188,7 @@ impl Packet {
             Packet::ReadRegisterResponse(x) => x.serialize(buf),
             Packet::ObjectReportRequest(_) => (),
             Packet::ObjectReport(x) => x.serialize(buf),
+            Packet::FlashSettings => (),
         };
     }
 

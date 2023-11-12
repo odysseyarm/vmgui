@@ -107,6 +107,11 @@ impl UsbDevice {
             .with_context(|| "unexpected response")?;
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
+
+    pub async fn flash_settings(&self) -> Result<()> {
+        self.0.send((Packet::FlashSettings, None)).await?;
+        Ok(())
+    }
 }
 
 macro_rules! read_register_spec {
