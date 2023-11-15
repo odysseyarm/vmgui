@@ -98,7 +98,7 @@ impl MotRunner {
                     fv_aim_point = wf_aim_point;
                 } else if wf_points.len() > 3 {
                     let mut index_claim_map = [None::<usize>; 4];
-                    let mut dist_map = [0.; 4];
+                    let mut dist_map = [999.; 4];
                     for (i, wf_point) in wf_points[0..4].iter().enumerate() {
                         for (j, nf_point) in nf_points.iter().enumerate() {
                             let _dist = ((wf_point.x-nf_point.x).powi(2) + (wf_point.y-nf_point.y).powi(2)).sqrt();
