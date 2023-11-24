@@ -11,7 +11,8 @@ use leptos_reactive::{
     create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet,
     SignalWith, SignalWithUntracked, SignalUpdate,
 };
-use serialport::SerialPortInfo;
+use serialport::{SerialPortInfo, SerialPortType};
+use serialport::SerialPortType::UsbPort;
 
 pub fn config_window(
     ui: &UI,
@@ -110,7 +111,22 @@ pub fn config_window(
                     config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
                     return;
                 }
-            };
+            }.into_iter().filter(|port| {
+                match &port.port_type {
+                    UsbPort(port_info) => {
+                        if let Some(i) = port_info.interface {
+                            // interface 0: cdc acm module
+                            // interface 1: cdc acm module functional subordinate interface
+                            // interface 2: cdc acm dfu
+                            // interface 3: cdc acm dfu subordinate interface
+                            i == 0
+                        } else {
+                            true
+                        }
+                    },
+                    _ => false,
+                }
+            }).collect();
             device_list.set(ports);
             device_combobox_on_selected(-1);
         }
