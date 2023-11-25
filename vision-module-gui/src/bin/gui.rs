@@ -284,7 +284,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let datapoints = datapoints.c();
             let datapoints = datapoints.blocking_lock();
-            if let Some(path_buf) = main_win.save_file(&ui) {
+            let fd = rfd::FileDialog::new()
+                .add_filter("csv", &["csv"]);
+            if let Some(path_buf) = fd.save_file() {
                 let file = File::create(path_buf).expect("Could not create file");
                 let mut writer = csv::Writer::from_writer(file);
 
