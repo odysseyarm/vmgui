@@ -17,14 +17,15 @@ impl AreaHandler for TestCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
 
-        let fv_ch_path = Path::new(ctx, FillMode::Winding);
+        // todo foveated is not ready
+        // let fv_ch_path = Path::new(ctx, FillMode::Winding);
         let nf_ch_path = Path::new(ctx, FillMode::Winding);
         let wf_ch_path = Path::new(ctx, FillMode::Winding);
         let state = self.state.blocking_lock();
-        if let Some(aim_point) = state.fv_aim_point {
-            draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
-        }
-        fv_ch_path.end(ctx);
+        // if let Some(aim_point) = state.fv_aim_point {
+        //     draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
+        // }
+        // fv_ch_path.end(ctx);
         if let Some(aim_point) = state.nf_aim_point {
             draw_crosshair(&ctx, &nf_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 15.);
         }
@@ -34,23 +35,23 @@ impl AreaHandler for TestCanvas {
         }
         wf_ch_path.end(ctx);
 
-        let stroke = StrokeParams {
-            cap: 0, // Bevel
-            join: 0, // Flat
-            thickness: 10.,
-            miter_limit: 0.,
-            dashes: vec![],
-            dash_phase: 0.,
-        };
+        // let stroke = StrokeParams {
+        //     cap: 0, // Bevel
+        //     join: 0, // Flat
+        //     thickness: 10.,
+        //     miter_limit: 0.,
+        //     dashes: vec![],
+        //     dash_phase: 0.,
+        // };
 
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.,
-            g: 1.,
-            b: 0.,
-            a: 1.,
-        });
+        // let brush = Brush::Solid(SolidBrush {
+        //     r: 0.,
+        //     g: 1.,
+        //     b: 0.,
+        //     a: 1.,
+        // });
 
-        ctx.stroke(&fv_ch_path, &brush, &stroke);
+        // ctx.stroke(&fv_ch_path, &brush, &stroke);
 
         let stroke = StrokeParams {
             cap: 0, // Bevel
