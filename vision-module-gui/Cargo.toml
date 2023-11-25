@@ -14,3 +14,5 @@ serialport = { version = "4.2.2", features = ["usbportinfo-interface"] }
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
 nalgebra = "0.32.3"
 arrayvec = "0.7.4"
+serde = "1.0.193"
+csv = "1.3.0"
