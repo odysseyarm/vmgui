@@ -285,7 +285,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let datapoints = datapoints.c();
             let datapoints = datapoints.blocking_lock();
             let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("csv").extension("csv")]);
-            if let Some(path_buf) = path_buf {
+            if let Some(mut path_buf) = path_buf {
+                if path_buf.extension() != Some("csv".as_ref()) {
+                    path_buf.as_mut_os_string().push(".csv");
+                }
                 let file = File::create(path_buf).expect("Could not create file");
                 let mut writer = csv::Writer::from_writer(file);
 
