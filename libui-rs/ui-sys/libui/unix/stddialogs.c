@@ -6,7 +6,7 @@
 
 #define windowWindow(w) (GTK_WINDOW(uiControlHandle(uiControl(w))))
 
-static char *filedialog(GtkWindow *parent, GtkFileChooserAction mode, const gchar *confirm)
+static char *filedialog(GtkWindow *parent, GtkFileChooserAction mode, const gchar *confirm, const uiFileTypeFilter *filters, int filters_len)
 {
 	GtkWidget *fcd;
 	GtkFileChooser *fc;
@@ -23,6 +23,25 @@ static char *filedialog(GtkWindow *parent, GtkFileChooserAction mode, const gcha
 	gtk_file_chooser_set_show_hidden(fc, TRUE);
 	gtk_file_chooser_set_do_overwrite_confirmation(fc, TRUE);
 	gtk_file_chooser_set_create_folders(fc, TRUE);
+
+	char *pattern = NULL;
+	int pattern_cap = 0;
+	for (int i = 0; i < filters_len; i++) {
+		GtkFileFilter* gfilter = gtk_file_filter_new();
+		gtk_file_filter_set_name(gfilter, filters[i].name);
+		for (int j = 0; j < filters[i].extensions_len; j++) {
+			int ext_len = strlen(filters[i].extensions[j]);
+			if (3 + ext_len > pattern_cap) {
+				pattern = uiprivRealloc(pattern, 3 + ext_len, "char[]");
+				pattern_cap = 3 + ext_len;
+			}
+			sprintf(pattern, "*.%s", filters[i].extensions[j]);
+			gtk_file_filter_add_pattern(gfilter, pattern);
+			gtk_file_chooser_add_filter(fc, gfilter);
+		}
+	}
+	uiprivFree(pattern);
+
 	response = gtk_dialog_run(GTK_DIALOG(fcd));
 	if (response != GTK_RESPONSE_ACCEPT) {
 		gtk_widget_destroy(fcd);
@@ -35,17 +54,22 @@ static char *filedialog(GtkWindow *parent, GtkFileChooserAction mode, const gcha
 
 char *uiOpenFile(uiWindow *parent)
 {
-	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_OPEN, "_Open");
+	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_OPEN, "_Open", NULL, 0);
 }
 
 char *uiOpenFolder(uiWindow *parent)
 {
-	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, "_Open");
+	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, "_Open", NULL, 0);
 }
 
 char *uiSaveFile(uiWindow *parent)
 {
-	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_SAVE, "_Save");
+	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_SAVE, "_Save", NULL, 0);
+}
+
+char *uiSaveFile2(uiWindow *parent, const uiFileTypeFilter *filters, int filters_len)
+{
+	return filedialog(windowWindow(parent), GTK_FILE_CHOOSER_ACTION_SAVE, "_Save", filters, filters_len);
 }
 
 static void msgbox(GtkWindow *parent, const char *title, const char *description, GtkMessageType type, GtkButtonsType buttons)
