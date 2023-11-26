@@ -37,12 +37,15 @@ fn main() {
         }
     }
 
+    println!("cargo:rerun-if-changed=wrapper.h");
+
     // Generate libui bindings on the fly
     let bindings = BindgenBuilder::default()
         .header("wrapper.h")
         .opaque_type("max_align_t") // For some reason this ends up too large
         //.rustified_enum(".*")
         .trust_clang_mangling(false) // clang sometimes wants to treat these functions as C++
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
         .generate()
         .expect("Unable to generate bindings");
 
@@ -59,6 +62,13 @@ fn main() {
 
         // libui might emit lots of warnings we can do nothing
         base_config.warnings(false);
+        macro_rules! src_add {
+            ($p:expr) => {
+                let path = $p;
+                println!("cargo:rerun-if-changed={}", path);
+                base_config.file(path);
+            }
+        }
 
         // Add source files that are common to all platforms
         base_config.include(src_path("/common"));
@@ -81,7 +91,7 @@ fn main() {
         ]
         .iter()
         {
-            base_config.file(src_path(filename));
+            src_add!(src_path(filename));
         }
 
         if target_os == "windows" {
@@ -153,7 +163,7 @@ fn main() {
             ]
             .iter()
             {
-                base_config.file(src_path(filename));
+                src_add!(src_path(filename));
             }
 
             // See https://github.com/nabijaczleweli/rust-embed-resource/issues/11
@@ -235,7 +245,7 @@ fn main() {
             ]
             .iter()
             {
-                base_config.file(src_path(filename));
+                src_add!(src_path(filename));
             }
         } else if apple {
             base_config.include(src_path("/darwin"));
@@ -293,7 +303,7 @@ fn main() {
             ]
             .iter()
             {
-                base_config.file(src_path(filename));
+                src_add!(src_path(filename));
             }
             println!("cargo:rustc-link-lib=framework=AppKit");
         } else {
