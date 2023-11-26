@@ -3,7 +3,7 @@
 use callback_helpers::{from_void_ptr, to_heap_ptr};
 use controls::Control;
 use std::cell::RefCell;
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::mem;
 use std::os::raw::{c_int, c_void};
 use std::path::PathBuf;
@@ -165,6 +165,22 @@ impl Window {
         Some(path_string.into())
     }
 
+    pub fn save_file_with_filter(&self, _ctx: &UI, filters: &[FileTypeFilter]) -> Option<PathBuf> {
+        let filters: Vec<ui_sys::uiFileTypeFilter> = filters
+            .iter()
+            .map(|f| unsafe { f.as_ui_file_type_filter() })
+            .collect();
+        let ptr = unsafe { ui_sys::uiSaveFile2(self.uiWindow, filters.as_ptr(), filters.len() as c_int) };
+        if ptr.is_null() {
+            return None;
+        };
+        let path_string: String = unsafe { CStr::from_ptr(ptr).to_string_lossy().into() };
+        unsafe {
+            uiFreeText(ptr);
+        }
+        Some(path_string.into())
+    }
+
     /// Allow the user to select a single folder using the systems folder dialog.
     pub fn open_folder(&self, _ctx: &UI) -> Option<PathBuf> {
         let ptr = unsafe { ui_sys::uiOpenFolder(self.uiWindow) };
@@ -258,5 +274,41 @@ impl<F: FnOnce() + Unpin + 'static> std::future::Future for Modal<F> {
             });
         }
         std::task::Poll::Ready(())
+    }
+}
+
+pub struct FileTypeFilter {
+    name: CString,
+    extensions: Vec<*mut c_char>,
+}
+
+impl FileTypeFilter {
+    pub fn new(name: &str) -> Self {
+        let name = CString::new(name.as_bytes().to_vec()).unwrap();
+        Self {
+            name: name.into(),
+            extensions: Vec::new(),
+        }
+    }
+    pub fn extension(mut self, extension: &str) -> Self {
+        let e = CString::new(extension.as_bytes().to_vec()).unwrap().into_raw();
+        self.extensions.push(e);
+        self
+    }
+    /// The return value borrows from `self`.
+    pub unsafe fn as_ui_file_type_filter(&self) -> ui_sys::uiFileTypeFilter {
+        ui_sys::uiFileTypeFilter {
+            name: self.name.as_ptr() as _,
+            extensions: self.extensions.as_ptr() as _,
+            extensions_len: self.extensions.len() as i32,
+        }
+    }
+}
+
+impl Drop for FileTypeFilter {
+    fn drop(&mut self) {
+        for &e in &self.extensions {
+            let _ = unsafe { CString::from_raw(e) };
+        }
     }
 }
