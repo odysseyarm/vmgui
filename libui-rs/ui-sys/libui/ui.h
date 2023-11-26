@@ -1951,6 +1951,28 @@ _UI_EXTERN char *uiOpenFolder(uiWindow *parent);
  */
 _UI_EXTERN char *uiSaveFile(uiWindow *parent);
 
+typedef struct uiFileTypeFilter uiFileTypeFilter;
+struct uiFileTypeFilter {
+	char *name;
+	char **extensions;
+	int extensions_len;
+};
+/**
+ * Save file dialog window, with specified filetypes.
+ *
+ * The user is asked to confirm overwriting existing files, should the chosen
+ * file path already exist on the system.
+ *
+ * @param parent Parent window.
+ * @returns File path, `NULL` on cancel.\n
+ *          If path is not `NULL`:\n
+ *          TODO: clarify string encoding.
+ *          Caller is responsible for freeing the data with `uiFreeText()`.
+ * @note File paths are separated by the underlying OS file path separator.
+ * @ingroup dataEntry dialogWindow
+ */
+_UI_EXTERN char *uiSaveFile2(uiWindow *parent, const uiFileTypeFilter *filters, int filters_len);
+
 /**
  * Message box dialog window.
  *
