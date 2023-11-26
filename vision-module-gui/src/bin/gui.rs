@@ -8,7 +8,7 @@ use serde::Serialize;
 use vision_module_gui::{config_window::config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
-use iui::controls::{Area, Button, HorizontalBox};
+use iui::controls::{Area, Button, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::test_canvas::{TestCanvas};
@@ -284,9 +284,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let datapoints = datapoints.c();
             let datapoints = datapoints.blocking_lock();
-            let fd = rfd::FileDialog::new()
-                .add_filter("csv", &["csv"]);
-            if let Some(path_buf) = fd.save_file() {
+            let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("csv").extension("csv")]);
+            if let Some(path_buf) = path_buf {
                 let file = File::create(path_buf).expect("Could not create file");
                 let mut writer = csv::Writer::from_writer(file);
 
