@@ -440,8 +440,8 @@ impl SensorSettingsForm {
             "area threshold min" area_threshold_min: u8,
             "area threshold max" area_threshold_max: u16 { |x| (x < (1 << 14), "must be < 16384") },
             "max object count" max_object_cnt: u8 { |x| ((1..=16).contains(&x), "must be between 1 and 16") },
-            "scale resolution X" resolution_x: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
-            "scale resolution Y" resolution_y: u16 { |x| ((1..=4095).contains(&x), "must be between 1 and 4095") },
+            "scale resolution X" resolution_x: u16 { |x| ((1..=4096).contains(&x), "must be between 1 and 4096") },
+            "scale resolution Y" resolution_y: u16 { |x| ((1..=4096).contains(&x), "must be between 1 and 4096") },
         }
     }
 
