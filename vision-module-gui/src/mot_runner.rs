@@ -80,8 +80,8 @@ impl MotRunner {
                     point.y -= nf_vert_offset;
                     point.x /= nf_mag_ratio;
                     point.y /= nf_mag_ratio;
-                    point.x = 4096./nf_mag_ratio+point.x;
-                    point.y = 4096./nf_mag_ratio+point.y;
+                    point.x = 4095./nf_mag_ratio+point.x;
+                    point.y = 4095./nf_mag_ratio+point.y;
                 }
 
                 for (points, aim_point) in [(&mut nf_points, &mut nf_aim_point), (&mut wf_points, &mut wf_aim_point)] {

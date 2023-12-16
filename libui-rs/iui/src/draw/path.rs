@@ -1,6 +1,6 @@
 use draw::DrawContext;
 use std::os::raw::c_int;
-use ui_sys::{self, uiDrawFillMode, uiDrawFillModeAlternate, uiDrawFillModeWinding, uiDrawPath};
+use ui_sys::{self, uiDrawFillMode, uiDrawFillModeAlternate, uiDrawFillModeWinding, uiDrawPath, uiDrawTextLayout};
 
 pub struct Path {
     ui_draw_path: *mut uiDrawPath,

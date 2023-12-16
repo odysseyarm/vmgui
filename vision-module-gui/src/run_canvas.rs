@@ -24,9 +24,9 @@ impl AreaHandler for RunCanvas {
                 if mot_data.area == 0 {
                     break;
                 }
-                // todo don't use hardcoded 4096x4096 res assumption
-                let x = mot_data.cx as f64 / 4096. * draw_params.area_width;
-                let y = mot_data.cy as f64 / 4096. * draw_params.area_height;
+                // todo don't use hardcoded 4095x4095 res assumption
+                let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
+                let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
 
                 let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
                 let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
@@ -42,6 +42,8 @@ impl AreaHandler for RunCanvas {
                     right-left,
                     down-up,
                 );
+
+                ctx.draw_text(x+20.0, y+20.0, format!("({}, {})", mot_data.cx, mot_data.cy).as_str());
             }
         }
         nf_path.end(ctx);
@@ -50,9 +52,9 @@ impl AreaHandler for RunCanvas {
                 if mot_data.area == 0 {
                     break;
                 }
-                // todo don't use hardcoded 4096x4096 res assumption
-                let x = mot_data.cx as f64 / 4096. * draw_params.area_width;
-                let y = mot_data.cy as f64 / 4096. * draw_params.area_height;
+                // todo don't use hardcoded 4095x4095 res assumption
+                let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
+                let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
 
                 let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
                 let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
