@@ -4,5 +4,6 @@ resolver = "2"
 members = [
     "libui-rs/iui",
     "libui-rs/ui-sys",
-    "vision-module-gui"
-]
+    "ats_cv",
+    "ats_cv_cbindgen",
+    "vision-module-gui"]

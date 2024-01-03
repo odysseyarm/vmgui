@@ -1,4 +1,8 @@
-use std::mem::swap;
+pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
+    ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
+                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
+                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
+}
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
@@ -8,36 +12,6 @@ use tokio::time::sleep;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::packet::MotData;
-
-fn transform_aim_point(aim_point: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>,
-             np1: Point2<f64>, np2: Point2<f64>, np3: Point2<f64>, np4: Point2<f64>) -> Option<Point2<f64>> {
-
-    let a = SMatrix::<f64,8,8>::from_row_slice(
-        &[p1.x, p1.y, 1., 0.,  0.,  0., -np1.x*p1.x, -np1.x*p1.y,
-        0.,  0.,  0., p1.x, p1.y, 1., -np1.y*p1.x, -np1.y*p1.y,
-        p2.x, p2.y, 1., 0.,  0.,  0., -np2.x*p2.x, -np2.x*p2.y,
-        0.,  0.,  0., p2.x, p2.y, 1., -np2.y*p2.x, -np2.y*p2.y,
-        p3.x, p3.y, 1., 0.,  0.,  0., -np3.x*p3.x, -np3.x*p3.y,
-        0.,  0.,  0., p3.x, p3.y, 1., -np3.y*p3.x, -np3.y*p3.y,
-        p4.x, p4.y, 1., 0.,  0.,  0., -np4.x*p4.x, -np4.x*p4.y,
-        0.,  0.,  0., p4.x, p4.y, 1., -np4.y*p4.x, -np4.y*p4.y],
-    );
-    let axp = SVector::from_row_slice(&[np1.x, np1.y, np2.x, np2.y, np3.x, np3.y, np4.x, np4.y]);
-    let decomp = a.lu();
-    let p = decomp.solve(&axp)?;
-    let transformation = Matrix3::new(
-        p[0], p[1], p[2],
-        p[3], p[4], p[5],
-        p[6], p[7], 1.
-    );
-    Some(transformation.transform_point(&aim_point))
-}
-
-fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
-    transform_aim_point(center_aim, p1, p2, p3, p4,
-                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
-                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
-}
 
 fn sort_clockwise(a: &mut [Point2<f64>]) {
     if a[0].y < a[1].y { a.swap(0, 1); }
