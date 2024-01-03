@@ -1,16 +1,14 @@
+#![no_std]
+
+#[cfg(not(test))]
+use panic_rtt_target as _;
+
 #[repr(C)]
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub struct Pointf32 {
     x: f32,
     y: f32,
-}
-
-impl Pointf32 {
-    // Another associated function, taking two arguments:
-    fn new(x: f32, y: f32) -> Pointf32 {
-        Pointf32 { x, y }
-    }
 }
 
 #[no_mangle]
@@ -38,20 +36,20 @@ mod tests {
 
     #[test]
     fn center_aimpoint() {
-        let center_aim = Pointf32::new(0.5, 0.5);
+        let center_aim = Pointf32 { x: 0.5, y: 0.5 };
 
-        let p1 = Pointf32::new(0.5, 1.);
-        let p2 = Pointf32::new(0., 0.5);
-        let p3 = Pointf32::new(0.5, 0.);
-        let p4 = Pointf32::new(1., 0.5);
+        let p1 = Pointf32 { x: 0.5, y: 1. };
+        let p2 = Pointf32 { x: 0., y: 0.5 };
+        let p3 = Pointf32 { x: 0.5, y: 0. };
+        let p4 = Pointf32 { x: 1., y: 0.5 };
 
-        let mut result = Pointf32::new(0., 0.);
+        let mut result = Pointf32 { x: 0., y: 0. };
 
         transform_aim_point_f32(center_aim, p1, p2, p3, p4,
-                                         Pointf32::new(0.5, 1.), Pointf32::new(0., 0.5),
-                                         Pointf32::new(0.5, 0.), Pointf32::new(1., 0.5),
+                                         Pointf32 { x: 0.5, y: 1.}, Pointf32 { x: 0., y: 0.5},
+                                         Pointf32 { x: 0.5, y: 0. }, Pointf32 { x: 1., y: 0.5 },
                                          &mut result);
 
-        assert_eq!(result, Pointf32::new(0.5, 0.5));
+        assert_eq!(result, Pointf32 { x: 0.5, y: 0.5 });
     }
 }

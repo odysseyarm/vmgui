@@ -1,8 +1,10 @@
+#![no_std]
+
 use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector};
 
-use num::{Float, FromPrimitive};
+use num::{traits::Float, FromPrimitive};
 
-pub fn transform_aim_point<F: Float + std::fmt::Debug + FromPrimitive + 'static>(aim_point: Point2<F>, p1: Point2<F>, p2: Point2<F>, p3: Point2<F>, p4: Point2<F>,
+pub fn transform_aim_point<F: Float + FromPrimitive + 'static>(aim_point: Point2<F>, p1: Point2<F>, p2: Point2<F>, p3: Point2<F>, p4: Point2<F>,
                        np1: Point2<F>, np2: Point2<F>, np3: Point2<F>, np4: Point2<F>) -> Option<Point2<F>> where F: ComplexField, F: RealField {
 
     let a = SMatrix::<F,8,8>::from_row_slice(
