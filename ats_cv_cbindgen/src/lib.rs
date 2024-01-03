@@ -17,20 +17,34 @@ impl From<Pointf32> for nalgebra::Point2<f32> {
 }
 
 #[no_mangle]
-pub extern "C" fn transform_aim_point_f32(aim_point: Pointf32, p1: Pointf32, p2: Pointf32, p3: Pointf32, p4: Pointf32,
-                                      np1: Pointf32, np2: Pointf32, np3: Pointf32, np4: Pointf32,
-                                      result: &mut Pointf32) -> bool {
-
-    match ats_cv::transform_aim_point(aim_point.into(),
-                                      p1.into(),
-                                      p2.into(),
-                                      p3.into(),
-                                      p4.into(),
-                                      np1.into(),
-                                      np2.into(),
-                                      np3.into(),
-                                      np4.into()) {
+pub extern "C" fn transform_aim_point_f32(
+    aim_point: Pointf32,
+    p1: Pointf32,
+    p2: Pointf32,
+    p3: Pointf32,
+    p4: Pointf32,
+    np1: Pointf32,
+    np2: Pointf32,
+    np3: Pointf32,
+    np4: Pointf32,
+    result: &mut Pointf32,
+) -> bool {
+    match ats_cv::transform_aim_point(
+        aim_point.into(),
+        p1.into(),
+        p2.into(),
+        p3.into(),
+        p4.into(),
+        np1.into(),
+        np2.into(),
+        np3.into(),
+        np4.into(),
+    ) {
         None => false,
-        Some(p) => { result.x = p.x; result.y = p.y; true }
+        Some(p) => {
+            result.x = p.x;
+            result.y = p.y;
+            true
+        }
     }
 }
