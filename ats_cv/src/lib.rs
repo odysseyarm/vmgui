@@ -1,6 +1,7 @@
 #![no_std]
 
 use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector};
+pub mod kalman;
 
 use num::{traits::Float, FromPrimitive};
 
@@ -30,7 +31,7 @@ where
         p4.x, p4.y, F::one(), F::zero(), F::zero(), F::zero(), -np4.x * p4.x, -np4.x * p4.y,
         F::zero(), F::zero(), F::zero(), p4.x, p4.y, F::one(), -np4.y * p4.x, -np4.y * p4.y,
     ]);
-    let axp = SVector::from_row_slice(&[np1.x, np1.y, np2.x, np2.y, np3.x, np3.y, np4.x, np4.y]);
+    let axp = SVector::from([np1.x, np1.y, np2.x, np2.y, np3.x, np3.y, np4.x, np4.y]);
     let decomp = a.lu();
     let p = decomp.solve(&axp)?;
     let transformation = Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], F::one());
@@ -63,5 +64,24 @@ mod tests {
         );
 
         assert_eq!(result, Some(Point2::new(0.5, 0.5)));
+    }
+
+    #[test]
+    fn side_on_transform_aimpoint() {
+        let r = transform_aim_point(
+            Point2::new(1976., 808.),
+            Point2::new(1768., 637.),
+            Point2::new(353., 2583.),
+            Point2::new(2834., 665.),
+            Point2::new(4173., 2652.),
+            Point2::new(0., 0.),
+            Point2::new(8., 0.),
+            Point2::new(0., 4.),
+            Point2::new(8., 4.),
+        )
+        .unwrap();
+        assert_eq!(r, Point2::new(0., 0.));
+        assert!(f64::abs(r.x - 0.5) < 0.03);
+        assert!(f64::abs(r.y - 0.5) < 0.03);
     }
 }
