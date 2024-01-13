@@ -1,5 +1,6 @@
 use arrayvec::ArrayVec;
 use nalgebra::Point2;
+use ats_cv::kalman::Pva2d;
 use crate::packet::MotData;
 
 pub mod packet;
@@ -27,4 +28,5 @@ pub struct MotState {
     pub wf_aim_point: Option<Point2<f64>>,
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
+    pub nf_pva2ds: [Pva2d<f64>; 4],
 }

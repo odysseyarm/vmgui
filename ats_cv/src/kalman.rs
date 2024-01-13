@@ -110,3 +110,7 @@ impl<F: RealField + Float> Pva2d<F> {
         [self.filter.state[4], self.filter.state[5]]
     }
 }
+
+impl Default for Pva2d<f64> {
+    fn default() -> Self { Pva2d::new(0.4, 0.4) }
+}
