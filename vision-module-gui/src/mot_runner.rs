@@ -58,6 +58,17 @@ impl MotRunner {
                     point.y = 4095./nf_mag_ratio+point.y;
                 }
 
+                // kal man for nf rn
+                if nf_points.len() > 3 {
+                    let mut state = self.state.lock().await;
+                    for (i, pva2d) in state.nf_pva2ds.iter_mut().enumerate() {
+                        pva2d.step();
+                        pva2d.observe(nf_points[i].coords.as_ref(), &[10.0, 10.0]);
+                        nf_points[i].x = pva2d.position()[0];
+                        nf_points[i].y = pva2d.position()[1];
+                    }
+                }
+
                 for (points, aim_point) in [(&mut nf_points, &mut nf_aim_point), (&mut wf_points, &mut wf_aim_point)] {
                     if points.len() > 3 {
                         sort_clockwise(&mut points[0..4]);
