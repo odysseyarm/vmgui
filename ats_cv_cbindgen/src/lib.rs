@@ -1,5 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
 
+use core::mem::MaybeUninit;
+use ats_cv::kalman::{Pva2d};
 #[cfg(target_os = "none")]
 use panic_rtt_target as _;
 
@@ -47,4 +49,26 @@ pub extern "C" fn transform_aim_point_f32(
             true
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn pva2df32_create_default(pva2df32: &mut MaybeUninit<Pva2d<f32>>) {
+    pva2df32.write(Pva2d::default());
+}
+
+#[no_mangle]
+pub extern "C" fn pva2df32_observe(pva2df32: &mut Pva2d<f32>, px: f32, py: f32, vx: f32, vy: f32) {
+    pva2df32.observe(&[px, py], &[vx, vy]);
+}
+
+#[no_mangle]
+pub extern "C" fn pva2df32_step(pva2df32: &mut Pva2d<f32>) {
+    pva2df32.step();
+}
+
+#[no_mangle]
+pub extern "C" fn pva2df32_position(pva2df32: &mut Pva2d<f32>, px: &mut MaybeUninit<f32>, py: &mut MaybeUninit<f32>) {
+    let pos = pva2df32.position();
+    px.write(pos[0]);
+    py.write(pos[1]);
 }

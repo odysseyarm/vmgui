@@ -111,6 +111,10 @@ impl<F: RealField + Float> Pva2d<F> {
     }
 }
 
+impl Default for Pva2d<f32> {
+    fn default() -> Self { Pva2d::new(0.4, 0.4) }
+}
+
 impl Default for Pva2d<f64> {
     fn default() -> Self { Pva2d::new(0.4, 0.4) }
 }
