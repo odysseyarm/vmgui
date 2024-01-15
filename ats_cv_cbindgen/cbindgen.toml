@@ -1,2 +1,3 @@
 [parse]
-parse_deps = false
+parse_deps = true
+exclude = ["nalgebra", "panic-rtt-target"]
