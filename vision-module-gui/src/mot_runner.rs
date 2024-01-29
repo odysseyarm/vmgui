@@ -9,6 +9,7 @@ use arrayvec::ArrayVec;
 use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
+use tokio_stream::StreamExt;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::packet::MotData;
@@ -28,12 +29,14 @@ pub struct MotRunner {
 
 impl MotRunner {
     pub async fn run(&self) {
+        let device = self.device.c().unwrap();
+        let mut frame_stream = device.stream_frames().await.unwrap();
         loop {
             if self.device.is_none() {
                 return;
             }
-            let device = self.device.c().unwrap();
-            if let Ok((nf_data, wf_data)) = device.get_frame().await {
+            // if let Ok((nf_data, wf_data)) = device.get_frame().await {
+            if let Some((nf_data, wf_data)) = frame_stream.next().await {
                 let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
                 let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
                 
