@@ -1,7 +1,10 @@
-use std::{borrow::Cow, io::ErrorKind, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, time::Duration};
-use anyhow::{Context, Result};
+use std::{borrow::Cow, io::ErrorKind, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use anyhow::{anyhow, Context, Result};
+use pin_project::{pin_project, pinned_drop};
 use serialport::ClearBuffer::Input;
 use tokio::sync::{mpsc, oneshot};
+use tokio_stream::{wrappers::ReceiverStream, Stream};
+
 use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, WriteRegister};
 
 #[derive(Default)]
@@ -21,6 +24,7 @@ pub struct UsbDevice {
 struct State {
     // id 255 is reserved for requests that don't care for a response
     response_channels: Mutex<[ResponseChannel; 255]>,
+    frame_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -56,6 +60,7 @@ impl UsbDevice {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
+            frame_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -73,6 +78,7 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
+                eprintln!("write id={} len={}", pkt.id, buf.len());
                 let r = port.write_all(&buf).and_then(|_| port.flush());
                 if let Err(e) = r {
                     eprintln!("device thread failed to write: {e}");
@@ -125,6 +131,7 @@ impl UsbDevice {
                     }
                     Ok(r) => r,
                 };
+                eprintln!("read id={} len={}", reply.id, buf.len());
                 let mut response_channels = state.response_channels.lock().unwrap();
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {
@@ -142,7 +149,10 @@ impl UsbDevice {
             }
             eprintln!("device reader thread for {:?} exiting", read_port.name());
         });
-        Ok(Self { to_thread: sender, thread_state })
+        Ok(Self {
+            to_thread: sender,
+            thread_state,
+        })
     }
 
     fn get_oneshot_slot(&self) -> (ResponseSlot, oneshot::Receiver<PacketData>) {
@@ -164,11 +174,11 @@ impl UsbDevice {
         panic!("Failed to allocate request id");
     }
 
-    fn get_stream_slot(&self) -> (ResponseSlot, mpsc::Receiver<PacketData>) {
+    fn get_stream_slot(&self, buffer: usize) -> (ResponseSlot, mpsc::Receiver<PacketData>) {
         let mut response_channels = self.thread_state.response_channels.lock().unwrap();
         for (i, c) in response_channels.iter_mut().enumerate() {
             if let ResponseChannel::None = c {
-                let (send, receiver) = mpsc::channel(16);
+                let (send, receiver) = mpsc::channel(buffer);
                 *c = ResponseChannel::Stream(send);
                 return (
                     ResponseSlot {
@@ -230,6 +240,15 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
+    pub async fn stream_frames(&self) -> Result<FrameStream> {
+        if self.thread_state.frame_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one frame stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(16);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(true) }).await?;
+        Ok(FrameStream { slot, receiver: ReceiverStream::new(receiver) })
+    }
+
     pub async fn flash_settings(&self) -> Result<()> {
         self.to_thread.send(Packet {
             id: 255,
@@ -239,6 +258,34 @@ impl UsbDevice {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub struct FrameStream {
+    slot: ResponseSlot,
+    #[pin]
+    receiver: ReceiverStream<PacketData>,
+}
+
+impl Stream for FrameStream {
+    type Item = ([MotData; 16], [MotData; 16]);
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+        self.project().receiver.poll_next(cx).map(|r| r.map(|p| {
+            let obj = p.object_report().unwrap();
+            (obj.mot_data_nf, obj.mot_data_wf)
+        }))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.receiver.size_hint()
+    }
+}
+
+#[pinned_drop]
+impl PinnedDrop for FrameStream {
+    fn drop(self: Pin<&mut Self>) {
+        self.slot.thread_state.frame_stream.store(false, Ordering::Relaxed);
+    }
+}
 
 macro_rules! read_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
