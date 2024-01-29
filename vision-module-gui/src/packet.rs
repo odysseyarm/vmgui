@@ -2,12 +2,18 @@
 
 use std::{fmt::Display, error::Error as StdError};
 #[derive(Clone, Debug)]
-pub enum Packet {
+pub struct Packet {
+    pub data: PacketData,
+    pub id: u8,
+}
+#[derive(Clone, Debug)]
+pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
+    StreamUpdate(bool),
     FlashSettings,
 }
 
@@ -99,7 +105,7 @@ impl TryFrom<u8> for Port {
 }
 
 #[repr(u8)]
-pub enum PacketId {
+pub enum PacketType {
     WriteRegister, // a.k.a. Poke
     ReadRegister,  // a.k.a. Peek
     ReadRegisterResponse,
@@ -108,10 +114,11 @@ pub enum PacketId {
     StreamUpdate,
     FlashSettings,
     AimPointReport,
+    ObjectReportWithAccelerometerRequest,
     End,
 }
 
-impl TryFrom<u8> for PacketId {
+impl TryFrom<u8> for PacketType {
     type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
         match n {
@@ -123,7 +130,8 @@ impl TryFrom<u8> for PacketId {
             5 => Ok(Self::StreamUpdate),
             6 => Ok(Self::FlashSettings),
             7 => Ok(Self::AimPointReport),
-            8 => Ok(Self::End),
+            8 => Ok(Self::ObjectReportWithAccelerometerRequest),
+            9 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -131,77 +139,84 @@ impl TryFrom<u8> for PacketId {
 
 impl Packet {
 
-    pub fn id(&self) -> PacketId {
-        use PacketId as P;
-        match self {
-            Self::WriteRegister(_) => P::WriteRegister,
-            Self::ReadRegister(_) => P::ReadRegister,
-            Self::ReadRegisterResponse(_) => P::ReadRegisterResponse,
-            Self::ObjectReportRequest(_) => P::ObjectReportRequest,
-            Self::ObjectReport(_) => P::ObjectReport,
-            Self::FlashSettings => P::FlashSettings,
+    pub fn ty(&self) -> PacketType {
+        use PacketType as P;
+        match self.data {
+            PacketData::WriteRegister(_) => P::WriteRegister,
+            PacketData::ReadRegister(_) => P::ReadRegister,
+            PacketData::ReadRegisterResponse(_) => P::ReadRegisterResponse,
+            PacketData::ObjectReportRequest(_) => P::ObjectReportRequest,
+            PacketData::ObjectReport(_) => P::ObjectReport,
+            PacketData::StreamUpdate(_) => P::StreamUpdate,
+            PacketData::FlashSettings => P::FlashSettings,
         }
     }
 
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        let [words1, words2, id, _, ..] = **bytes else {
+        let [words1, words2, ty, id, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
 
         let words = u16::from_le_bytes([words1, words2]);
-        let id = PacketId::try_from(id)?;
+        let ty = PacketType::try_from(ty)?;
 
         let len = usize::from(words)*2;
         if bytes.len() < len {
             return Err(E::UnexpectedEof);
         }
         *bytes = &bytes[4..];
-        Ok(match id {
-            PacketId::WriteRegister => Self::WriteRegister(WriteRegister::parse(bytes)?),
-            PacketId::ReadRegister => Self::ReadRegister(Register::parse(bytes)?),
-            PacketId::ReadRegisterResponse => Self::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
-            PacketId::ObjectReportRequest => Self::ObjectReportRequest(ObjectReportRequest{}),
-            PacketId::ObjectReport => Self::ObjectReport(ObjectReport::parse(bytes)?),
-            PacketId::FlashSettings => Self::FlashSettings,
+        let data = match ty {
+            PacketType::WriteRegister => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
+            PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes)?),
+            PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
+            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
+            PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
+            // PacketType::StreamUpdate => PacketData::StreamUpdate(bytes[0] != 0),
+            PacketType::FlashSettings => PacketData::FlashSettings,
             _ => unimplemented!(),
-        })
+        };
+        Ok(Self { id, data })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        // (u16 words/2, u8 tag, u8 padding)
-        let len = match self {
-            Packet::WriteRegister(_) => 4,
-            Packet::ReadRegister(_) => 4,
-            Packet::ReadRegisterResponse(_) => 4,
-            Packet::ObjectReportRequest(_) => 0,
-            Packet::ObjectReport(_) => 514,
-            Packet::FlashSettings => 0,
+        // (u16 words/2, u8 tag, u8 id)
+        let len = match self.data {
+            PacketData::WriteRegister(_) => 4,
+            PacketData::ReadRegister(_) => 4,
+            PacketData::ReadRegisterResponse(_) => 4,
+            PacketData::ObjectReportRequest(_) => 0,
+            PacketData::ObjectReport(_) => 514,
+            PacketData::StreamUpdate(_) => 2,
+            PacketData::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
-        let id = self.id();
+        let ty = self.ty();
         buf.reserve(4 + usize::from(len));
-        buf.extend_from_slice(&[words[0], words[1], id as u8, 0]);
-        match self {
-            Packet::WriteRegister(x) => x.serialize(buf),
-            Packet::ReadRegister(x) => x.serialize(buf),
-            Packet::ReadRegisterResponse(x) => x.serialize(buf),
-            Packet::ObjectReportRequest(_) => (),
-            Packet::ObjectReport(x) => x.serialize(buf),
-            Packet::FlashSettings => (),
+        buf.extend_from_slice(&[words[0], words[1], ty as u8, self.id]);
+        match &self.data {
+            PacketData::WriteRegister(x) => x.serialize(buf),
+            PacketData::ReadRegister(x) => x.serialize(buf),
+            PacketData::ReadRegisterResponse(x) => x.serialize(buf),
+            PacketData::ObjectReportRequest(_) => (),
+            PacketData::ObjectReport(x) => x.serialize(buf),
+            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[*x as u8, 0]),
+            PacketData::FlashSettings => (),
         };
     }
+}
 
+impl PacketData {
     pub fn read_register_response(self) -> Option<ReadRegisterResponse> {
         match self {
-            Self::ReadRegisterResponse(x) => Some(x),
+            PacketData::ReadRegisterResponse(x) => Some(x),
             _ => None,
         }
     }
 
     pub fn object_report(self) -> Option<ObjectReport> {
         match self {
-            Self::ObjectReport(x) => Some(x),
+            PacketData::ObjectReport(x) => Some(x),
             _ => None,
         }
     }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use vision_module_gui::packet::{Packet, Register, Port};
+use vision_module_gui::packet::{Packet, PacketData, Port, Register};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -31,11 +31,14 @@ fn main() {
     let mut buf = Vec::new();
     for (bank, address) in registers {
         println!("Reading bank {bank:x}, addr {address:x}");
-        let pkt = Packet::ReadRegister(Register {
-            port: Port::Nf,
-            bank,
-            address,
-        });
+        let pkt = Packet {
+            id: 0,
+            data: PacketData::ReadRegister(Register {
+                port: Port::Nf,
+                bank,
+                address,
+            }),
+        };
         buf.clear();
         buf.push(0xff);
         pkt.serialize(&mut buf);

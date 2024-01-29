@@ -1,33 +1,71 @@
-use std::{borrow::Cow, time::Duration};
-
+use std::{borrow::Cow, io::ErrorKind, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, time::Duration};
 use anyhow::{Context, Result};
 use serialport::ClearBuffer::Input;
 use tokio::sync::{mpsc, oneshot};
+use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, WriteRegister};
 
-use crate::packet::{MotData, ObjectReportRequest, Packet, Port, Register, WriteRegister};
-
-type Message = (Packet, Option<oneshot::Sender<Result<Packet>>>);
+#[derive(Default)]
+enum ResponseChannel {
+    #[default]
+    None,
+    Oneshot(oneshot::Sender<PacketData>),
+    Stream(mpsc::Sender<PacketData>),
+}
 
 #[derive(Clone)]
-pub struct UsbDevice(mpsc::Sender<Message>);
+pub struct UsbDevice {
+    to_thread: mpsc::Sender<Packet>,
+    thread_state: Arc<State>,
+}
+
+struct State {
+    // id 255 is reserved for requests that don't care for a response
+    response_channels: Mutex<[ResponseChannel; 255]>,
+}
+
+/// A helper struct to deal with cancellation
+struct ResponseSlot {
+    thread_state: Arc<State>,
+    id: u8,
+    finished: bool,
+}
+
+impl Drop for ResponseSlot {
+    fn drop(&mut self) {
+        // If the future holding the slot was cancelled, remove the sender from the
+        // channel.
+        if !self.finished {
+            self.thread_state.response_channels.lock().unwrap()[usize::from(self.id)] = ResponseChannel::None;
+        }
+    }
+}
 
 impl UsbDevice {
+    /// Connect to the device using the serial port at `path`. Starts two background threads to
+    /// service reads and writes.
     pub fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
         eprintln!("Connecting to {path}...");
-        let mut port = serialport::new(path, 115200)
+        let mut read_port = serialport::new(path, 115200)
             .timeout(Duration::from_secs(3))
             .open()?;
 
-        port.clear(Input)?;
+        read_port.clear(Input)?;
 
-        port.write_data_terminal_ready(true)?;
+        read_port.write_data_terminal_ready(true)?;
+        let response_channels = std::array::from_fn(|_| ResponseChannel::None);
+        let state = Arc::new(State {
+            response_channels: Mutex::new(response_channels),
+        });
+        let thread_state = Arc::clone(&state);
 
-        let (sender, mut receiver) = mpsc::channel::<Message>(16);
+        // Writer thread
+        let (sender, mut receiver) = mpsc::channel::<Packet>(16);
+        let mut port = read_port.try_clone().context("Failed to clone serial port")?;
         std::thread::spawn(move || {
             let mut buf = vec![];
             loop {
-                let Some((pkt, reply_sender)) = receiver.blocking_recv() else {
+                let Some(pkt) = receiver.blocking_recv() else {
                     break;
                 };
 
@@ -35,47 +73,127 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                let Some(reply_sender) = reply_sender else {
-                    let r = port.write_all(&buf).and_then(|_| port.flush());
-                    if let Err(e) = r {
-                        eprintln!("device thread failed to write: {e}");
-                    }
-                    continue;
-                };
-
-                let reply = (|| {
-                    port.write_all(&buf)?;
-                    port.flush()?;
-
-                    buf.clear();
-                    buf.resize(2, 0);
-                    port.read_exact(&mut buf)?;
-                    let len = u16::from_le_bytes([buf[0], buf[1]]);
-                    buf.resize(usize::from(len * 2), 0);
-                    port.read_exact(&mut buf[2..])?;
-                    let resp =
-                        Packet::parse(&mut &buf[..]).with_context(|| "failed to parse packet")?;
-                    Ok(resp)
-                })();
-                let sent = reply_sender.send(reply);
-                if let Err(e) = sent {
-                    eprintln!("device thread failed to send reply: {e:?}");
+                let r = port.write_all(&buf).and_then(|_| port.flush());
+                if let Err(e) = r {
+                    eprintln!("device thread failed to write: {e}");
                 }
             }
-            eprintln!("device thread for {:?} exiting", port.name());
+            eprintln!("device writer thread for {:?} exiting", port.name());
         });
-        Ok(Self(sender))
+
+        // Reader thread.
+        std::thread::spawn(move || {
+            let mut buf = vec![];
+            let mut io_error_count = 0;
+            loop {
+                if Arc::strong_count(&state) == 1 {
+                    // We are the only ones with a reference to the state
+                    break;
+                }
+                let reply: Result<_, std::io::Error> = (|| {
+                    buf.clear();
+                    buf.resize(2, 0);
+                    read_port.read_exact(&mut buf)?;
+                    let len = u16::from_le_bytes([buf[0], buf[1]]);
+                    buf.resize(usize::from(len * 2), 0);
+                    read_port.read_exact(&mut buf[2..])?;
+                    Ok(Packet::parse(&mut &buf[..]).with_context(|| format!("failed to parse packet: {:?}", buf.clone())))
+                })();
+                let reply = match reply {
+                    // IO error
+                    Err(e) => {
+                        if e.kind() == ErrorKind::TimedOut {
+                            io_error_count = 0;
+                            continue;
+                        } else if io_error_count < 3 {
+                            eprintln!("error reading from device: {}, ignoring", e);
+                            io_error_count += 1;
+                            continue;
+                        } else {
+                            eprintln!("error reading from device: {}", e);
+                            break;
+                        }
+                    }
+                    Ok(r) => r,
+                };
+                io_error_count = 0;
+                let reply = match reply {
+                    // Parse error
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        continue;
+                    }
+                    Ok(r) => r,
+                };
+                let mut response_channels = state.response_channels.lock().unwrap();
+                let response_sender = &mut response_channels[usize::from(reply.id)];
+                let e = match std::mem::take(response_sender) {
+                    ResponseChannel::None => None,
+                    ResponseChannel::Oneshot(oneshot) => oneshot.send(reply.data).err().map(|e| format!("{e:?}")),
+                    ResponseChannel::Stream(sender) => {
+                        let e = sender.try_send(reply.data).err().map(|e| format!("{e:?}"));
+                        *response_sender = ResponseChannel::Stream(sender);
+                        e
+                    }
+                };
+                if let Some(e) = e {
+                    eprintln!("device reader thread failed to send reply: {e:?}");
+                }
+            }
+            eprintln!("device reader thread for {:?} exiting", read_port.name());
+        });
+        Ok(Self { to_thread: sender, thread_state })
     }
 
-    pub async fn request(&self, packet: Packet) -> Result<Packet> {
-        let oneshot = oneshot::channel();
-        self.0.send((packet, Some(oneshot.0))).await?;
-        oneshot.1.await?
+    fn get_oneshot_slot(&self) -> (ResponseSlot, oneshot::Receiver<PacketData>) {
+        let mut response_channels = self.thread_state.response_channels.lock().unwrap();
+        for (i, c) in response_channels.iter_mut().enumerate() {
+            if let ResponseChannel::None = c {
+                let (send, receiver) = oneshot::channel();
+                *c = ResponseChannel::Oneshot(send);
+                return (
+                    ResponseSlot {
+                        thread_state: self.thread_state.clone(),
+                        id: i as u8,
+                        finished: false,
+                    },
+                    receiver,
+                );
+            }
+        }
+        panic!("Failed to allocate request id");
+    }
+
+    fn get_stream_slot(&self) -> (ResponseSlot, mpsc::Receiver<PacketData>) {
+        let mut response_channels = self.thread_state.response_channels.lock().unwrap();
+        for (i, c) in response_channels.iter_mut().enumerate() {
+            if let ResponseChannel::None = c {
+                let (send, receiver) = mpsc::channel(16);
+                *c = ResponseChannel::Stream(send);
+                return (
+                    ResponseSlot {
+                        thread_state: self.thread_state.clone(),
+                        id: i as u8,
+                        finished: false,
+                    },
+                    receiver,
+                );
+            }
+        }
+        panic!("Failed to allocate request id");
+    }
+
+    pub async fn request(&self, packet: PacketData) -> Result<PacketData> {
+        let (mut response_slot, receiver) = self.get_oneshot_slot();
+        self.to_thread.send(Packet { id: response_slot.id, data: packet }).await?;
+        let result = receiver.await;
+        response_slot.finished = true;
+        Ok(result?)
     }
 
     pub async fn read_register(&self, port: Port, bank: u8, address: u8) -> Result<u8> {
         let r = self
-            .request(Packet::ReadRegister(Register {
+            .request(PacketData::ReadRegister(Register {
                 port,
                 bank,
                 address,
@@ -89,19 +207,23 @@ impl UsbDevice {
     }
 
     pub async fn write_register(&self, port: Port, bank: u8, address: u8, data: u8) -> Result<()> {
-        let pkt = Packet::WriteRegister(WriteRegister {
+        let data = PacketData::WriteRegister(WriteRegister {
             port,
             bank,
             address,
             data,
         });
-        self.0.send((pkt, None)).await?;
+        let pkt = Packet {
+            id: 255,
+            data,
+        };
+        self.to_thread.send(pkt).await?;
         Ok(())
     }
 
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
         let r = self
-            .request(Packet::ObjectReportRequest(ObjectReportRequest {}))
+            .request(PacketData::ObjectReportRequest(ObjectReportRequest {}))
             .await?
             .object_report()
             .with_context(|| "unexpected response")?;
@@ -109,10 +231,14 @@ impl UsbDevice {
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
-        self.0.send((Packet::FlashSettings, None)).await?;
+        self.to_thread.send(Packet {
+            id: 255,
+            data: PacketData::FlashSettings,
+        }).await?;
         Ok(())
     }
 }
+
 
 macro_rules! read_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
