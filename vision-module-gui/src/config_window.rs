@@ -351,37 +351,21 @@ impl SensorSettingsForm {
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let (
-            pid,
-            res_x,
-            res_y,
-            expo,
-            frame_period,
-            brightness_threshold,
-            noise_threshold,
-            area_threshold_min,
-            area_threshold_max,
-            max_object_cnt,
-            operation_mode,
-            frame_subtraction,
-            gain_1,
-            gain_2,
-        ) = tokio::try_join!(
-            device.product_id(self.port),
-            device.resolution_x(self.port),
-            device.resolution_y(self.port),
-            device.exposure_time(self.port),
-            device.frame_period(self.port),
-            device.brightness_threshold(self.port),
-            device.noise_threshold(self.port),
-            device.area_threshold_min(self.port),
-            device.area_threshold_max(self.port),
-            device.max_object_cnt(self.port),
-            device.operation_mode(self.port),
-            device.frame_subtraction(self.port),
-            device.gain_1(self.port),
-            device.gain_2(self.port),
-        )?;
+        let pid = device.product_id(self.port).await?;
+        let res_x = device.resolution_x(self.port).await?;
+        let res_y = device.resolution_y(self.port).await?;
+        let expo = device.exposure_time(self.port).await?;
+        let frame_period = device.frame_period(self.port).await?;
+        let brightness_threshold = device.brightness_threshold(self.port).await?;
+        let noise_threshold = device.noise_threshold(self.port).await?;
+        let area_threshold_min = device.area_threshold_min(self.port).await?;
+        let area_threshold_max = device.area_threshold_max(self.port).await?;
+        let max_object_cnt = device.max_object_cnt(self.port).await?;
+        let operation_mode = device.operation_mode(self.port).await?;
+        let frame_subtraction = device.frame_subtraction(self.port).await?;
+        let gain_1 = device.gain_1(self.port).await?;
+        let gain_2 = device.gain_2(self.port).await?;
+
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
         self.resolution_y.set(res_y.to_string());
