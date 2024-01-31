@@ -365,14 +365,14 @@ macro_rules! layout {
     ];
 
     // Control properties
-    [ @args $ty:ident $ui:expr; Spinbox value $value:expr] => [
+    [ @args Spinbox $ui:expr; $ctl:ident value $value:expr] => [
         leptos_reactive::create_effect({
             let ui = iui::UI::clone($ui);
             let ctl = $ctl.clone();
             let value = $crate::layout_macro::IntoMaybeSignal::from($value);
             move |_| {
                 let mut ctl = ctl.clone();
-                leptos_reactive::SignalWith::with(&value, |v| iui::controls::NumericEntry::set_value(&mut ctl, &ui, v));
+                leptos_reactive::SignalWith::with(&value, |v| iui::controls::NumericEntry::set_value(&mut ctl, &ui, *v));
             }
         })
     ];
@@ -402,8 +402,8 @@ macro_rules! layout {
             }
         });
     ];
-    [ @args $ty:ident $ui:expr; Spinbox onchange $signal:expr] => [
-        iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
+    [ @args Spinbox $ui:expr; $ctl:ident onchange $signal:expr] => [
+        iui::controls::NumericEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
     ];
     [ @args $ty:ident $ui:expr; $ctl:ident onchange $signal:expr] => [
         iui::controls::TextEntry::on_changed(&mut $ctl, $ui, move |v| leptos_reactive::SignalSet::set(&$signal, v))
