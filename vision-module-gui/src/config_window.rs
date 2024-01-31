@@ -64,7 +64,7 @@ pub fn config_window(
             let Ok(i) = usize::try_from(i) else { return };
             let path = device_list.with_untracked(|d| d[i].port_name.clone());
             let task = async move {
-                let usb_device = UsbDevice::connect(path)?;
+                let usb_device = UsbDevice::connect(path).await?;
                 tokio::try_join!(
                     wf_settings.load_from_device(&usb_device),
                     nf_settings.load_from_device(&usb_device),

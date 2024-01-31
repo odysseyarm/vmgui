@@ -47,14 +47,30 @@ impl Drop for ResponseSlot {
 impl UsbDevice {
     /// Connect to the device using the serial port at `path`. Starts two background threads to
     /// service reads and writes.
-    pub fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
+    pub async fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
         eprintln!("Connecting to {path}...");
-        let mut read_port = serialport::new(path, 115200)
+        let read_port = serialport::new(path, 115200)
             .timeout(Duration::from_secs(3))
             .open()?;
 
-        read_port.clear(Input)?;
+        let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut drained = 0;
+            loop {
+                let bytes_to_read = read_port.bytes_to_read()?;
+                if bytes_to_read > 0 {
+                    read_port.clear(Input)?;
+                    drained += bytes_to_read;
+                    std::thread::sleep(Duration::from_millis(7));
+                } else {
+                    break;
+                }
+            }
+            if drained > 0 {
+                eprintln!("{drained} bytes drained");
+            }
+            Ok(read_port)
+        }).await??;
 
         read_port.write_data_terminal_ready(true)?;
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
