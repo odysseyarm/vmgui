@@ -1377,6 +1377,7 @@ dependencies = [
  "tokio-stream",
  "toml 0.8.9",
  "ui-sys",
+ "winapi",
 ]
 
 [[package]]
