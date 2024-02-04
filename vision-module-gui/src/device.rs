@@ -1,7 +1,7 @@
-use std::{borrow::Cow, io::ErrorKind, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{ErrorKind, Read, Write}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
-use serialport::ClearBuffer::Input;
+use serialport::{ClearBuffer::Input, SerialPort};
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 
@@ -53,7 +53,7 @@ impl UsbDevice {
         let mut read_port = serialport::new(path, 115200)
             //.timeout(Duration::from_secs(3))
             .timeout(Duration::from_millis(5))
-            .open()?;
+            .open_native()?;
 
         let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
@@ -305,6 +305,37 @@ impl Stream for FrameStream {
 impl PinnedDrop for FrameStream {
     fn drop(self: Pin<&mut Self>) {
         self.slot.thread_state.frame_stream.store(false, Ordering::Relaxed);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_timeouts_windows(port: serialport::COMPort, timeout: Duration) -> std::io::Result<()> {
+    use winapi::um::commapi;
+    use std::os::windows::io::AsRawHandle;
+
+    fn check_bool(ret: std::ffi::c_int) -> std::io::Result<()> {
+        if ret == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+    unsafe {
+        let mut timeouts = std::mem::MaybeUninit::uninit();
+        // Mimic POSIX behaviour for reads.
+        // Timeout must be > 0 and < u32::MAX, so clamp it.
+        // For more details, see:
+        // https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-commtimeouts#remarks
+        let timeout_ms = timeout.as_millis()
+            .try_into()
+            .unwrap_or(u32::MAX)
+            .clamp(1, u32::MAX - 1);
+        check_bool(commapi::GetCommTimeouts(port.as_raw_handle() as _, timeouts.as_mut_ptr()))?;
+        let mut timeouts = timeouts.assume_init();
+        timeouts.ReadIntervalTimeout = u32::MAX;
+        timeouts.ReadTotalTimeoutMultiplier = u32::MAX;
+        timeouts.ReadTotalTimeoutConstant = timeout_ms;
+        check_bool(commapi::SetCommTimeouts(port.as_raw_handle() as _, &mut timeouts))
     }
 }
 
