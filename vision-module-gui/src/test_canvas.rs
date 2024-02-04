@@ -91,9 +91,9 @@ impl AreaHandler for TestCanvas {
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
         println!("{:?}", area_key_event);
-        // #[cfg(target_os = "windows")]
-        // let evt_key = area_key_event.ext_key as i32;
-        // #[cfg(not(target_os = "windows"))]
+        #[cfg(target_os = "windows")]
+        let evt_key = area_key_event.ext_key as i32;
+        #[cfg(not(target_os = "windows"))]
         let evt_key = area_key_event.ext_key;
         match evt_key {
             ui_sys::uiExtKeyUp => self.offset_y -= 1.0,
