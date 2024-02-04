@@ -50,11 +50,15 @@ impl UsbDevice {
     pub async fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
         eprintln!("Connecting to {path}...");
-        let read_port = serialport::new(path, 115200)
-            .timeout(Duration::from_secs(3))
+        let mut read_port = serialport::new(path, 115200)
+            //.timeout(Duration::from_secs(3))
+            .timeout(Duration::from_millis(5))
             .open()?;
 
         let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
+            let mut buf = vec![0xff];
+            Packet { id: 0, data: PacketData::StreamUpdate(false) }.serialize(&mut buf);
+            read_port.write_all(&buf).unwrap();
             let mut drained = 0;
             loop {
                 let bytes_to_read = read_port.bytes_to_read()?;
@@ -62,12 +66,12 @@ impl UsbDevice {
                     read_port.clear(Input)?;
                     drained += bytes_to_read;
                     std::thread::sleep(Duration::from_millis(7));
+                    if drained > 0 {
+                        eprintln!("{drained} bytes drained");
+                    }
                 } else {
                     break;
                 }
-            }
-            if drained > 0 {
-                eprintln!("{drained} bytes drained");
             }
             Ok(read_port)
         }).await??;
@@ -125,6 +129,7 @@ impl UsbDevice {
                     // IO error
                     Err(e) => {
                         if e.kind() == ErrorKind::TimedOut {
+                            // eprintln!("read timed out");
                             io_error_count = 0;
                             continue;
                         } else if io_error_count < 3 {
@@ -147,7 +152,7 @@ impl UsbDevice {
                     }
                     Ok(r) => r,
                 };
-                eprintln!("read id={} len={}", reply.id, buf.len());
+                // eprintln!("read id={} len={}", reply.id, buf.len());
                 let mut response_channels = state.response_channels.lock().unwrap();
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {
@@ -260,7 +265,7 @@ impl UsbDevice {
         if self.thread_state.frame_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one frame stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(16);
+        let (slot, receiver) = self.get_stream_slot(2);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(true) }).await?;
         Ok(FrameStream { slot, receiver: ReceiverStream::new(receiver) })
     }

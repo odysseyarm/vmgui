@@ -514,6 +514,7 @@ fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
         out.push_str(" ");
     }
     out.push_str(&format!("({:4x}:{:4x})", usb_port.vid, usb_port.pid));
+    out = out.replace('\x00', "");
     out
 }
 

@@ -6,6 +6,7 @@ use crate::packet::MotData;
 pub mod packet;
 pub mod device;
 pub mod config_window;
+pub mod marker_config_window;
 pub mod layout_macro;
 pub mod mot_runner;
 pub mod run_canvas;
