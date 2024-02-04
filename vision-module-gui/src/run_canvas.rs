@@ -4,11 +4,12 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::{draw, UI};
 use crate::custom_shapes::draw_crosshair;
+use crate::mot_runner::MotRunner;
 use crate::MotState;
 
 pub struct RunCanvas {
     pub ctx: UI,
-    pub state: Arc<Mutex<MotState>>,
+    pub state: Arc<Mutex<MotRunner>>,
 }
 
 impl AreaHandler for RunCanvas {
@@ -18,9 +19,10 @@ impl AreaHandler for RunCanvas {
         let ch_path = Path::new(ctx, FillMode::Winding);
         let nf_path = Path::new(ctx, FillMode::Winding);
         let wf_path = Path::new(ctx, FillMode::Winding);
-        let state = self.state.blocking_lock();
+        let runner = self.state.blocking_lock();
+        let state = &runner.state;
         if state.nf_data.is_some() {
-            for mot_data in state.nf_data.as_ref().expect("Nf data is None") {
+            for (i, mot_data) in state.nf_data.as_ref().expect("Nf data is None").iter().enumerate() {
                 if mot_data.area == 0 {
                     break;
                 }
@@ -43,7 +45,7 @@ impl AreaHandler for RunCanvas {
                     down-up,
                 );
 
-                ctx.draw_text(x+20.0, y+20.0, format!("({}, {})", mot_data.cx, mot_data.cy).as_str());
+                ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
         }
         nf_path.end(ctx);

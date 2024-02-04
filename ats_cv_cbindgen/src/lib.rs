@@ -3,7 +3,7 @@
 use core::mem::MaybeUninit;
 use ats_cv::kalman::{Pva2d};
 #[cfg(target_os = "none")]
-use panic_rtt_target as _;
+use panic_semihosting as _;
 
 #[repr(C)]
 #[derive(Debug, PartialEq)]

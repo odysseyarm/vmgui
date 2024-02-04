@@ -5,13 +5,13 @@ use anyhow::Result;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, SignalGet, SignalWith};
 use serde::Serialize;
-use vision_module_gui::{config_window::config_window, CloneButShorter, MotState};
+use vision_module_gui::{config_window::config_window, marker_config_window::marker_config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
 use iui::controls::{Area, Button, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::test_canvas::{TestCanvas};
+use vision_module_gui::test_canvas::TestCanvas;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -34,9 +34,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = UI::init().expect("Couldn't initialize UI library");
     let ui_ctx = ui.async_context();
 
+    let state = MotState::default();
+    let mot_runner = Arc::new(Mutex::new(MotRunner { state, device: None, markers_settings: Default::default() }));
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
     let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
+    let mut marker_config_win = marker_config_window(&ui, tokio_handle, mot_runner.c());
 
     iui::layout! { &ui,
         let form_vbox = VerticalBox(padded: true) {
@@ -85,8 +88,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
 
-    let state: Arc<Mutex<MotState>> = Default::default();
-    let run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: state.c() }));
+    let run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: mot_runner.c() }));
     let mut run_hbox = HorizontalBox::new(&ui);
 
     let stop_tracking = {
@@ -127,14 +129,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     test_win.on_closing(&ui, test_win_on_closing.c());
 
-    let test_area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing.c()), state: state.c() }));
+    let test_area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing.c()), state: mot_runner.c(), offset_x: 0.0, offset_y: 0.0 }));
 
     iui::layout! { &ui,
         let vert_box = VerticalBox(padded: true) {
             Compact: let grid = LayoutGrid(padded: false) {
                 (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
-                (1, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button("Start Tracking")
-                (2, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
+                (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
+                (2, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button("Start Tracking")
+                (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
             }
             Compact: let separator = HorizontalSeparator()
             Compact: let spacer = Spacer()
@@ -170,7 +173,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui = ui.c();
         let datapoints = datapoints.c();
         let collected_text = collected_text.c();
-        let state = state.c();
+        let state = mot_runner.c();
         move |_| {
             let datapoints = datapoints.c();
             let mut datapoints = datapoints.blocking_lock();
@@ -200,6 +203,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                               };
 
             let state = state.blocking_lock();
+            let state = &state.state;
 
             if let Some(nf_aim_point) = state.nf_aim_point {
                 frame.nf_aim_point_x = Some(nf_aim_point.x as f32);
@@ -309,9 +313,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    vert_box.append(&ui, form_vbox.c(), LayoutStrategy::Compact);
+    marker_config_button.on_clicked(&ui, {
+        let ui = ui.c();
+        move |_| {
+            marker_config_win.show(&ui);
+        }
+    });
 
-    let mot_runner = Arc::new(Mutex::new(MotRunner { state: state.c(), device: None }));
+    vert_box.append(&ui, form_vbox.c(), LayoutStrategy::Compact);
 
     create_effect({
         let view = mot_runner.c();
@@ -339,7 +348,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_hbox.show(&ui);
                 if mot_runner_abort_handle.blocking_lock().is_none() {
                     let mot_runner = mot_runner.c();
-                    *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(async move { mot_runner.lock().await.run().await; }).abort_handle());
+                    *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner)).abort_handle());
                 }
                 button.set_text(&ui, "Stop Tracking");
             }
@@ -361,7 +370,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             test_win.show(&ui);
             if mot_runner_abort_handle.blocking_lock().is_none() {
                 let mot_runner = mot_runner.c();
-                *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(async move { mot_runner.lock().await.run().await; }).abort_handle());
+                *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner)).abort_handle());
             }
         }
     });

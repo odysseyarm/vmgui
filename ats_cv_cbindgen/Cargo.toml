@@ -13,7 +13,7 @@ ats_cv = { path = "../ats_cv", default-features = false }
 nalgebra = {  version = "0.32.3", default-features = false, features = [ "libm" ] }
 
 [target.thumbv7em-none-eabihf.dependencies]
-panic-rtt-target = { version = "0.1.2", features = ["cortex-m"] }
+panic-semihosting = "0.6.0"
 
 [target.'thumbv8m.main-none-eabihf'.dependencies]
-panic-rtt-target = { version = "0.1.2", features = ["cortex-m"] }
+panic-semihosting = "0.6.0"
