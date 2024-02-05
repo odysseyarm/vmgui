@@ -1100,6 +1100,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serial2"
+version = "0.2.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c33d8d4368299f2efb0692053a5abfd8868f72f13ab21213f8b28616c01c6e3c"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "serialport"
 version = "4.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1372,6 +1383,7 @@ dependencies = [
  "nalgebra",
  "pin-project",
  "serde",
+ "serial2",
  "serialport",
  "tokio",
  "tokio-stream",

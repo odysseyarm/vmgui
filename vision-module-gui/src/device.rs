@@ -1,7 +1,8 @@
 use std::{borrow::Cow, io::{ErrorKind, Read, Write}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
-use serialport::{ClearBuffer::Input, SerialPort};
+use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
+use serial2;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 
@@ -50,34 +51,28 @@ impl UsbDevice {
     pub async fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
         eprintln!("Connecting to {path}...");
-        let mut read_port = serialport::new(path, 115200)
-            .timeout(Duration::from_secs(3))
-            .open_native()?;
-        #[cfg(target_os = "windows")]
-        set_timeouts_windows(&read_port, Duration::from_secs(3))?;
+        let mut read_port = serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
+            settings.set_raw();
+            settings.set_baud_rate(115200)?;
+            settings.set_char_size(serial2::CharSize::Bits7);
+            settings.set_stop_bits(serial2::StopBits::Two);
+            settings.set_parity(serial2::Parity::Odd);
+            settings.set_flow_control(serial2::FlowControl::RtsCts);
+            Ok(settings)
+        })?;
 
-        let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
+        read_port.set_read_timeout(Duration::from_millis(3000))?;
+        read_port.set_write_timeout(Duration::from_millis(0))?;
+
+        let read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
             Packet { id: 0, data: PacketData::StreamUpdate(false) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
-            let mut drained = 0;
-            loop {
-                let bytes_to_read = read_port.bytes_to_read()?;
-                if bytes_to_read > 0 {
-                    read_port.clear(Input)?;
-                    drained += bytes_to_read;
-                    std::thread::sleep(Duration::from_millis(7));
-                    if drained > 0 {
-                        eprintln!("{drained} bytes drained");
-                    }
-                } else {
-                    break;
-                }
-            }
+            read_port.discard_buffers().unwrap();
             Ok(read_port)
         }).await??;
 
-        read_port.write_data_terminal_ready(true)?;
+        read_port.set_dtr(true).unwrap();
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
@@ -105,7 +100,7 @@ impl UsbDevice {
                     eprintln!("device thread failed to write: {e}");
                 }
             }
-            eprintln!("device writer thread for {:?} exiting", port.name());
+            eprintln!("device writer thread exiting");
         });
 
         // Reader thread.
@@ -169,7 +164,7 @@ impl UsbDevice {
                     eprintln!("device reader thread failed to send reply: {e:?}");
                 }
             }
-            eprintln!("device reader thread for {:?} exiting", read_port.name());
+            eprintln!("device reader thread exiting");
         });
         Ok(Self {
             to_thread: sender,
@@ -306,37 +301,6 @@ impl Stream for FrameStream {
 impl PinnedDrop for FrameStream {
     fn drop(self: Pin<&mut Self>) {
         self.slot.thread_state.frame_stream.store(false, Ordering::Relaxed);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn set_timeouts_windows(port: &serialport::COMPort, timeout: Duration) -> std::io::Result<()> {
-    use winapi::um::commapi;
-    use std::os::windows::io::AsRawHandle;
-
-    fn check_bool(ret: std::ffi::c_int) -> std::io::Result<()> {
-        if ret == 0 {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
-    unsafe {
-        let mut timeouts = std::mem::MaybeUninit::uninit();
-        // Mimic POSIX behaviour for reads.
-        // Timeout must be > 0 and < u32::MAX, so clamp it.
-        // For more details, see:
-        // https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-commtimeouts#remarks
-        let timeout_ms = timeout.as_millis()
-            .try_into()
-            .unwrap_or(u32::MAX)
-            .clamp(1, u32::MAX - 1);
-        check_bool(commapi::GetCommTimeouts(port.as_raw_handle() as _, timeouts.as_mut_ptr()))?;
-        let mut timeouts = timeouts.assume_init();
-        timeouts.ReadIntervalTimeout = u32::MAX;
-        timeouts.ReadTotalTimeoutMultiplier = u32::MAX;
-        timeouts.ReadTotalTimeoutConstant = timeout_ms;
-        check_bool(commapi::SetCommTimeouts(port.as_raw_handle() as _, &mut timeouts))
     }
 }
 
