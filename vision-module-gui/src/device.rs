@@ -51,9 +51,10 @@ impl UsbDevice {
         let path = path.into();
         eprintln!("Connecting to {path}...");
         let mut read_port = serialport::new(path, 115200)
-            //.timeout(Duration::from_secs(3))
-            .timeout(Duration::from_millis(5))
+            .timeout(Duration::from_secs(3))
             .open_native()?;
+        #[cfg(target_os = "windows")]
+        set_timeouts_windows(&read_port, Duration::from_secs(3))?;
 
         let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
@@ -98,7 +99,7 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                eprintln!("write id={} len={}", pkt.id, buf.len());
+                // eprintln!("write id={} len={}", pkt.id, buf.len());
                 let r = port.write_all(&buf).and_then(|_| port.flush());
                 if let Err(e) = r {
                     eprintln!("device thread failed to write: {e}");
@@ -129,7 +130,7 @@ impl UsbDevice {
                     // IO error
                     Err(e) => {
                         if e.kind() == ErrorKind::TimedOut {
-                            // eprintln!("read timed out");
+                            eprintln!("read timed out");
                             io_error_count = 0;
                             continue;
                         } else if io_error_count < 3 {
@@ -309,7 +310,7 @@ impl PinnedDrop for FrameStream {
 }
 
 #[cfg(target_os = "windows")]
-fn set_timeouts_windows(port: serialport::COMPort, timeout: Duration) -> std::io::Result<()> {
+fn set_timeouts_windows(port: &serialport::COMPort, timeout: Duration) -> std::io::Result<()> {
     use winapi::um::commapi;
     use std::os::windows::io::AsRawHandle;
 
