@@ -17,6 +17,7 @@ leptos_reactive = {  version = "0.6.4", features = ["serde"] }
 nalgebra = "0.32.3"
 serde = "1.0.193"
 serialport = { version = "4.2.2", features = ["usbportinfo-interface"] }
+serial2 = "0.2.19"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
 toml = "0.8.9"
 ats_cv = { path = "../ats_cv" }
