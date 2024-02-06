@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use arrayvec::ArrayVec;
+use nalgebra::Point2;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::draw_crosshair;
-use crate::mot_runner::MotRunner;
+use crate::custom_shapes::{draw_crosshair, draw_grid};
+use crate::mot_runner::{rescale, sort_clockwise, MotRunner};
 use crate::MotState;
 
 pub struct TestCanvas {
@@ -54,6 +56,24 @@ impl AreaHandler for TestCanvas {
         }
         wf_ch_path.end(ctx);
 
+        let nf_grid_path = Path::new(ctx, FillMode::Winding);
+
+        // todo lol... i know
+        let transform = ats_cv::get_perspective_transform(
+            Point2::new(draw_params.area_width/2.0, draw_params.area_height as f64), // bottom
+            Point2::new(0.0, draw_params.area_height/2.0), // left
+            Point2::new(draw_params.area_width/2.0, 0.0), // top
+            Point2::new(draw_params.area_width as f64, draw_params.area_height/2.0), // right
+            Point2::new(0.5, 1.), // bottom
+            Point2::new(0., 0.5), // left
+            Point2::new(0.5, 0.), // top
+            Point2::new(1., 0.5), // right
+        );
+        if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
+            draw_grid(ctx, &nf_grid_path, 10, 10, transform);
+        }
+        nf_grid_path.end(ctx);
+
         // let stroke = StrokeParams {
         //     cap: 0, // Bevel
         //     join: 0, // Flat
@@ -98,6 +118,23 @@ impl AreaHandler for TestCanvas {
         });
 
         ctx.stroke(&wf_ch_path, &brush, &stroke);
+
+        // Grid
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.5,
+            g: 0.,
+            b: 0.,
+            a: 1.,
+        });
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 1.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
+        ctx.stroke(&nf_grid_path, &brush, &stroke);
     }
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {

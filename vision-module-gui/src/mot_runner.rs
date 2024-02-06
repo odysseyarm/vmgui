@@ -52,18 +52,6 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
 
             let center_aim = Point2::new(2048.0, 2048.0);
 
-            let nf_horiz_offset = 230.;
-            let nf_vert_offset = 60.;
-            let nf_mag_ratio = 3.0;
-            for point in &mut nf_points {
-                point.x -= nf_horiz_offset;
-                point.y -= nf_vert_offset;
-                point.x /= nf_mag_ratio;
-                point.y /= nf_mag_ratio;
-                point.x = 4095./nf_mag_ratio+point.x;
-                point.y = 4095./nf_mag_ratio+point.y;
-            }
-
             // kal man for nf rn
             if nf_points.len() > 3 {
                 let state = &mut runner.state;
