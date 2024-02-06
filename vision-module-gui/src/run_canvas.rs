@@ -4,10 +4,9 @@ use nalgebra::Point2;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
-use iui::{draw, UI};
-use crate::custom_shapes::{draw_crosshair, draw_grid};
-use crate::mot_runner::{sort_clockwise, MotRunner};
-use crate::MotState;
+use iui::UI;
+use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid};
+use crate::mot_runner::{rescale, sort_clockwise, MotRunner};
 
 pub struct RunCanvas {
     pub ctx: UI,
@@ -54,11 +53,18 @@ impl AreaHandler for RunCanvas {
             }
             if nf_screen_points.len() >= 4 {
                 sort_clockwise(&mut nf_screen_points[..4]);
+                let top = runner.markers_settings.views[0].marker_top.position;
+                let left = runner.markers_settings.views[0].marker_left.position;
+                let bottom = runner.markers_settings.views[0].marker_bottom.position;
+                let right = runner.markers_settings.views[0].marker_right.position;
                 let transform = ats_cv::get_perspective_transform(
                     nf_screen_points[0], nf_screen_points[1],
                     nf_screen_points[2], nf_screen_points[3],
-                    Point2::new(0.5, 1.), Point2::new(0., 0.5),
-                    Point2::new(0.5, 0.), Point2::new(1., 0.5));
+                    Point2::new(rescale(bottom.x as f64), rescale(bottom.y as f64)), // bottom
+                    Point2::new(rescale(left.x as f64), rescale(left.y as f64)), // left
+                    Point2::new(rescale(top.x as f64), rescale(top.y as f64)), // top
+                    Point2::new(rescale(right.x as f64), rescale(right.y as f64)), // right
+                );
                 if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
                     draw_grid(ctx, &nf_grid_path, 10, 10, transform);
                 }
@@ -131,13 +137,13 @@ impl AreaHandler for RunCanvas {
 
         ctx.stroke(&ch_path, &brush, &stroke);
 
+        // Grid
         let brush = Brush::Solid(SolidBrush {
             r: 0.5,
             g: 0.,
             b: 0.,
             a: 1.,
         });
-
         let stroke = StrokeParams {
             cap: 0, // Bevel
             join: 0, // Flat
@@ -146,7 +152,26 @@ impl AreaHandler for RunCanvas {
             dashes: vec![],
             dash_phase: 0.,
         };
-
         ctx.stroke(&nf_grid_path, &brush, &stroke);
+
+        // Center point
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.0,
+            g: 0.,
+            b: 0.,
+            a: 1.,
+        });
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 2.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
+        let center_point_path = Path::new(ctx, FillMode::Winding);
+        draw_diamond(ctx, &center_point_path, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height, 8.0, 8.0);
+        center_point_path.end(ctx);
+        ctx.stroke(&center_point_path, &brush, &stroke);
     }
 }

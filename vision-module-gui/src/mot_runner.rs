@@ -39,8 +39,8 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
         if let Ok((nf_data, wf_data)) = device.get_frame().await {
         // if let Some((nf_data, wf_data)) = frame_stream.next().await {
             let mut runner = runner.lock().await;
-            let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
-            // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
+            // let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
+            let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
 
             let mut nf_points = ArrayVec::<Point2<f64>,16>::from_iter(nf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
@@ -157,7 +157,7 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn rescale(val: f64) -> f64 {
+pub fn rescale(val: f64) -> f64 {
     rescale_generic(-2047.0, 2047.0, 0.0, 1.0, val)
 }
 fn rescale_generic(lo1: f64, hi1: f64, lo2: f64, hi2: f64, val: f64) -> f64 {

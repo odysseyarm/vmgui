@@ -29,3 +29,11 @@ pub fn draw_grid(ctx: &draw::DrawContext, path: &Path, x_subdiv: usize, y_subdiv
         path.line_to(ctx, p2.x, p2.y);
     }
 }
+
+pub fn draw_diamond(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, w: f64, h: f64) {
+    path.new_figure(ctx, x, y - h/2.);
+    path.line_to(ctx, x + w/2., y);
+    path.line_to(ctx, x, y + h/2.);
+    path.line_to(ctx, x - w/2., y);
+    path.close_figure(ctx);
+}
