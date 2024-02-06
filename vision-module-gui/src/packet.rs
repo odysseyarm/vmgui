@@ -42,7 +42,7 @@ pub struct ReadRegisterResponse {
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectReportRequest {}
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct MotData {
     pub area: u16,
     pub cx: u16,

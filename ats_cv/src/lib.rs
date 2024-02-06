@@ -20,6 +20,23 @@ where
     F: ComplexField,
     F: RealField,
 {
+    Some(get_perspective_transform(p1, p2, p3, p4, np1, np2, np3, np4)?.transform_point(&aim_point))
+}
+
+pub fn get_perspective_transform<F: Float + FromPrimitive + 'static>(
+    p1: Point2<F>,
+    p2: Point2<F>,
+    p3: Point2<F>,
+    p4: Point2<F>,
+    np1: Point2<F>,
+    np2: Point2<F>,
+    np3: Point2<F>,
+    np4: Point2<F>,
+) -> Option<SMatrix<F, 3, 3>>
+where
+    F: ComplexField,
+    F: RealField,
+{
     #[rustfmt::skip]
     let a = SMatrix::<F, 8, 8>::from_row_slice(&[
         p1.x, p1.y, F::one(), F::zero(), F::zero(), F::zero(), -np1.x * p1.x, -np1.x * p1.y,
@@ -34,8 +51,7 @@ where
     let axp = SVector::from([np1.x, np1.y, np2.x, np2.y, np3.x, np3.y, np4.x, np4.y]);
     let decomp = a.lu();
     let p = decomp.solve(&axp)?;
-    let transformation = Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], F::one());
-    Some(transformation.transform_point(&aim_point))
+    Some(Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], F::one()))
 }
 
 #[cfg(test)]

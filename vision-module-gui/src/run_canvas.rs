@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use arrayvec::ArrayVec;
+use nalgebra::Point2;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::{draw, UI};
-use crate::custom_shapes::draw_crosshair;
-use crate::mot_runner::MotRunner;
+use crate::custom_shapes::{draw_crosshair, draw_grid};
+use crate::mot_runner::{sort_clockwise, MotRunner};
 use crate::MotState;
 
 pub struct RunCanvas {
@@ -19,16 +21,19 @@ impl AreaHandler for RunCanvas {
         let ch_path = Path::new(ctx, FillMode::Winding);
         let nf_path = Path::new(ctx, FillMode::Winding);
         let wf_path = Path::new(ctx, FillMode::Winding);
+        let nf_grid_path = Path::new(ctx, FillMode::Winding);
         let runner = self.state.blocking_lock();
         let state = &runner.state;
-        if state.nf_data.is_some() {
-            for (i, mot_data) in state.nf_data.as_ref().expect("Nf data is None").iter().enumerate() {
+        if let Some(nf_data) = state.nf_data.as_ref() {
+            let mut nf_screen_points = ArrayVec::<Point2<f64>,16>::new();
+            for (i, mot_data) in nf_data.iter().enumerate() {
                 if mot_data.area == 0 {
                     break;
                 }
                 // todo don't use hardcoded 4095x4095 res assumption
                 let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
                 let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
+                nf_screen_points.push(Point2::new(x, y));
 
                 let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
                 let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
@@ -47,10 +52,22 @@ impl AreaHandler for RunCanvas {
 
                 ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
+            if nf_screen_points.len() >= 4 {
+                sort_clockwise(&mut nf_screen_points[..4]);
+                let transform = ats_cv::get_perspective_transform(
+                    nf_screen_points[0], nf_screen_points[1],
+                    nf_screen_points[2], nf_screen_points[3],
+                    Point2::new(0.5, 1.), Point2::new(0., 0.5),
+                    Point2::new(0.5, 0.), Point2::new(1., 0.5));
+                if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
+                    draw_grid(ctx, &nf_grid_path, 10, 10, transform);
+                }
+            }
         }
         nf_path.end(ctx);
-        if state.wf_data.is_some() {
-            for mot_data in state.wf_data.as_ref().expect("Wf data is None") {
+        nf_grid_path.end(ctx);
+        if let Some(wf_data) = state.wf_data.as_ref() {
+            for mot_data in wf_data {
                 if mot_data.area == 0 {
                     break;
                 }
@@ -113,5 +130,23 @@ impl AreaHandler for RunCanvas {
         };
 
         ctx.stroke(&ch_path, &brush, &stroke);
+
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.5,
+            g: 0.,
+            b: 0.,
+            a: 1.,
+        });
+
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 1.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
+
+        ctx.stroke(&nf_grid_path, &brush, &stroke);
     }
 }

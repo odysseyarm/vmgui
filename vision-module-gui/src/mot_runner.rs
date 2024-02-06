@@ -15,7 +15,7 @@ use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
 use crate::packet::MotData;
 
-fn sort_clockwise(a: &mut [Point2<f64>]) {
+pub fn sort_clockwise(a: &mut [Point2<f64>]) {
     if a[0].y < a[1].y { a.swap(0, 1); }
     if a[2].y > a[3].y { a.swap(2, 3); }
     if a[0].y < a[3].y { a.swap(0, 3); }
@@ -40,6 +40,7 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
         // if let Some((nf_data, wf_data)) = frame_stream.next().await {
             let mut runner = runner.lock().await;
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
+            // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
 
             let mut nf_points = ArrayVec::<Point2<f64>,16>::from_iter(nf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
@@ -161,4 +162,33 @@ fn rescale(val: f64) -> f64 {
 }
 fn rescale_generic(lo1: f64, hi1: f64, lo2: f64, hi2: f64, val: f64) -> f64 {
     (val - lo1) / (hi1 - lo1) * (hi2 - lo2) + lo2
+}
+
+fn dummy_nf_data() -> [MotData; 4] {
+    [
+        MotData {
+            cx: 1047,
+            cy: 2047,
+            area: 1,
+            ..Default::default()
+        },
+        MotData {
+            cx: 3347,
+            cy: 2047,
+            area: 1,
+            ..Default::default()
+        },
+        MotData {
+            cx: 2047,
+            cy: 1047,
+            area: 1,
+            ..Default::default()
+        },
+        MotData {
+            cx: 2047,
+            cy: 3047,
+            area: 1,
+            ..Default::default()
+        },
+    ]
 }
