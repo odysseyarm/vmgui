@@ -232,14 +232,14 @@ impl MarkersSettingsForm {
 
     /// Make sure to call `validate()` before calling this method.
     fn apply(&self, markers_settings: &mut MarkersSettings) {
-        markers_settings.views[0].marker_top.position.x = self.marker_top.0.get();
-        markers_settings.views[0].marker_top.position.y = self.marker_top.1.get();
-        markers_settings.views[0].marker_bottom.position.x = self.marker_bottom.0.get();
-        markers_settings.views[0].marker_bottom.position.y = self.marker_bottom.1.get();
-        markers_settings.views[0].marker_left.position.x = self.marker_left.0.get();
-        markers_settings.views[0].marker_left.position.y = self.marker_left.1.get();
-        markers_settings.views[0].marker_right.position.x = self.marker_right.0.get();
-        markers_settings.views[0].marker_right.position.y = self.marker_right.1.get();
+        markers_settings.views[0].marker_top.position.x = self.marker_top.0.get_untracked();
+        markers_settings.views[0].marker_top.position.y = self.marker_top.1.get_untracked();
+        markers_settings.views[0].marker_bottom.position.x = self.marker_bottom.0.get_untracked();
+        markers_settings.views[0].marker_bottom.position.y = self.marker_bottom.1.get_untracked();
+        markers_settings.views[0].marker_left.position.x = self.marker_left.0.get_untracked();
+        markers_settings.views[0].marker_left.position.y = self.marker_left.1.get_untracked();
+        markers_settings.views[0].marker_right.position.x = self.marker_right.0.get_untracked();
+        markers_settings.views[0].marker_right.position.y = self.marker_right.1.get_untracked();
     }
 
     fn load_defaults(&self) {

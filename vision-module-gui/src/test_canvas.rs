@@ -20,6 +20,17 @@ impl AreaHandler for TestCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
 
+        let background = Path::new(ctx, FillMode::Winding);
+        background.add_rectangle(ctx, 0., 0., draw_params.area_width, draw_params.area_height);
+        background.end(ctx);
+
+        ctx.fill(&background, &Brush::Solid(SolidBrush {
+            r: 0.5,
+            g: 0.5,
+            b: 0.5,
+            a: 1.,
+        }));
+
         // todo foveated is not ready
         // let fv_ch_path = Path::new(ctx, FillMode::Winding);
         let nf_ch_path = Path::new(ctx, FillMode::Winding);
