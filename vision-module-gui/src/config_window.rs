@@ -100,12 +100,12 @@ pub fn config_window(
             device_combobox.enable(&ui);
         }
     });
-    let refresh_device_list = {
+    let mut refresh_device_list = {
         let config_win = config_win.c();
         let ui = ui.c();
         move || {
             let ports = serialport::available_ports();
-            let ports = match ports {
+            let ports: Vec<_> = match ports {
                 Ok(p) => p,
                 Err(e) => {
                     config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
@@ -127,8 +127,13 @@ pub fn config_window(
                     _ => false,
                 }
             }).collect();
-            device_list.set(ports);
-            device_combobox_on_selected(-1);
+            device_list.set(ports.c());
+            if ports.len() > 0 {
+                device_combobox.set_selected(&ui, 0);
+                device_combobox_on_selected(0);
+            } else {
+                device_combobox_on_selected(-1);
+            }
         }
     };
     refresh_device_list();
