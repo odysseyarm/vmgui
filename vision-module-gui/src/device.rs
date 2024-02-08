@@ -6,7 +6,7 @@ use serial2;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream};
 
-use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, WriteRegister};
+use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -66,7 +66,7 @@ impl UsbDevice {
 
         let read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
-            Packet { id: 0, data: PacketData::StreamUpdate(false) }.serialize(&mut buf);
+            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active:  false }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
             read_port.discard_buffers().unwrap();
             Ok(read_port)
@@ -262,7 +262,7 @@ impl UsbDevice {
             return Err(anyhow!("cannot have more than one frame stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(true) }).await?;
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1, active: true }) }).await?;
         Ok(FrameStream { slot, receiver: ReceiverStream::new(receiver) })
     }
 

@@ -13,8 +13,15 @@ pub enum PacketData {
     ReadRegisterResponse(ReadRegisterResponse),
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
-    StreamUpdate(bool),
+    StreamUpdate(StreamUpdate),
     FlashSettings,
+    AimPointReport,
+    ImpactWithAimPointReport,
+}
+pub enum StreamChoice {
+    Object,
+    AimPoint,
+    ImpactWithAimPoint,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,6 +73,11 @@ pub struct ObjectReport {
     pub mot_data_wf: [MotData; 16],
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct StreamUpdate {
+    pub mask: u8,
+    pub active: bool,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
@@ -114,7 +126,7 @@ pub enum PacketType {
     StreamUpdate,
     FlashSettings,
     AimPointReport,
-    ObjectReportWithAccelerometerRequest,
+    ImpactWithAimPointReport,
     End,
 }
 
@@ -130,7 +142,7 @@ impl TryFrom<u8> for PacketType {
             5 => Ok(Self::StreamUpdate),
             6 => Ok(Self::FlashSettings),
             7 => Ok(Self::AimPointReport),
-            8 => Ok(Self::ObjectReportWithAccelerometerRequest),
+            8 => Ok(Self::ImpactWithAimPointReport),
             9 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
@@ -148,6 +160,8 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => P::ObjectReportRequest,
             PacketData::ObjectReport(_) => P::ObjectReport,
             PacketData::StreamUpdate(_) => P::StreamUpdate,
+            PacketData::AimPointReport => P::AimPointReport,
+            PacketData::ImpactWithAimPointReport => P::ImpactWithAimPointReport,
             PacketData::FlashSettings => P::FlashSettings,
         }
     }
@@ -188,6 +202,8 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => 0,
             PacketData::ObjectReport(_) => 514,
             PacketData::StreamUpdate(_) => 2,
+            PacketData::AimPointReport => 80,
+            PacketData::ImpactWithAimPointReport => 80,
             PacketData::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
@@ -200,7 +216,9 @@ impl Packet {
             PacketData::ReadRegisterResponse(x) => x.serialize(buf),
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
-            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[*x as u8, 0]),
+            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
+            PacketData::AimPointReport => (),
+            PacketData::ImpactWithAimPointReport => (),
             PacketData::FlashSettings => (),
         };
     }
