@@ -10,7 +10,9 @@ crate-type = ["staticlib", "lib"] # C
 
 [dependencies]
 ats_cv = { path = "../ats_cv", default-features = false }
+cam-geom = { version = "0.14.1", default-features = false }
 nalgebra = {  version = "0.32.3", default-features = false, features = [ "libm" ] }
+opencv-ros-camera = { version = "0.14.1", default-features = false }
 
 [target.thumbv7em-none-eabihf.dependencies]
 panic-semihosting = "0.6.0"
