@@ -3,7 +3,7 @@
 use core::mem::MaybeUninit;
 use ats_cv::kalman::Pva2d;
 use cam_geom::Pixels;
-use nalgebra::{Matrix1x2, Vector5};
+use nalgebra::{Matrix, Vector5};
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 #[cfg(target_os = "none")]
 use panic_semihosting as _;
@@ -91,10 +91,27 @@ pub extern "C" fn ats_cv_camera_undistort(
     x: f32, y: f32,
     rx: *mut f32, ry: *mut f32,
 ) {
-    let distorted = Pixels::new(Matrix1x2::from_row_slice(&[x, y]));
+    let distorted = Pixels::new(Matrix::from([[x], [y]]));
     let undistorted = camera_model.undistort(&distorted);
     unsafe {
         rx.write(undistorted.data.x);
         ry.write(undistorted.data.y);
+    }
+}
+
+/// Undistort 4 coordinates at once
+#[no_mangle]
+pub extern "C" fn ats_cv_camera_undistort_4(
+    camera_model: &RosOpenCvIntrinsics<f32>,
+    x: *const [f32; 4], y: *const [f32; 4],
+    rx: *mut [f32; 4], ry: *mut [f32; 4],
+) {
+    let x = unsafe { x.read() };
+    let y = unsafe { y.read() };
+    let distorted = Pixels::new(Matrix::from([x, y]));
+    let undistorted = camera_model.undistort(&distorted);
+    unsafe {
+        rx.write(undistorted.data.data.0[0]);
+        ry.write(undistorted.data.data.0[1]);
     }
 }
