@@ -1,7 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 
 use core::mem::MaybeUninit;
-use ats_cv::kalman::{Pva2d};
+use ats_cv::kalman::Pva2d;
+use cam_geom::Pixels;
+use nalgebra::{Matrix1x2, Vector5};
+use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 #[cfg(target_os = "none")]
 use panic_semihosting as _;
 
@@ -71,4 +74,27 @@ pub extern "C" fn pva2df32_position(pva2df32: &mut Pva2d<f32>, px: &mut MaybeUni
     let pos = pva2df32.position();
     px.write(pos[0]);
     py.write(pos[1]);
+}
+
+#[no_mangle]
+pub extern "C" fn ats_cv_create_camera_model(
+    fx: f32, fy: f32, cx: f32, cy: f32,
+    k1: f32, k2: f32, p1: f32, p2: f32, k3: f32,
+    result: &mut MaybeUninit<RosOpenCvIntrinsics<f32>>,
+) {
+    result.write(RosOpenCvIntrinsics::from_params_with_distortion(fx, 0.0, fy, cx, cy, Distortion::from_opencv_vec(Vector5::new(k1, k2, p1, p2, k3))));
+}
+
+#[no_mangle]
+pub extern "C" fn ats_cv_camera_undistort(
+    camera_model: &RosOpenCvIntrinsics<f32>,
+    x: f32, y: f32,
+    rx: *mut f32, ry: *mut f32,
+) {
+    let distorted = Pixels::new(Matrix1x2::from_row_slice(&[x, y]));
+    let undistorted = camera_model.undistort(&distorted);
+    unsafe {
+        rx.write(undistorted.data.x);
+        ry.write(undistorted.data.y);
+    }
 }
