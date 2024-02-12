@@ -76,21 +76,44 @@ pub extern "C" fn pva2df32_position(pva2df32: &mut Pva2d<f32>, px: &mut MaybeUni
     py.write(pos[1]);
 }
 
+#[repr(C)]
+pub union CameraModel {
+    pub _size: [u8; 264],
+    pub _align: u32,
+}
+
+static_assertions::assert_eq_size!(CameraModel, RosOpenCvIntrinsics<f32>);
+static_assertions::assert_eq_align!(CameraModel, RosOpenCvIntrinsics<f32>);
+
+impl CameraModel {
+    fn as_ros_mut(p: *mut Self) -> *mut RosOpenCvIntrinsics<f32> {
+        p as _
+    }
+    fn as_ros(p: *const Self) -> *const RosOpenCvIntrinsics<f32> {
+        p as _
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn ats_cv_create_camera_model(
     fx: f32, fy: f32, cx: f32, cy: f32,
     k1: f32, k2: f32, p1: f32, p2: f32, k3: f32,
-    result: &mut MaybeUninit<RosOpenCvIntrinsics<f32>>,
+    result: *mut CameraModel,
 ) {
-    result.write(RosOpenCvIntrinsics::from_params_with_distortion(fx, 0.0, fy, cx, cy, Distortion::from_opencv_vec(Vector5::new(k1, k2, p1, p2, k3))));
+    let result = CameraModel::as_ros_mut(result);
+    unsafe {
+        result.write(RosOpenCvIntrinsics::from_params_with_distortion(fx, 0.0, fy, cx, cy, Distortion::from_opencv_vec(Vector5::new(k1, k2, p1, p2, k3))));
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn ats_cv_camera_undistort(
-    camera_model: &RosOpenCvIntrinsics<f32>,
+    camera_model: *const CameraModel,
     x: f32, y: f32,
     rx: *mut f32, ry: *mut f32,
 ) {
+    // TODO don't make references
+    let camera_model = unsafe { &*CameraModel::as_ros(camera_model) };
     let distorted = Pixels::new(Matrix::from([[x], [y]]));
     let undistorted = camera_model.undistort(&distorted);
     unsafe {
@@ -102,10 +125,11 @@ pub extern "C" fn ats_cv_camera_undistort(
 /// Undistort 4 coordinates at once
 #[no_mangle]
 pub extern "C" fn ats_cv_camera_undistort_4(
-    camera_model: &RosOpenCvIntrinsics<f32>,
+    camera_model: *const CameraModel,
     x: *const [f32; 4], y: *const [f32; 4],
     rx: *mut [f32; 4], ry: *mut [f32; 4],
 ) {
+    let camera_model = unsafe { &*CameraModel::as_ros(camera_model) };
     let x = unsafe { x.read() };
     let y = unsafe { y.read() };
     let distorted = Pixels::new(Matrix::from([x, y]));
