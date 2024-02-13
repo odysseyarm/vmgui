@@ -1,12 +1,9 @@
-pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
-    ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
-                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
-                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
-}
 use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
+use iui::concurrent::Context;
+use leptos_reactive::RwSignal;
 use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -15,6 +12,12 @@ use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
 use crate::packet::MotData;
+
+pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
+    ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
+                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
+                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
+}
 
 pub fn sort_clockwise(a: &mut [Point2<f64>]) {
     if a[0].y < a[1].y { a.swap(0, 1); }
@@ -28,6 +31,10 @@ pub struct MotRunner {
     pub state: MotState,
     pub device: Option<UsbDevice>,
     pub markers_settings: MarkersSettings,
+    pub record_impact: bool,
+    pub datapoints: Arc<Mutex<Vec<crate::Frame>>>,
+    pub ui_update: RwSignal<()>,
+    pub ui_ctx: Context,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -162,7 +169,28 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
     let mut frame_stream = device.stream_impact().await.unwrap();
     while runner.lock().await.device.is_some() {
         if let Some((_x, _y)) = frame_stream.next().await {
-            println!("Impact detected");
+            let mut runner = runner.lock().await;
+            if runner.record_impact {
+                let mut datapoints = runner.datapoints.lock().await;
+
+                let mut frame = crate::Frame {
+                    nf_aim_point_x: None,
+                    nf_aim_point_y: None,
+                };
+
+                if let Some(nf_aim_point) = runner.state.nf_aim_point.clone() {
+                    frame.nf_aim_point_x = Some(nf_aim_point.x);
+                    frame.nf_aim_point_y = Some(nf_aim_point.y);
+                }
+
+                datapoints.push(frame);
+
+                let ui_update = runner.ui_update.c();
+
+                runner.ui_ctx.queue_main(move || {
+                    leptos_reactive::SignalSet::set(&ui_update, ());
+                });
+            }
         }
     }
 }

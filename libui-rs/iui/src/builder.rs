@@ -48,7 +48,7 @@ macro_rules! layout {
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Checkbox::new($ui, $text);
-        $( $ctl.set_checked($checked); )?
+        $( $ctl.set_checked($ui, $checked); )?
     ];
 
     // ColorButton
