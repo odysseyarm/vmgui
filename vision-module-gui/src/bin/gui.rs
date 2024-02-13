@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use iui::prelude::*;
-use leptos_reactive::{create_effect, SignalGet, SignalWith};
+use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalWith};
 use serde::Serialize;
+use vision_module_gui::Frame;
 use vision_module_gui::{config_window::config_window, marker_config_window::marker_config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::{AbortHandle};
@@ -34,12 +35,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = UI::init().expect("Couldn't initialize UI library");
     let ui_ctx = ui.async_context();
 
-    let state = MotState::default();
-    let mot_runner = Arc::new(Mutex::new(MotRunner { state, device: None, markers_settings: Default::default() }));
-    // Create a main_window into which controls can be placed
-    let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
-    let mut marker_config_win = marker_config_window(&ui, tokio_handle, mot_runner.c());
+    let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
 
     iui::layout! { &ui,
         let form_vbox = VerticalBox(padded: true) {
@@ -49,6 +45,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Compact: let add_datapoint_btn = Button("Add datapoint")
                     Compact: let remove_datapoint_btn = Button("Remove datapoint")
                     Compact: let clear_datapoints_btn = Button("Clear datapoints")
+                    Compact: let record_impacts_cbx = Checkbox("Record impacts", checked: false)
                     Compact: let save_datapoints_btn = Button("Save to file")
                 }
             }
@@ -56,37 +53,38 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    form_vbox.hide(&ui);
+    let state = MotState::default();
+    let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
+    let mot_runner = Arc::new(Mutex::new(MotRunner { state, device: None, markers_settings: Default::default(), record_impact: false, datapoints: datapoints.c(), ui_update: ui_update.c(), ui_ctx }));
 
-    #[derive(Serialize)]
-    struct Frame {
-        nf_aim_point_x: Option<f32>,
-        nf_aim_point_y: Option<f32>,
-        wf_aim_point_x: Option<f32>,
-        wf_aim_point_y: Option<f32>,
-        nf_p1_x: Option<u16>,
-        nf_p1_y: Option<u16>,
-        nf_p2_x: Option<u16>,
-        nf_p2_y: Option<u16>,
-        nf_p3_x: Option<u16>,
-        nf_p3_y: Option<u16>,
-        nf_p4_x: Option<u16>,
-        nf_p4_y: Option<u16>,
-        wf_p1_x: Option<u16>,
-        wf_p1_y: Option<u16>,
-        wf_p2_x: Option<u16>,
-        wf_p2_y: Option<u16>,
-        wf_p3_x: Option<u16>,
-        wf_p3_y: Option<u16>,
-        wf_p4_x: Option<u16>,
-        wf_p4_y: Option<u16>,
-    }
+    // Create a main_window into which controls can be placed
+    let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
+    let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
+    let mut marker_config_win = marker_config_window(&ui, tokio_handle, mot_runner.c());
+
+    form_vbox.hide(&ui);
 
     let mot_runner_abort_handle = Arc::new(Mutex::new(None::<AbortHandle>));
 
     let mut test_win = Window::new(&ui, "Aimpoint Test", 10, 10, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
+
+    create_effect({
+        let ui = ui.c();
+        let collected_text = collected_text.c();
+        let datapoints = datapoints.c();
+        move |_| {
+            ui_update.with(|_| {
+                let datapoints = datapoints.c();
+                let datapoints = datapoints.blocking_lock();
+
+                let mut collected_text = collected_text.c();
+
+                collected_text.set_text(&ui, datapoints.len().to_string().as_str());
+            });
+        }
+    });
 
     let run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: mot_runner.c() }));
     let mut run_hbox = HorizontalBox::new(&ui);
@@ -167,8 +165,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
-
     add_datapoint_btn.on_clicked(&ui, {
         let ui = ui.c();
         let datapoints = datapoints.c();
@@ -182,75 +178,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut frame = Frame {
                               nf_aim_point_x: None,
                               nf_aim_point_y: None,
-                              wf_aim_point_x: None,
-                              wf_aim_point_y: None,
-                              nf_p1_x: None,
-                              nf_p1_y: None,
-                              nf_p2_x: None,
-                              nf_p2_y: None,
-                              nf_p3_x: None,
-                              nf_p3_y: None,
-                              nf_p4_x: None,
-                              nf_p4_y: None,
-                              wf_p1_x: None,
-                              wf_p1_y: None,
-                              wf_p2_x: None,
-                              wf_p2_y: None,
-                              wf_p3_x: None,
-                              wf_p3_y: None,
-                              wf_p4_x: None,
-                              wf_p4_y: None,
                               };
 
             let state = state.blocking_lock();
             let state = &state.state;
 
             if let Some(nf_aim_point) = state.nf_aim_point {
-                frame.nf_aim_point_x = Some(nf_aim_point.x as f32);
-                frame.nf_aim_point_y = Some(nf_aim_point.y as f32);
-            }
-
-            if let Some(wf_aim_point) = state.wf_aim_point {
-                frame.wf_aim_point_x = Some(wf_aim_point.x as f32);
-                frame.wf_aim_point_y = Some(wf_aim_point.y as f32);
-            }
-
-            if let Some(nf_data) = &state.nf_data {
-                if nf_data.len() > 0 {
-                    frame.nf_p1_x = Some(nf_data[0].cx);
-                    frame.nf_p1_y = Some(nf_data[0].cy);
-                }
-                if nf_data.len() > 1 {
-                    frame.nf_p2_x = Some(nf_data[1].cx);
-                    frame.nf_p2_y = Some(nf_data[1].cy);
-                }
-                if nf_data.len() > 2 {
-                    frame.nf_p3_x = Some(nf_data[2].cx);
-                    frame.nf_p3_y = Some(nf_data[2].cy);
-                }
-                if nf_data.len() > 3 {
-                    frame.nf_p4_x = Some(nf_data[3].cx);
-                    frame.nf_p4_y = Some(nf_data[3].cy);
-                }
-            }
-
-            if let Some(wf_data) = &state.wf_data {
-                if wf_data.len() > 0 {
-                    frame.wf_p1_x = Some(wf_data[0].cx);
-                    frame.wf_p1_y = Some(wf_data[0].cy);
-                }
-                if wf_data.len() > 1 {
-                    frame.wf_p2_x = Some(wf_data[1].cx);
-                    frame.wf_p2_y = Some(wf_data[1].cy);
-                }
-                if wf_data.len() > 2 {
-                    frame.wf_p3_x = Some(wf_data[2].cx);
-                    frame.wf_p3_y = Some(wf_data[2].cy);
-                }
-                if wf_data.len() > 3 {
-                    frame.wf_p4_x = Some(wf_data[3].cx);
-                    frame.wf_p4_y = Some(wf_data[3].cy);
-                }
+                frame.nf_aim_point_x = Some(nf_aim_point.x);
+                frame.nf_aim_point_y = Some(nf_aim_point.y);
             }
 
             datapoints.push(frame);
@@ -279,6 +214,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut datapoints = datapoints.blocking_lock();
             datapoints.clear();
             collected_text.set_text(&ui, datapoints.len().to_string().as_str());
+        }
+    });
+
+    record_impacts_cbx.on_toggled(&ui, {
+        let mot_runner = mot_runner.c();
+        move |checked| {
+            mot_runner.blocking_lock().record_impact = checked;
         }
     });
 

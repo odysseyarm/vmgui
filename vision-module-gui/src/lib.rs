@@ -1,6 +1,7 @@
 use arrayvec::ArrayVec;
 use nalgebra::Point2;
 use ats_cv::kalman::Pva2d;
+use serde::Serialize;
 use crate::packet::MotData;
 
 pub mod packet;
@@ -21,6 +22,12 @@ pub trait CloneButShorter: Clone {
 }
 
 impl<T: Clone> CloneButShorter for T {}
+
+#[derive(Serialize)]
+pub struct Frame {
+    pub nf_aim_point_x: Option<f64>,
+    pub nf_aim_point_y: Option<f64>,
+}
 
 #[derive(Default)]
 pub struct MotState {
