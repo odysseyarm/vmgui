@@ -45,7 +45,7 @@ fn main() {
         .opaque_type("max_align_t") // For some reason this ends up too large
         //.rustified_enum(".*")
         .trust_clang_mangling(false) // clang sometimes wants to treat these functions as C++
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 
@@ -173,7 +173,7 @@ fn main() {
                     env::set_var(key, value);
                 }
             }
-            embed_resource::compile(src_path("/windows/resources.rc"));
+            embed_resource::compile(src_path("/windows/resources.rc"), embed_resource::NONE);
 
             link("user32", false);
             link("kernel32", false);
