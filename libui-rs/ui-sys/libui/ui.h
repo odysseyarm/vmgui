@@ -82,6 +82,16 @@ _UI_EXTERN void uiTimer(int milliseconds, int (*f)(void *data), void *data);
 
 _UI_EXTERN void uiOnShouldQuit(int (*f)(void *data), void *data);
 
+
+/**
+ * Free the memory of a returned string.
+ *
+ * @note Every time a string is returned from the library, this method should be called.
+ *       Examples of these functions are uiWindowTitle, uiOpenFile, uiSaveFile, and uiEntryText.
+ *       It is not required for input strings, e.g. in uiWindowSetTitle.
+ *
+ * @param text The string to free memory
+ */
 _UI_EXTERN void uiFreeText(char *text);
 
 
@@ -112,6 +122,10 @@ struct uiControl {
 
 /**
  * Dispose and free all allocated resources.
+ *
+ * The platform specific APIs that actually destroy a control (and its children) are called.
+ *
+ * @note Most of the time is needed to be used directly only on the top level windows.
  *
  * @param c uiControl instance.
  * @todo Document ownership.
@@ -221,7 +235,9 @@ _UI_EXTERN void uiControlDisable(uiControl *c);
 _UI_EXTERN uiControl *uiAllocControl(size_t n, uint32_t OSsig, uint32_t typesig, const char *typenamestr);
 
 /**
- * Frees the control.
+ * Frees the memory associated with the control reference.
+ *
+ * @note This method is public only for writing custom controls.
  *
  * @param c uiControl instance.
  * @memberof uiControl
@@ -1292,7 +1308,7 @@ typedef struct uiSeparator uiSeparator;
 #define uiSeparator(this) ((uiSeparator *) (this))
 
 /**
- * Creates a new horizontal separator.
+ * Creates a new horizontal separator to separate controls being stacked vertically.
  *
  * @returns A new uiSeparator instance.
  * @memberof uiSeparator @static
@@ -1300,7 +1316,7 @@ typedef struct uiSeparator uiSeparator;
 _UI_EXTERN uiSeparator *uiNewHorizontalSeparator(void);
 
 /**
- * Creates a new vertical separator.
+ * Creates a new vertical separator to separate controls being stacked horizontally.
  *
  * @returns A new uiSeparator instance.
  * @memberof uiSeparator @static
