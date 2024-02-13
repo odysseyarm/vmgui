@@ -16,7 +16,7 @@ pub enum PacketData {
     StreamUpdate(StreamUpdate),
     FlashSettings,
     AimPointReport,
-    ImpactWithAimPointReport,
+    ImpactWithAimPointReport(ImpactWithAimPointReport),
 }
 pub enum StreamChoice {
     Object,
@@ -77,6 +77,12 @@ pub struct ObjectReport {
 pub struct StreamUpdate {
     pub mask: u8,
     pub active: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ImpactWithAimPointReport {
+    pub x: i16,
+    pub y: i16,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -161,7 +167,7 @@ impl Packet {
             PacketData::ObjectReport(_) => P::ObjectReport,
             PacketData::StreamUpdate(_) => P::StreamUpdate,
             PacketData::AimPointReport => P::AimPointReport,
-            PacketData::ImpactWithAimPointReport => P::ImpactWithAimPointReport,
+            PacketData::ImpactWithAimPointReport(_) => P::ImpactWithAimPointReport,
             PacketData::FlashSettings => P::FlashSettings,
         }
     }
@@ -187,6 +193,7 @@ impl Packet {
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             // PacketType::StreamUpdate => PacketData::StreamUpdate(bytes[0] != 0),
+            PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
             _ => unimplemented!(),
         };
@@ -203,7 +210,7 @@ impl Packet {
             PacketData::ObjectReport(_) => 514,
             PacketData::StreamUpdate(_) => 2,
             PacketData::AimPointReport => 80,
-            PacketData::ImpactWithAimPointReport => 80,
+            PacketData::ImpactWithAimPointReport(_) => 80,
             PacketData::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
@@ -218,7 +225,7 @@ impl Packet {
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::AimPointReport => (),
-            PacketData::ImpactWithAimPointReport => (),
+            PacketData::ImpactWithAimPointReport(_) => (),
             PacketData::FlashSettings => (),
         };
     }
@@ -235,6 +242,13 @@ impl PacketData {
     pub fn object_report(self) -> Option<ObjectReport> {
         match self {
             PacketData::ObjectReport(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn impact_with_aim_point_report(self) -> Option<ImpactWithAimPointReport> {
+        match self {
+            PacketData::ImpactWithAimPointReport(x) => Some(x),
             _ => None,
         }
     }
@@ -351,5 +365,16 @@ impl ObjectReport {
             self.mot_data_wf[i].serialize(buf);
         }
         buf.extend_from_slice(&[1, 0]);
+    }
+}
+
+impl ImpactWithAimPointReport {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let impact_with_aim_point = ImpactWithAimPointReport {
+            x: bytes[0] as i16 | ((bytes[1] & 0x0f) as i16) << 8,
+            y: bytes[2] as i16 | ((bytes[3] & 0x0f) as i16) << 8,
+        };
+        *bytes = &bytes[4..];
+        Ok(impact_with_aim_point)
     }
 }

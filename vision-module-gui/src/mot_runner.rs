@@ -3,6 +3,7 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
                         Point2::new(0.5, 1.), Point2::new(0., 0.5),
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
 }
+use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
@@ -30,14 +31,25 @@ pub struct MotRunner {
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
+    // doesn't work too lazy to figure out why
+    // let halt = Cell::new(false);
+    tokio::join!(
+        // frame_loop(&halt, runner.clone()),
+        // impact_loop(&halt, runner.clone()),
+        frame_loop(runner.clone()),
+        impact_loop(runner.clone()),
+    );
+}
+
+async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
-    // let mut frame_stream = device.stream_frames().await.unwrap();
+    let mut frame_stream = device.stream_mot_data().await.unwrap();
     loop {
         if runner.lock().await.device.is_none() {
             return;
         }
-        if let Ok((nf_data, wf_data)) = device.get_frame().await {
-        // if let Some((nf_data, wf_data)) = frame_stream.next().await {
+        // if let Ok((nf_data, wf_data)) = device.get_frame().await {
+        if let Some((nf_data, wf_data)) = frame_stream.next().await {
             let mut runner = runner.lock().await;
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
@@ -142,6 +154,16 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
             state.wf_data = Some(wf_data);
         }
         sleep(Duration::from_millis(5)).await;
+    }
+}
+
+async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().await.device.c().unwrap();
+    let mut frame_stream = device.stream_impact().await.unwrap();
+    while runner.lock().await.device.is_some() {
+        if let Some((_x, _y)) = frame_stream.next().await {
+            println!("Impact detected");
+        }
     }
 }
 
