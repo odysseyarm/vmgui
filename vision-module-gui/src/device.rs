@@ -4,7 +4,7 @@ use pin_project::{pin_project, pinned_drop};
 use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
 use serial2;
 use tokio::sync::{mpsc, oneshot};
-use tokio_stream::{wrappers::ReceiverStream, Stream};
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 
 use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
@@ -25,7 +25,8 @@ pub struct UsbDevice {
 struct State {
     // id 255 is reserved for requests that don't care for a response
     response_channels: Mutex<[ResponseChannel; 255]>,
-    frame_stream: AtomicBool,
+    mot_data_stream: AtomicBool,
+    impact_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -66,7 +67,7 @@ impl UsbDevice {
 
         let read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
-            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active:  false }) }.serialize(&mut buf);
+            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
             read_port.discard_buffers().unwrap();
             Ok(read_port)
@@ -76,7 +77,8 @@ impl UsbDevice {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
-            frame_stream: AtomicBool::new(false),
+            mot_data_stream: AtomicBool::new(false),
+            impact_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -257,13 +259,28 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
-    pub async fn stream_frames(&self) -> Result<FrameStream> {
-        if self.thread_state.frame_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one frame stream"));
+    pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ([MotData; 16], [MotData; 16])> + Send + Sync> {
+        if self.thread_state.mot_data_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one mot data stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1, active: true }) }).await?;
-        Ok(FrameStream { slot, receiver: ReceiverStream::new(receiver) })
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b001, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
+            let obj = x.object_report().unwrap();
+            (obj.mot_data_nf, obj.mot_data_wf)
+        }))
+    }
+
+    pub async fn stream_impact(&self) -> Result<impl Stream<Item = (i16, i16)> + Send + Sync> {
+        if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one impact stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b100, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
+            let obj = x.impact_with_aim_point_report().unwrap();
+            (obj.x, obj.y)
+        }))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
@@ -276,20 +293,18 @@ impl UsbDevice {
 }
 
 #[pin_project(PinnedDrop)]
-pub struct FrameStream {
+pub struct PacketStream {
+    stream_type: u8,
     slot: ResponseSlot,
     #[pin]
     receiver: ReceiverStream<PacketData>,
 }
 
-impl Stream for FrameStream {
-    type Item = ([MotData; 16], [MotData; 16]);
+impl Stream for PacketStream {
+    type Item = PacketData;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
-        self.project().receiver.poll_next(cx).map(|r| r.map(|p| {
-            let obj = p.object_report().unwrap();
-            (obj.mot_data_nf, obj.mot_data_wf)
-        }))
+        self.project().receiver.poll_next(cx)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -298,9 +313,13 @@ impl Stream for FrameStream {
 }
 
 #[pinned_drop]
-impl PinnedDrop for FrameStream {
+impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
-        self.slot.thread_state.frame_stream.store(false, Ordering::Relaxed);
+        if self.stream_type == 0 {
+            self.slot.thread_state.mot_data_stream.store(false, Ordering::Relaxed);
+        } else {
+            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
+        }
     }
 }
 
