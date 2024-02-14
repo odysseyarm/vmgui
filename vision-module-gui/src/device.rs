@@ -27,6 +27,7 @@ struct State {
     response_channels: Mutex<[ResponseChannel; 255]>,
     mot_data_stream: AtomicBool,
     impact_stream: AtomicBool,
+    aim_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -79,6 +80,7 @@ impl UsbDevice {
             response_channels: Mutex::new(response_channels),
             mot_data_stream: AtomicBool::new(false),
             impact_stream: AtomicBool::new(false),
+            aim_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -283,6 +285,18 @@ impl UsbDevice {
         }))
     }
 
+    pub async fn stream_aim(&self) -> Result<impl Stream<Item = (i16, i16)> + Send + Sync> {
+        if self.thread_state.aim_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one aim stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b010, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
+            let obj = x.aim_point_report().unwrap();
+            (obj.x, obj.y)
+        }))
+    }
+
     pub async fn flash_settings(&self) -> Result<()> {
         self.to_thread.send(Packet {
             id: 255,
@@ -317,8 +331,10 @@ impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
         if self.stream_type == 0 {
             self.slot.thread_state.mot_data_stream.store(false, Ordering::Relaxed);
-        } else {
+        } else if self.stream_type == 1 {
             self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
+        } else if self.stream_type == 2 {
+            self.slot.thread_state.aim_stream.store(false, Ordering::Relaxed);
         }
     }
 }
