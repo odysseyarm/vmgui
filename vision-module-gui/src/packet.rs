@@ -15,7 +15,7 @@ pub enum PacketData {
     ObjectReport(ObjectReport),
     StreamUpdate(StreamUpdate),
     FlashSettings,
-    AimPointReport,
+    AimPointReport(AimPointReport),
     ImpactWithAimPointReport(ImpactWithAimPointReport),
 }
 pub enum StreamChoice {
@@ -81,6 +81,12 @@ pub struct StreamUpdate {
 
 #[derive(Clone, Copy, Debug)]
 pub struct ImpactWithAimPointReport {
+    pub x: i16,
+    pub y: i16,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct AimPointReport {
     pub x: i16,
     pub y: i16,
 }
@@ -166,7 +172,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => P::ObjectReportRequest,
             PacketData::ObjectReport(_) => P::ObjectReport,
             PacketData::StreamUpdate(_) => P::StreamUpdate,
-            PacketData::AimPointReport => P::AimPointReport,
+            PacketData::AimPointReport(_) => P::AimPointReport,
             PacketData::ImpactWithAimPointReport(_) => P::ImpactWithAimPointReport,
             PacketData::FlashSettings => P::FlashSettings,
         }
@@ -209,7 +215,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => 0,
             PacketData::ObjectReport(_) => 514,
             PacketData::StreamUpdate(_) => 2,
-            PacketData::AimPointReport => 80,
+            PacketData::AimPointReport(_) => 80,
             PacketData::ImpactWithAimPointReport(_) => 80,
             PacketData::FlashSettings => 0,
         };
@@ -224,7 +230,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
-            PacketData::AimPointReport => (),
+            PacketData::AimPointReport(_) => (),
             PacketData::ImpactWithAimPointReport(_) => (),
             PacketData::FlashSettings => (),
         };
@@ -249,6 +255,13 @@ impl PacketData {
     pub fn impact_with_aim_point_report(self) -> Option<ImpactWithAimPointReport> {
         match self {
             PacketData::ImpactWithAimPointReport(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn aim_point_report(self) -> Option<AimPointReport> {
+        match self {
+            PacketData::AimPointReport(x) => Some(x),
             _ => None,
         }
     }
@@ -376,5 +389,16 @@ impl ImpactWithAimPointReport {
         };
         *bytes = &bytes[4..];
         Ok(impact_with_aim_point)
+    }
+}
+
+impl AimPointReport {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let aim_point = AimPointReport {
+            x: bytes[0] as i16 | ((bytes[1] & 0x0f) as i16) << 8,
+            y: bytes[2] as i16 | ((bytes[3] & 0x0f) as i16) << 8,
+        };
+        *bytes = &bytes[4..];
+        Ok(aim_point)
     }
 }
