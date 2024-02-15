@@ -200,6 +200,7 @@ impl Packet {
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             // PacketType::StreamUpdate => PacketData::StreamUpdate(bytes[0] != 0),
             PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
+            PacketType::AimPointReport => PacketData::AimPointReport(AimPointReport::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
             _ => unimplemented!(),
         };
@@ -384,8 +385,8 @@ impl ObjectReport {
 impl ImpactWithAimPointReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         let impact_with_aim_point = ImpactWithAimPointReport {
-            x: bytes[0] as i16 | ((bytes[1] & 0x0f) as i16) << 8,
-            y: bytes[2] as i16 | ((bytes[3] & 0x0f) as i16) << 8,
+            x: i16::from_le_bytes([bytes[0], bytes[1]]),
+            y: i16::from_le_bytes([bytes[2], bytes[3]]),
         };
         *bytes = &bytes[4..];
         Ok(impact_with_aim_point)
@@ -395,8 +396,8 @@ impl ImpactWithAimPointReport {
 impl AimPointReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         let aim_point = AimPointReport {
-            x: bytes[0] as i16 | ((bytes[1] & 0x0f) as i16) << 8,
-            y: bytes[2] as i16 | ((bytes[3] & 0x0f) as i16) << 8,
+            x: i16::from_le_bytes([bytes[0], bytes[1]]),
+            y: i16::from_le_bytes([bytes[2], bytes[3]]),
         };
         *bytes = &bytes[4..];
         Ok(aim_point)

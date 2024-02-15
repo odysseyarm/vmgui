@@ -203,6 +203,7 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some((_x, _y)) = frame_stream.next().await {
             let mut runner = runner.lock().await;
             let state = &mut runner.state;
+            println!("aim: ({}, {})", _x, _y);
             state.nf_aim_point = Some(Point2::new(((_x as f64)/2047.+1.)/2., ((_y as f64)/2047.+1.)/2.));
         }
     }
