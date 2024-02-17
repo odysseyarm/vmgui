@@ -3,13 +3,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use iui::prelude::*;
-use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalWith};
-use serde::Serialize;
+use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
 use vision_module_gui::Frame;
 use vision_module_gui::{config_window::config_window, marker_config_window::marker_config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
-use tokio::task::{AbortHandle};
-use iui::controls::{Area, Button, HorizontalBox, FileTypeFilter};
+use tokio::task::AbortHandle;
+use iui::controls::{Area, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
@@ -36,39 +35,81 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui_ctx = ui.async_context();
 
     let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
-
-    iui::layout! { &ui,
-        let form_vbox = VerticalBox(padded: true) {
-            Compact: let form = Form(padded: true) {
-                (Compact, "Datapoints added:"): let collected_text = Label("")
-                (Compact, "Dataset"): let dataset_controls_group = HorizontalBox(padded: true) {
-                    Compact: let add_datapoint_btn = Button("Add datapoint")
-                    Compact: let remove_datapoint_btn = Button("Remove datapoint")
-                    Compact: let clear_datapoints_btn = Button("Clear datapoints")
-                    Compact: let record_impacts_cbx = Checkbox("Record impacts", checked: false)
-                    Compact: let save_datapoints_btn = Button("Save to file")
-                }
-            }
-            Compact: let separator = HorizontalSeparator()
-        }
-    }
-
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
-    let mot_runner = Arc::new(Mutex::new(MotRunner { state, device: None, markers_settings: Default::default(), record_impact: false, datapoints: datapoints.c(), ui_update: ui_update.c(), ui_ctx }));
+    let mot_runner = Arc::new(Mutex::new(MotRunner {
+        state,
+        device: None,
+        markers_settings: Default::default(),
+        record_impact: false,
+        datapoints: datapoints.c(),
+        ui_update: ui_update.c(),
+        ui_ctx,
+    }));
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
     let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
     let mut marker_config_win = marker_config_window(&ui, tokio_handle, mot_runner.c());
 
-    form_vbox.hide(&ui);
-
-    let mot_runner_abort_handle = Arc::new(Mutex::new(None::<AbortHandle>));
 
     let mut test_win = Window::new(&ui, "Aimpoint Test", 10, 10, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
+
+    let tracking = RwSignal::new(false);
+    let testing = RwSignal::new(false);
+    let test_win_on_closing = move |_: &mut _| testing.set(false);
+    test_win.on_closing(&ui, test_win_on_closing.c());
+    let test_area = Area::new(&ui, Box::new(TestCanvas {
+        ctx: ui.c(),
+        window: test_win.c(),
+        on_closing: Box::new(test_win_on_closing.c()),
+        state: mot_runner.c(),
+        offset_x: 0.0,
+        offset_y: 0.0,
+    }));
+    let mut test_hbox = HorizontalBox::new(&ui);
+    test_hbox.append(&ui, test_area.c(), LayoutStrategy::Stretchy);
+    test_win.set_child(&ui, test_hbox);
+
+
+    vision_module_gui::layout! { &ui,
+        let vert_box = VerticalBox(padded: true) {
+            Compact: let grid = LayoutGrid(padded: false) {
+                (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
+                (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
+                (2, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button(move || {
+                    if !tracking.get() { "Start Tracking" } else { "Stop Tracking" }
+                })
+                (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
+            }
+            Compact: let separator = HorizontalSeparator()
+            Compact: let spacer = Spacer()
+            Compact: let form_vbox = VerticalBox(padded: true) {
+                Compact: let form = Form(padded: true) {
+                    (Compact, "Datapoints added:"): let collected_text = Label("")
+                    (Compact, "Dataset"): let dataset_controls_group = HorizontalBox(padded: true) {
+                        Compact: let add_datapoint_btn = Button("Add datapoint")
+                        Compact: let remove_datapoint_btn = Button("Remove datapoint")
+                        Compact: let clear_datapoints_btn = Button("Clear datapoints")
+                        Compact: let record_impacts_cbx = Checkbox("Record impacts", checked: false)
+                        Compact: let save_datapoints_btn = Button("Save to file")
+                    }
+                }
+                Compact: let separator = HorizontalSeparator()
+            }
+            Stretchy: let run_hbox = HorizontalBox() {
+                Stretchy: let run_area = Area(Box::new(RunCanvas {
+                    ctx: ui.c(),
+                    state: mot_runner.c(),
+                }))
+            }
+        }
+    }
+    form_vbox.hide(&ui);
+    run_hbox.hide(&ui);
+    main_win.set_child(&ui, vert_box.clone());
 
     create_effect({
         let ui = ui.c();
@@ -81,67 +122,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut collected_text = collected_text.c();
 
-                collected_text.set_text(&ui, datapoints.len().to_string().as_str());
+                collected_text.set_text(&ui, &datapoints.len().to_string());
             });
         }
     });
 
-    let run_area = Area::new(&ui, Box::new(RunCanvas { ctx: ui.c(), state: mot_runner.c() }));
-    let mut run_hbox = HorizontalBox::new(&ui);
-
-    let stop_tracking = {
-        let ui = ui.c();
-        let run_hbox = run_hbox.c();
-        let test_win = test_win.c();
-        let mot_runner_abort_handle = mot_runner_abort_handle.c();
-        move |button:&mut Button| {
-            let mut run_hbox = run_hbox.c();
-            run_hbox.hide(&ui);
-            button.set_text(&ui, "Start Tracking");
-            if !test_win.visible(&ui) {
-                let mot_runner_abort_handle = &mot_runner_abort_handle.blocking_lock().take();
-                if mot_runner_abort_handle.is_some() {
-                    mot_runner_abort_handle.as_ref().expect("MOT Runner abort handle is None").abort();
-                }
-            }
-        }
-    };
-
-    let test_win_on_closing = {
-        let ui = ui.c();
-        let form_vbox = form_vbox.c();
-        let run_hbox = run_hbox.c();
-        let mot_runner_abort_handle = mot_runner_abort_handle.c();
-        move |win:&mut Window| {
-            let mut form_vbox = form_vbox.c();
-            win.hide(&ui);
-            form_vbox.hide(&ui);
-            if !run_hbox.visible(&ui) {
-                let mot_runner_abort_handle = &mot_runner_abort_handle.blocking_lock().take();
-                if mot_runner_abort_handle.is_some() {
-                    mot_runner_abort_handle.as_ref().expect("MOT Runner abort handle is None").abort();
-                }
-            }
-        }
-    };
-
-    test_win.on_closing(&ui, test_win_on_closing.c());
-
-    let test_area = Area::new(&ui, Box::new(TestCanvas { ctx: ui.c(), window: test_win.c(), on_closing: Box::new(test_win_on_closing.c()), state: mot_runner.c(), offset_x: 0.0, offset_y: 0.0 }));
-
-    iui::layout! { &ui,
-        let vert_box = VerticalBox(padded: true) {
-            Compact: let grid = LayoutGrid(padded: false) {
-                (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
-                (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
-                (2, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button("Start Tracking")
-                (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
-            }
-            Compact: let separator = HorizontalSeparator()
-            Compact: let spacer = Spacer()
-        }
-    }
-
+    // Disable buttons if no device is connected
     create_effect({
         let ui = ui.c();
         let test_win = test_win.c();
@@ -162,6 +148,64 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     test_button.enable(&ui);
                 }
             });
+        }
+    });
+
+    // Start/stop the mot_runner task as needed
+    create_effect({
+        let mot_runner = mot_runner.c();
+        move |abort_handle: Option<Option<AbortHandle>>| {
+            if tracking.get() || testing.get() {
+                if let Some(Some(abort_handle)) = abort_handle {
+                    // The mot_runner task is already running
+                    Some(abort_handle)
+                } else {
+                    Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner.c())).abort_handle())
+                }
+            } else {
+                if let Some(Some(abort_handle)) = abort_handle {
+                    abort_handle.abort();
+                }
+                None
+            }
+        }
+    });
+
+    // Keep the mot_runner device in sync with the selected device from the config window
+    create_effect({
+        let view = mot_runner.c();
+        move |_| {
+            let view = view.c();
+            view.blocking_lock().device = device_rs.get();
+        }
+    });
+
+    // Show the test window and form when running test
+    create_effect({
+        let ui = ui.c();
+        let form_vbox = form_vbox.c();
+        let test_win = test_win.c();
+        move |_| {
+            if testing.get() {
+                form_vbox.c().show(&ui);
+                test_win.c().show(&ui);
+            } else {
+                form_vbox.c().hide(&ui);
+                test_win.c().hide(&ui);
+            }
+        }
+    });
+
+    // Show the run_hbox form when tracking
+    create_effect({
+        let ui = ui.c();
+        let run_hbox = run_hbox.c();
+        move |_| {
+            if tracking.get() {
+                run_hbox.c().show(&ui);
+            } else {
+                run_hbox.c().hide(&ui);
+            }
         }
     });
 
@@ -246,8 +290,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    main_win.set_child(&ui, vert_box.clone());
-
     config_button.on_clicked(&ui, {
         let ui = ui.c();
         move |_| {
@@ -262,74 +304,20 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    vert_box.append(&ui, form_vbox.c(), LayoutStrategy::Compact);
-
-    create_effect({
-        let view = mot_runner.c();
-        move |_| {
-            let view = view.c();
-            view.blocking_lock().device = device_rs.get();
-        }
-    });
-
-    run_hbox.append(&ui, run_area.c(), LayoutStrategy::Stretchy);
-
-    vert_box.append(&ui, run_hbox.c(), LayoutStrategy::Stretchy);
-
-    run_hbox.hide(&ui);
-
-    track_button.on_clicked(&ui, {
-        let ui = ui.c();
-        let mut run_hbox = run_hbox.c();
-        let mot_runner = mot_runner.c();
-        let mot_runner_abort_handle = mot_runner_abort_handle.c();
-        move |button| {
-            if run_hbox.visible(&ui) {
-                stop_tracking(button);
-            } else {
-                run_hbox.show(&ui);
-                if mot_runner_abort_handle.blocking_lock().is_none() {
-                    let mot_runner = mot_runner.c();
-                    *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner)).abort_handle());
-                }
-                button.set_text(&ui, "Stop Tracking");
-            }
-        }
-    });
-
-    let mut test_hbox = HorizontalBox::new(&ui);
-    test_hbox.append(&ui, test_area.c(), LayoutStrategy::Stretchy);
-    test_win.set_child(&ui, test_hbox);
-
-    test_button.on_clicked(&ui, {
-        let ui = ui.c();
-        let mut form_vbox = form_vbox.c();
-        let mut test_win = test_win.c();
-        let mot_runner = mot_runner.c();
-        let mot_runner_abort_handle = mot_runner_abort_handle.c();
-        move |_| {
-            form_vbox.show(&ui);
-            test_win.show(&ui);
-            if mot_runner_abort_handle.blocking_lock().is_none() {
-                let mot_runner = mot_runner.c();
-                *(mot_runner_abort_handle.blocking_lock()) = Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner)).abort_handle());
-            }
-        }
-    });
+    track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
+    test_button.on_clicked(&ui, move |_| testing.set(true));
 
     main_win.show(&ui);
 
     ui.ui_timer(5, {
         let ui = ui.c();
         let run_area = run_area.c();
-        let run_hbox = test_area.c();
         let test_area = test_area.c();
-        let test_win = test_win.c();
         move || {
-            if run_hbox.visible(&ui) {
+            if tracking.get_untracked() {
                 run_area.queue_redraw_all(&ui);
             }
-            if test_win.visible(&ui) {
+            if testing.get_untracked() {
                 test_area.queue_redraw_all(&ui);
             }
             true
@@ -337,12 +325,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Run the application
-    let mut i = 0;
     let mut ev = ui.event_loop();
-    ev.on_tick(&ui, || {
-        // println!("tick {i}");
-        i += 1;
-    });
     ev.run(&ui);
 
     leptos_rt.dispose();

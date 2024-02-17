@@ -39,6 +39,12 @@ use leptos_reactive::{MaybeSignal, ReadSignal, RwSignal, Memo, Signal};
 macro_rules! layout {
 
     // ---------------------- Controls without children -----------------------
+    [ $ui:expr ,
+        let $ctl:ident = Area ( $handler:expr )
+    ] => [
+        #[allow(unused_mut)]
+        let mut $ctl = iui::controls::Area::new($ui, $handler);
+    ];
 
     // Button
     [ $ui:expr ,
@@ -78,8 +84,8 @@ macro_rules! layout {
         let $ctl:ident = Checkbox ( $text:expr $( , checked: $checked:expr )? )
     ] => [
         #[allow(unused_mut)]
-        let mut $ctl = iui::controls::Checkbox::new($text);
-        $( $ctl.set_checked($checked); )?
+        let mut $ctl = iui::controls::Checkbox::new($ui, $text);
+        $( $ctl.set_checked($ui, $checked); )?
     ];
 
     // ColorButton
@@ -483,11 +489,12 @@ impl IntoMaybeSignal<String> for &str {
     }
 }
 
-impl<F, T> IntoMaybeSignal<T> for F
+impl<F, T, U> IntoMaybeSignal<T> for F
 where
-    F: Fn() -> T + 'static,
+    F: Fn() -> U + 'static,
+    U: Into<T>,
 {
     fn from(self) -> MaybeSignal<T> {
-        MaybeSignal::derive(self)
+        MaybeSignal::derive(move || self().into())
     }
 }
