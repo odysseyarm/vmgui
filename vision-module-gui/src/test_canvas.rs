@@ -145,12 +145,14 @@ impl AreaHandler for TestCanvas {
             ui_sys::uiExtKeyDown => self.offset_y += 1.0,
             ui_sys::uiExtKeyLeft => self.offset_x -= 1.0,
             ui_sys::uiExtKeyRight => self.offset_x += 1.0,
+            ui_sys::uiExtKeyEscape => (self.on_closing)(&mut self.window),
             _ => match area_key_event.key {
                 b'w' => self.offset_y -= 100.0,
                 b's' => self.offset_y += 100.0,
                 b'a' => self.offset_x -= 100.0,
                 b'd' => self.offset_x += 100.0,
-                _ => (self.on_closing)(&mut self.window),
+                b'q' => (self.on_closing)(&mut self.window),
+                _ => (),
             }
         }
         true
