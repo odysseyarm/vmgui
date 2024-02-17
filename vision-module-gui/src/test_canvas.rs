@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
+use tracing::debug;
 use crate::custom_shapes::{draw_crosshair, draw_grid};
 use crate::mot_runner::{rescale, sort_clockwise, MotRunner};
 use crate::MotState;
@@ -138,7 +139,7 @@ impl AreaHandler for TestCanvas {
     }
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
-        println!("{:?}", area_key_event);
+        debug!("{:?}", area_key_event);
         match area_key_event.ext_key as _ {
             ui_sys::uiExtKeyUp => self.offset_y -= 1.0,
             ui_sys::uiExtKeyDown => self.offset_y += 1.0,
