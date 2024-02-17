@@ -63,17 +63,27 @@ impl UsbDevice {
             Ok(settings)
         })?;
 
-        read_port.set_read_timeout(Duration::from_millis(3000))?;
+        read_port.set_read_timeout(Duration::from_millis(10))?;
         read_port.set_write_timeout(Duration::from_millis(0))?;
 
-        let read_port = tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
             Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
-            read_port.discard_buffers().unwrap();
+            let mut drained = 0;
+            loop {
+                let Ok(bytes_read) = read_port.read(&mut [0; 1024]) else {
+                    break;
+                };
+                drained += bytes_read;
+            }
+            if drained > 0 {
+                eprintln!("{drained} bytes drained");
+            }
             Ok(read_port)
         }).await??;
 
+        read_port.set_read_timeout(Duration::from_millis(3000))?;
         read_port.set_dtr(true).unwrap();
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
@@ -86,7 +96,7 @@ impl UsbDevice {
 
         // Writer thread
         let (sender, mut receiver) = mpsc::channel::<Packet>(16);
-        let mut port = read_port.try_clone().context("Failed to clone serial port")?;
+        let port = read_port.try_clone().context("Failed to clone serial port")?;
         std::thread::spawn(move || {
             let mut buf = vec![];
             loop {
@@ -98,7 +108,7 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                // eprintln!("write id={} len={}", pkt.id, buf.len());
+                eprintln!("write id={} len={}", pkt.id, buf.len());
                 let r = port.write_all(&buf).and_then(|_| port.flush());
                 if let Err(e) = r {
                     eprintln!("device thread failed to write: {e}");
@@ -152,7 +162,7 @@ impl UsbDevice {
                     }
                     Ok(r) => r,
                 };
-                // eprintln!("read id={} len={}", reply.id, buf.len());
+                eprintln!("read id={} len={}", reply.id, buf.len());
                 let mut response_channels = state.response_channels.lock().unwrap();
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {
