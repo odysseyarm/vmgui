@@ -4,6 +4,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
+use tracing::Level;
+use tracing_subscriber::EnvFilter;
 use vision_module_gui::Frame;
 use vision_module_gui::{config_window::config_window, marker_config_window::marker_config_window, CloneButShorter, MotState};
 use tokio::sync::Mutex;
@@ -23,6 +25,14 @@ use vision_module_gui::test_canvas::TestCanvas;
 //     * They are leaky
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_env_var("RUST_LOG")
+                .with_default_directive(Level::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
     let tokio_rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -76,7 +86,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     vision_module_gui::layout! { &ui,
         let vert_box = VerticalBox(padded: true) {
-            Compact: let grid = LayoutGrid(padded: false) {
+            Compact: let grid = LayoutGrid(padded: true) {
                 (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
                 (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
                 (2, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button(move || {

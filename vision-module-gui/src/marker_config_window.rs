@@ -6,6 +6,7 @@ use std::io::Read;
 use std::sync::Arc;
 use std::time::Duration;
 use directories::{BaseDirs, UserDirs, ProjectDirs};
+use tracing::error;
 
 use crate::{CloneButShorter};
 use anyhow::Result;
@@ -180,7 +181,7 @@ impl MarkersSettingsForm {
                             self.marker_left.1.set(view.marker_left.position.y);
                         }
                     },
-                    Err(e) => eprintln!("{}", e),
+                    Err(e) => error!("{}", e),
                 };
             } else {
                 self.marker_top.0.set(0);

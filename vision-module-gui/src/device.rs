@@ -5,6 +5,7 @@ use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
 use serial2;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
+use tracing::{debug, error, info, warn};
 
 use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
@@ -52,7 +53,7 @@ impl UsbDevice {
     /// service reads and writes.
     pub async fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
-        eprintln!("Connecting to {path}...");
+        info!("Connecting to {path}...");
         let mut read_port = serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
             settings.set_raw();
             settings.set_baud_rate(115200)?;
@@ -78,7 +79,7 @@ impl UsbDevice {
                 drained += bytes_read;
             }
             if drained > 0 {
-                eprintln!("{drained} bytes drained");
+                info!("{drained} bytes drained");
             }
             Ok(read_port)
         }).await??;
@@ -108,13 +109,13 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                eprintln!("write id={} len={}", pkt.id, buf.len());
+                debug!("write id={} len={}", pkt.id, buf.len());
                 let r = port.write_all(&buf).and_then(|_| port.flush());
                 if let Err(e) = r {
-                    eprintln!("device thread failed to write: {e}");
+                    error!("device thread failed to write: {e}");
                 }
             }
-            eprintln!("device writer thread exiting");
+            info!("device writer thread exiting");
         });
 
         // Reader thread.
@@ -139,16 +140,16 @@ impl UsbDevice {
                     // IO error
                     Err(e) => {
                         if e.kind() == ErrorKind::TimedOut {
-                            eprintln!("read timed out");
+                            debug!("read timed out");
                             io_error_count = 0;
                             continue;
                         }
                         if io_error_count < 3 {
-                            eprintln!("error reading from device: {}, ignoring", e);
+                            warn!("error reading from device: {}, ignoring", e);
                             io_error_count += 1;
                             continue;
                         }
-                        eprintln!("error reading from device: {}", e);
+                        error!("error reading from device: {}", e);
                         break;
                     }
                     Ok(r) => r,
@@ -157,12 +158,12 @@ impl UsbDevice {
                 let reply = match reply {
                     // Parse error
                     Err(e) => {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                         continue;
                     }
                     Ok(r) => r,
                 };
-                eprintln!("read id={} len={}", reply.id, buf.len());
+                debug!("read id={} len={}", reply.id, buf.len());
                 let mut response_channels = state.response_channels.lock().unwrap();
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {
@@ -175,10 +176,10 @@ impl UsbDevice {
                     }
                 };
                 if let Some(e) = e {
-                    eprintln!("device reader thread failed to send reply: {e:?}");
+                    info!("device reader thread failed to send reply: {e:?}");
                 }
             }
-            eprintln!("device reader thread exiting");
+            info!("device reader thread exiting");
         });
         Ok(Self {
             to_thread: sender,

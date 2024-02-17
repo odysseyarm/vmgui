@@ -8,6 +8,7 @@ use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
+use tracing::debug;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
@@ -203,7 +204,7 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some((_x, _y)) = frame_stream.next().await {
             let mut runner = runner.lock().await;
             let state = &mut runner.state;
-            println!("aim: ({}, {})", _x, _y);
+            debug!("aim: ({}, {})", _x, _y);
             state.nf_aim_point = Some(Point2::new(((_x as f64)/2047.+1.)/2., ((_y as f64)/2047.+1.)/2.));
         }
     }
