@@ -132,14 +132,14 @@ impl UsbDevice {
                             eprintln!("read timed out");
                             io_error_count = 0;
                             continue;
-                        } else if io_error_count < 3 {
+                        }
+                        if io_error_count < 3 {
                             eprintln!("error reading from device: {}, ignoring", e);
                             io_error_count += 1;
                             continue;
-                        } else {
-                            eprintln!("error reading from device: {}", e);
-                            break;
                         }
+                        eprintln!("error reading from device: {}", e);
+                        break;
                     }
                     Ok(r) => r,
                 };
