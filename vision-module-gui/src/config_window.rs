@@ -44,12 +44,15 @@ pub fn config_window(
             }
         }
     }
+    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only());
     let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
+    tab_group.append(&ui, "General", general_form);
     tab_group.append(&ui, "Wide field", wf_form);
     tab_group.append(&ui, "Near field", nf_form);
     tab_group.set_margined(&ui, 0, true);
     tab_group.set_margined(&ui, 1, true);
+    tab_group.set_margined(&ui, 2, true);
 
     config_win.set_child(&ui, vbox);
 
@@ -59,6 +62,7 @@ pub fn config_window(
         let config_win = config_win.c();
         move |i| {
             device.set(None);
+            general_settings.clear();
             wf_settings.clear();
             nf_settings.clear();
             let Ok(i) = usize::try_from(i) else { return };
@@ -66,6 +70,7 @@ pub fn config_window(
             let task = async move {
                 let usb_device = UsbDevice::connect(path).await?;
                 tokio::try_join!(
+                    general_settings.load_from_device(&usb_device),
                     wf_settings.load_from_device(&usb_device),
                     nf_settings.load_from_device(&usb_device),
                 )?;
@@ -144,6 +149,17 @@ pub fn config_window(
         let ui = ui.c();
         move |device: UsbDevice| async move {
             let mut errors = vec![];
+            general_settings.validate(&mut errors);
+            if !errors.is_empty() {
+                let mut message = String::new();
+                for msg in &errors {
+                    message.push_str(&msg);
+                    message.push('\n');
+                }
+                config_win.modal_err_async(&ui, "General Validation Error", &message).await;
+                return false;
+            }
+
             wf_settings.validate(&mut errors);
             if !errors.is_empty() {
                 let mut message = String::new();
@@ -166,6 +182,10 @@ pub fn config_window(
                 return false;
             }
 
+            if let Err(e) = general_settings.apply(&device).await {
+                config_win.modal_err_async(&ui, "Failed to apply general settings", &e.to_string()).await;
+                return false;
+            };
             if let Err(e) = wf_settings.apply(&device).await {
                 config_win.modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string()).await;
                 return false;
@@ -247,6 +267,90 @@ pub fn config_window(
     });
 
     (config_win, device.read_only())
+}
+
+#[derive(Copy, Clone)]
+struct GeneralSettingsForm {
+    connecting_string: RwSignal<String>,
+    impact_threshold: RwSignal<i32>,
+}
+
+impl GeneralSettingsForm {
+    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>) -> (Form, Self) {
+        let connecting_string = create_rw_signal(String::new());
+        let impact_threshold = create_rw_signal(0);
+        crate::layout! { &ui,
+            let form = Form(padded: true) {
+                (Compact, "Impact threshold") : let x = Spinbox(signal: impact_threshold)
+            }
+        }
+        (
+            form,
+            Self {
+                connecting_string,
+                impact_threshold,
+            },
+        )
+    }
+
+    async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
+        self.connecting_string.set("Connecting...".into());
+        let impact_threshold = device.impact_threshold().await?;
+
+        self.impact_threshold.set(i32::from(impact_threshold));
+        Ok(())
+    }
+
+    fn validate(&self, errors: &mut Vec<String>) {
+        macro_rules! validators {
+            ($($display:literal $reg:ident : $ty:ty $({ $( $check:expr ),* $(,)? })? ),* $(,)?) => {
+                $(
+                    #[allow(unused_variables)]
+                    let $reg = self.$reg.with_untracked(|s| s.parse::<$ty>());
+                    match &$reg {
+                        Ok(_) => (),
+                        Err(e) => errors.push(format!("{}: {}", $display, e)),
+                    }
+                )*
+                if !errors.is_empty() {
+                    return
+                }
+                $(
+                    // SAFETY: all the values are already checked for errors. Can convert to
+                    // unwrap_unchecked if necessary.
+                    #[allow(unused_variables)]
+                    let $reg = $reg.unwrap();
+                )*
+                $(
+                    $($(
+                        let (test_result, msg) = ($check)($reg);
+                        if !test_result {
+                            errors.push(format!("{}: {}", $display, msg));
+                        }
+                    )*)?
+                )*
+            }
+        }
+        validators! {
+            //
+        }
+    }
+
+    /// Make sure to call `validate()` before calling this method.
+    async fn apply(&self, device: &UsbDevice) -> Result<()> {
+        tokio::try_join!(
+            device.set_impact_threshold(u8::try_from(self.impact_threshold.get_untracked()).unwrap()),
+        )?;
+        Ok(())
+    }
+
+    fn clear(&self) {
+        self.impact_threshold.set(0);
+    }
+
+    fn load_defaults(&self) {
+        self.impact_threshold.set(5);
+    }
 }
 
 #[derive(Copy, Clone)]

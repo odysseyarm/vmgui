@@ -17,6 +17,9 @@ pub enum PacketData {
     FlashSettings,
     AimPointReport(AimPointReport),
     ImpactWithAimPointReport(ImpactWithAimPointReport),
+    WriteConfig(WriteConfig),
+    ReadConfig,
+    ReadConfigResponse(ReadConfigResponse),
 }
 pub enum StreamChoice {
     Object,
@@ -44,6 +47,16 @@ pub struct ReadRegisterResponse {
     pub bank: u8,
     pub address: u8,
     pub data: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WriteConfig {
+    pub impact_threshold: u8,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ReadConfigResponse {
+    pub impact_threshold: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -139,6 +152,9 @@ pub enum PacketType {
     FlashSettings,
     AimPointReport,
     ImpactWithAimPointReport,
+    WriteConfig,
+    ReadConfig,
+    ReadConfigResponse,
     End,
 }
 
@@ -155,7 +171,10 @@ impl TryFrom<u8> for PacketType {
             6 => Ok(Self::FlashSettings),
             7 => Ok(Self::AimPointReport),
             8 => Ok(Self::ImpactWithAimPointReport),
-            9 => Ok(Self::End),
+            9 => Ok(Self::WriteConfig),
+            10 => Ok(Self::ReadConfig),
+            11 => Ok(Self::ReadConfigResponse),
+            12 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -175,6 +194,9 @@ impl Packet {
             PacketData::AimPointReport(_) => P::AimPointReport,
             PacketData::ImpactWithAimPointReport(_) => P::ImpactWithAimPointReport,
             PacketData::FlashSettings => P::FlashSettings,
+            PacketData::WriteConfig(_) => P::WriteConfig,
+            PacketData::ReadConfig => P::ReadConfig,
+            PacketData::ReadConfigResponse(_) => P::ReadConfigResponse,
         }
     }
 
@@ -202,6 +224,9 @@ impl Packet {
             PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
             PacketType::AimPointReport => PacketData::AimPointReport(AimPointReport::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
+            PacketType::WriteConfig => PacketData::WriteConfig(WriteConfig::parse(bytes)?),
+            PacketType::ReadConfig => PacketData::ReadConfig,
+            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(ReadConfigResponse::parse(bytes)?),
             _ => unimplemented!(),
         };
         Ok(Self { id, data })
@@ -218,6 +243,9 @@ impl Packet {
             PacketData::StreamUpdate(_) => 2,
             PacketData::AimPointReport(_) => 80,
             PacketData::ImpactWithAimPointReport(_) => 80,
+            PacketData::WriteConfig(_) => 2,
+            PacketData::ReadConfig => 0,
+            PacketData::ReadConfigResponse(_) => 2,
             PacketData::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
@@ -233,6 +261,9 @@ impl Packet {
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::AimPointReport(_) => (),
             PacketData::ImpactWithAimPointReport(_) => (),
+            PacketData::WriteConfig(x) => x.serialize(buf),
+            PacketData::ReadConfig => (),
+            PacketData::ReadConfigResponse(x) => x.serialize(buf),
             PacketData::FlashSettings => (),
         };
     }
@@ -242,6 +273,13 @@ impl PacketData {
     pub fn read_register_response(self) -> Option<ReadRegisterResponse> {
         match self {
             PacketData::ReadRegisterResponse(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn read_config_response(self) -> Option<ReadConfigResponse> {
+        match self {
+            PacketData::ReadConfigResponse(x) => Some(x),
             _ => None,
         }
     }
@@ -312,6 +350,36 @@ impl WriteRegister {
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&[self.port as u8, self.bank, self.address, self.data]);
+    }
+}
+
+impl ReadConfigResponse {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
+        let [impact_threshold, _, ..] = **bytes else {
+            return Err(E::UnexpectedEof);
+        };
+        *bytes = &bytes[2..];
+        Ok(Self { impact_threshold })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[self.impact_threshold, 0]);
+    }
+}
+
+impl WriteConfig {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
+        let [impact_threshold, _, ..] = **bytes else {
+            return Err(E::UnexpectedEof);
+        };
+        *bytes = &bytes[2..];
+        Ok(Self { impact_threshold })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[self.impact_threshold, 0]);
     }
 }
 
