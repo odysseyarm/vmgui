@@ -90,6 +90,7 @@ pub fn create(
                     ) {
                         Some(t) => t,
                         None => {
+                            drop(mot_runner);
                             window.modal_err(&ui, "Calibration failed", "Singular matrix");
                             return;
                         }
@@ -142,7 +143,6 @@ pub fn create(
                     marker_settings.marker_right.1.set(right.y.round() as i32);
                 }
             });
-
         }
     });
     vbox
