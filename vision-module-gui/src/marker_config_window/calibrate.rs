@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use ats_cv::get_perspective_transform;
 use iui::{controls::{VerticalBox, Window}, UI};
-use leptos_reactive::{create_effect, Effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
-use nalgebra::{Point2, Scale2, Translation2, Vector2};
+use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
+use nalgebra::{Point2, Vector2};
 use tokio::sync::Mutex;
 
 use crate::{mot_runner::MotRunner, CloneButShorter};
@@ -79,14 +79,14 @@ pub fn create(
 
                     // do math
                     let transform = match get_perspective_transform(
-                        s1.reported_aim_point,
-                        s2.reported_aim_point,
-                        s3.reported_aim_point,
-                        s4.reported_aim_point,
                         s1.true_aim_point,
                         s2.true_aim_point,
                         s3.true_aim_point,
                         s4.true_aim_point,
+                        s1.reported_aim_point,
+                        s2.reported_aim_point,
+                        s3.reported_aim_point,
+                        s4.reported_aim_point,
                     ) {
                         Some(t) => t,
                         None => {
