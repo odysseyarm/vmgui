@@ -7,6 +7,7 @@ use iui::{controls::{VerticalBox, Window}, UI};
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
 use nalgebra::{Point2, Vector2};
 use tokio::sync::Mutex;
+use tracing::debug;
 
 use crate::{mot_runner::MotRunner, CloneButShorter};
 
@@ -66,16 +67,19 @@ pub fn create(
     collect_button.on_clicked(ui, {
         let ui = ui.c();
         move |_| {
-            let mut mot_runner = mot_runner.blocking_lock();
-            let Some(reported_aim_point) = mot_runner.state.nf_aim_point else { return };
-            let true_aim_point = reported_aim_point + mot_runner.nf_offset;
+            let runner = mot_runner.blocking_lock();
+            let Some(reported_aim_point) = runner.state.nf_aim_point else { return };
+            let true_aim_point = reported_aim_point + runner.nf_offset;
+            drop(runner);
             samples.update(|s| {
-                s.push(Sample { reported_aim_point, true_aim_point });
+                let sample = Sample { reported_aim_point, true_aim_point };
+                debug!("{sample:?}");
+                s.push(sample);
 
                 if let [s1, s2, s3, s4] = s[..] {
                     s.clear();
                     calibrating.set(false);
-                    mot_runner.nf_offset = Vector2::new(0.0, 0.0);
+                    mot_runner.blocking_lock().nf_offset = Vector2::new(0.0, 0.0);
 
                     // do math
                     let transform = match get_perspective_transform(
@@ -90,13 +94,14 @@ pub fn create(
                     ) {
                         Some(t) => t,
                         None => {
-                            drop(mot_runner);
                             window.modal_err(&ui, "Calibration failed", "Singular matrix");
                             return;
                         }
                     };
+                    debug!("calculated transformation:{transform}");
                     // TODO don't assume view[0]
-                    let view = &mut mot_runner.markers_settings.views[0];
+                    let mut runner = mot_runner.blocking_lock();
+                    let view = &mut runner.markers_settings.views[0];
                     let top = view.marker_top.position;
                     let bottom = view.marker_bottom.position;
                     let left = view.marker_left.position;
@@ -148,7 +153,7 @@ pub fn create(
     vbox
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct Sample {
     reported_aim_point: Point2<f64>,
     true_aim_point: Point2<f64>,
