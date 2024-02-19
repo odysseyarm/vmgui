@@ -2,9 +2,10 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
+use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, U1, U8};
+use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, Vector2, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -36,6 +37,7 @@ pub struct MotRunner {
     pub datapoints: Arc<Mutex<Vec<crate::Frame>>>,
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
+    pub nf_offset: Vector2<f64>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -199,13 +201,40 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
 
 async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
-    let mut frame_stream = device.stream_aim().await.unwrap();
+    let mut aim_stream = device.stream_aim().await.unwrap();
     while runner.lock().await.device.is_some() {
-        if let Some((_x, _y)) = frame_stream.next().await {
+        if let Some((x, y)) = aim_stream.next().await {
             let mut runner = runner.lock().await;
+            debug!("aim: ({}, {})", x, y);
+            let p = Point2::new(x, y).cast::<f64>();
+
+            // TODO don't assume view[0]
+            let view = &mut runner.markers_settings.views[0];
+            let top = view.marker_top.position;
+            let bottom = view.marker_bottom.position;
+            let left = view.marker_left.position;
+            let right = view.marker_right.position;
+
+            let top = Point2::new(top.x, top.y).cast::<f64>();
+            let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
+            let left = Point2::new(left.x, left.y).cast::<f64>();
+            let right = Point2::new(right.x, right.y).cast::<f64>();
+
+            // TODO maybe don't recompute this in a hot loop lol
+            let tf = get_perspective_transform(
+                Point2::new(0.0, -2047.0), // top
+                Point2::new(0.0, 2047.0), // bottom
+                Point2::new(-2047.0, 0.0), // left
+                Point2::new(2047.0, 0.0), // right
+                top,
+                bottom,
+                left,
+                right,
+            ).unwrap();
+            let p = tf.transform_point(&p);
+
             let state = &mut runner.state;
-            debug!("aim: ({}, {})", _x, _y);
-            state.nf_aim_point = Some(Point2::new(((_x as f64)/2047.+1.)/2., ((_y as f64)/2047.+1.)/2.));
+            state.nf_aim_point = Some(Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.));
         }
     }
 }

@@ -80,7 +80,7 @@ pub struct MotData {
     pub vy: u8,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectReport {
     pub mot_data_nf: [MotData; 16],
     pub mot_data_wf: [MotData; 16],
@@ -142,6 +142,7 @@ impl TryFrom<u8> for Port {
 }
 
 #[repr(u8)]
+#[derive(Copy, Clone, Debug)]
 pub enum PacketType {
     WriteRegister, // a.k.a. Poke
     ReadRegister,  // a.k.a. Peek
@@ -220,14 +221,14 @@ impl Packet {
             PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
-            // PacketType::StreamUpdate => PacketData::StreamUpdate(bytes[0] != 0),
+            PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
             PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
             PacketType::AimPointReport => PacketData::AimPointReport(AimPointReport::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
             PacketType::WriteConfig => PacketData::WriteConfig(WriteConfig::parse(bytes)?),
             PacketType::ReadConfig => PacketData::ReadConfig,
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(ReadConfigResponse::parse(bytes)?),
-            _ => unimplemented!(),
+            p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
     }
@@ -241,8 +242,8 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => 0,
             PacketData::ObjectReport(_) => 514,
             PacketData::StreamUpdate(_) => 2,
-            PacketData::AimPointReport(_) => 80,
-            PacketData::ImpactWithAimPointReport(_) => 80,
+            PacketData::AimPointReport(_) => 4,
+            PacketData::ImpactWithAimPointReport(_) => 4,
             PacketData::WriteConfig(_) => 2,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 2,
@@ -259,8 +260,8 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
-            PacketData::AimPointReport(_) => (),
-            PacketData::ImpactWithAimPointReport(_) => (),
+            PacketData::AimPointReport(x) => x.serialize(buf),
+            PacketData::ImpactWithAimPointReport(_) => unimplemented!(),
             PacketData::WriteConfig(x) => x.serialize(buf),
             PacketData::ReadConfig => (),
             PacketData::ReadConfigResponse(x) => x.serialize(buf),
@@ -469,5 +470,22 @@ impl AimPointReport {
         };
         *bytes = &bytes[4..];
         Ok(aim_point)
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        let [a, b] = self.x.to_le_bytes();
+        let [c, d] = self.y.to_le_bytes();
+        buf.extend_from_slice(&[a, b, c, d]);
+    }
+}
+
+impl StreamUpdate {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let stream_update = StreamUpdate {
+            mask: bytes[0],
+            active: bytes[1] != 0,
+        };
+        *bytes = &bytes[2..];
+        Ok(stream_update)
     }
 }

@@ -49,7 +49,11 @@ pub fn marker_config_window(
     }
     let (marker_settings_form, mut marker_settings) = MarkersSettingsForm::new(&ui);
     tab_group.append(&ui, "Marker Settings", marker_settings_form.c());
-    tab_group.append(&ui, "Calibrate", calibrate::create(ui, marker_offset_calibrating));
+    tab_group.append(
+        &ui,
+        "Calibrate",
+        calibrate::create(ui, marker_offset_calibrating, mot_runner.c(), marker_settings, config_win.c()),
+    );
     tab_group.set_margined(&ui, 0, true);
     tab_group.set_margined(&ui, 1, true);
 

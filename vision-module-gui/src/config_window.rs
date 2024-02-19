@@ -16,6 +16,7 @@ use serialport::SerialPortType::UsbPort;
 
 pub fn config_window(
     ui: &UI,
+    simulator_addr: Option<String>,
     _tokio_handle: &tokio::runtime::Handle,
 ) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
     let ui_ctx = ui.async_context();
@@ -60,15 +61,21 @@ pub fn config_window(
     let device_combobox_on_selected = {
         let ui = ui.c();
         let config_win = config_win.c();
+        let sim_addr = simulator_addr.c();
         move |i| {
             device.set(None);
             general_settings.clear();
             wf_settings.clear();
             nf_settings.clear();
             let Ok(i) = usize::try_from(i) else { return };
-            let path = device_list.with_untracked(|d| d[i].port_name.clone());
+            let path = device_list.with_untracked(|d| Some(d.get(i)?.port_name.clone()));
+            let sim_addr = sim_addr.c();
             let task = async move {
-                let usb_device = UsbDevice::connect_serial(path).await?;
+                let usb_device = if let Some(path) = path {
+                    UsbDevice::connect_serial(path).await?
+                } else {
+                    UsbDevice::connect_tcp(sim_addr.as_ref().unwrap())?
+                };
                 tokio::try_join!(
                     general_settings.load_from_device(&usb_device),
                     wf_settings.load_from_device(&usb_device),
@@ -94,6 +101,7 @@ pub fn config_window(
         // update device combobox when device_list changes
         let device_combobox = device_combobox.c();
         let ui = ui.c();
+        let simulator_addr = simulator_addr.c();
         move |_| {
             let mut device_combobox = device_combobox.c();
             device_combobox.clear(&ui);
@@ -102,12 +110,16 @@ pub fn config_window(
                     device_combobox.append(&ui, &display_for_serial_port(&device));
                 }
             });
+            if let Some(sim_addr) = &simulator_addr {
+                device_combobox.append(&ui, &format!("Simulator @ {sim_addr}"));
+            }
             device_combobox.enable(&ui);
         }
     });
     let mut refresh_device_list = {
         let config_win = config_win.c();
         let ui = ui.c();
+        let simulator_addr = simulator_addr.c();
         move || {
             let ports = serialport::available_ports();
             let ports: Vec<_> = match ports {
@@ -133,7 +145,10 @@ pub fn config_window(
                 }
             }).collect();
             device_list.set(ports.c());
-            if ports.len() > 0 {
+            if simulator_addr.is_some() {
+                device_combobox.set_selected(&ui, ports.len() as i32);
+                device_combobox_on_selected(ports.len() as i32);
+            } else if ports.len() > 0 {
                 device_combobox.set_selected(&ui, 0);
                 device_combobox_on_selected(0);
             } else {

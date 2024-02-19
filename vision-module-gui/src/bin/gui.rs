@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use iui::prelude::*;
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
+use nalgebra::Vector2;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use vision_module_gui::Frame;
@@ -44,6 +45,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = UI::init().expect("Couldn't initialize UI library");
     let ui_ctx = ui.async_context();
 
+    let simulator_addr = std::env::args().nth(1);
     let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
@@ -55,6 +57,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         datapoints: datapoints.c(),
         ui_update: ui_update.c(),
         ui_ctx,
+        nf_offset: Vector2::default(),
     }));
     let tracking = RwSignal::new(false);
     let testing = RwSignal::new(false);
@@ -62,7 +65,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
+    let (mut config_win, device_rs) = config_window(&ui, simulator_addr, tokio_handle);
     let mut marker_config_win = marker_config_window(&ui, marker_offset_calibrating, mot_runner.c());
 
 
@@ -70,15 +73,16 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
 
-    let test_win_on_closing = move |_: &mut _| testing.set(false);
+    let test_win_on_closing = move |_: &mut _| {
+        testing.set(false);
+        marker_offset_calibrating.set(false);
+    };
     test_win.on_closing(&ui, test_win_on_closing.c());
     let test_area = Area::new(&ui, Box::new(TestCanvas {
         ctx: ui.c(),
         window: test_win.c(),
         on_closing: Box::new(test_win_on_closing.c()),
         state: mot_runner.c(),
-        offset_x: 0.0,
-        offset_y: 0.0,
     }));
     let mut test_hbox = HorizontalBox::new(&ui);
     test_hbox.append(&ui, test_area.c(), LayoutStrategy::Stretchy);
@@ -166,7 +170,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     create_effect({
         let mot_runner = mot_runner.c();
         move |abort_handle: Option<Option<AbortHandle>>| {
-            if tracking.get() || testing.get() {
+            if tracking.get() || testing.get() || marker_offset_calibrating.get() {
                 if let Some(Some(abort_handle)) = abort_handle {
                     // The mot_runner task is already running
                     Some(abort_handle)
@@ -191,13 +195,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Show the test window and form when running test
+    // Show the test window and form when running test or when calibrating marker offsets
     create_effect({
         let ui = ui.c();
         let form_vbox = form_vbox.c();
         let test_win = test_win.c();
         move |_| {
-            if testing.get() {
+            if testing.get() || marker_offset_calibrating.get() {
                 form_vbox.c().show(&ui);
                 test_win.c().show(&ui);
             } else {
@@ -328,7 +332,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             if tracking.get_untracked() {
                 run_area.queue_redraw_all(&ui);
             }
-            if testing.get_untracked() {
+            if testing.get_untracked() || marker_offset_calibrating.get_untracked() {
                 test_area.queue_redraw_all(&ui);
             }
             true

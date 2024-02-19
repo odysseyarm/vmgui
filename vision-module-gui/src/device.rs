@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{ErrorKind, Read, Write}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
@@ -91,6 +91,14 @@ impl UsbDevice {
         Ok(Self::new(reader, writer))
     }
 
+    pub fn connect_tcp(addr: &str) -> Result<Self> {
+        info!("Connecting to {addr}...");
+        let conn = TcpStream::connect(addr)?;
+        conn.set_read_timeout(Some(Duration::from_millis(3000)))?;
+        let conn2 = conn.try_clone().context("Failed to clone tcp stream")?;
+        Ok(Self::new(conn, conn2))
+    }
+
     pub fn new<R, W>(reader: R, writer: W) -> Self
     where
         R: Read + Send + 'static,
@@ -150,7 +158,7 @@ impl UsbDevice {
                 let reply = match reply {
                     // IO error
                     Err(e) => {
-                        if e.kind() == ErrorKind::TimedOut {
+                        if e.kind() == ErrorKind::TimedOut || e.kind() == ErrorKind::WouldBlock {
                             debug!("read timed out");
                             io_error_count = 0;
                             continue;
