@@ -1,8 +1,9 @@
 use std::sync::Arc;
 use arrayvec::ArrayVec;
-use nalgebra::Point2;
+use nalgebra::coordinates::XY;
+use nalgebra::{Point2, Scale2};
 use tokio::sync::Mutex;
-use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
+use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
@@ -15,8 +16,6 @@ pub struct TestCanvas {
     pub window: Window,
     pub on_closing: Box<dyn FnMut(&mut Window)>,
     pub state: Arc<Mutex<MotRunner>>,
-    pub offset_x: f64,
-    pub offset_y: f64,
 }
 
 impl AreaHandler for TestCanvas {
@@ -44,12 +43,15 @@ impl AreaHandler for TestCanvas {
         //     draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
         // }
         // fv_ch_path.end(ctx);
-        ctx.draw_text(20.0, 20.0, format!("offset = ({:.4}, {:.4})", self.offset_x, self.offset_y).as_str());
+        ctx.draw_text(
+            20.0,
+            20.0,
+            &format!("offset = ({:.4}, {:.4})", runner.nf_offset.x, runner.nf_offset.y),
+        );
         if let Some(aim_point) = state.nf_aim_point {
-            let x = aim_point.x*draw_params.area_width + self.offset_x;
-            let y = aim_point.y*draw_params.area_height + self.offset_y;
-            draw_crosshair(&ctx, &nf_ch_path, x, y, 15.);
-            ctx.draw_text(x+20.0, y+20.0, format!("({:.4}, {:.4})", x, y).as_str());
+            let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aim_point + runner.nf_offset);
+            draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
+            ctx.draw_text(p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
         }
         nf_ch_path.end(ctx);
         if let Some(aim_point) = state.wf_aim_point {
@@ -143,17 +145,21 @@ impl AreaHandler for TestCanvas {
         if area_key_event.up {
             return true;
         }
+        let mut slow_speed = 0.001;
+        if area_key_event.modifiers.contains(Modifiers::MODIFIER_SHIFT) {
+            slow_speed = 0.0001;
+        }
         match area_key_event.ext_key as _ {
-            ui_sys::uiExtKeyUp => self.offset_y -= 1.0,
-            ui_sys::uiExtKeyDown => self.offset_y += 1.0,
-            ui_sys::uiExtKeyLeft => self.offset_x -= 1.0,
-            ui_sys::uiExtKeyRight => self.offset_x += 1.0,
+            ui_sys::uiExtKeyUp => self.state.blocking_lock().nf_offset.y -= slow_speed,
+            ui_sys::uiExtKeyDown => self.state.blocking_lock().nf_offset.y += slow_speed,
+            ui_sys::uiExtKeyLeft => self.state.blocking_lock().nf_offset.x -= slow_speed,
+            ui_sys::uiExtKeyRight => self.state.blocking_lock().nf_offset.x += slow_speed,
             ui_sys::uiExtKeyEscape => (self.on_closing)(&mut self.window),
             _ => match area_key_event.key {
-                b'w' => self.offset_y -= 100.0,
-                b's' => self.offset_y += 100.0,
-                b'a' => self.offset_x -= 100.0,
-                b'd' => self.offset_x += 100.0,
+                b'w' => self.state.blocking_lock().nf_offset.y -= 0.1,
+                b's' => self.state.blocking_lock().nf_offset.y += 0.1,
+                b'a' => self.state.blocking_lock().nf_offset.x -= 0.1,
+                b'd' => self.state.blocking_lock().nf_offset.x += 0.1,
                 b'q' => (self.on_closing)(&mut self.window),
                 _ => (),
             }

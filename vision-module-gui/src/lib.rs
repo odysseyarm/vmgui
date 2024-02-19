@@ -12,7 +12,7 @@ pub mod layout_macro;
 pub mod mot_runner;
 pub mod run_canvas;
 pub mod test_canvas;
-mod custom_shapes;
+pub mod custom_shapes;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
@@ -31,9 +31,11 @@ pub struct Frame {
 
 #[derive(Default)]
 pub struct MotState {
+    // Coordinates between 0.0 and 1.0
     pub fv_aim_point: Option<Point2<f64>>,
     pub nf_aim_point: Option<Point2<f64>>,
     pub wf_aim_point: Option<Point2<f64>>,
+
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
     pub nf_pva2ds: [Pva2d<f64>; 4],
