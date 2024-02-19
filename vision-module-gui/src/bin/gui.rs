@@ -241,10 +241,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                               nf_aim_point_y: None,
                               };
 
-            let state = state.blocking_lock();
-            let state = &state.state;
+            let runner = state.blocking_lock();
+            let state = &runner.state;
 
             if let Some(nf_aim_point) = state.nf_aim_point {
+                let nf_aim_point = nf_aim_point + runner.nf_offset;
                 frame.nf_aim_point_x = Some(nf_aim_point.x);
                 frame.nf_aim_point_y = Some(nf_aim_point.y);
             }
