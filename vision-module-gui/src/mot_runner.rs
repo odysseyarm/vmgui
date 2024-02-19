@@ -183,6 +183,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 };
 
                 if let Some(nf_aim_point) = runner.state.nf_aim_point.clone() {
+                    let nf_aim_point = nf_aim_point + runner.nf_offset;
                     frame.nf_aim_point_x = Some(nf_aim_point.x);
                     frame.nf_aim_point_y = Some(nf_aim_point.y);
                 }
