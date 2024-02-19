@@ -79,14 +79,14 @@ pub fn create(
 
                     // do math
                     let transform = match get_perspective_transform(
-                        s1.true_aim_point,
-                        s2.true_aim_point,
-                        s3.true_aim_point,
-                        s4.true_aim_point,
                         s1.reported_aim_point,
                         s2.reported_aim_point,
                         s3.reported_aim_point,
                         s4.reported_aim_point,
+                        s1.true_aim_point,
+                        s2.true_aim_point,
+                        s3.true_aim_point,
+                        s4.true_aim_point,
                     ) {
                         Some(t) => t,
                         None => {
