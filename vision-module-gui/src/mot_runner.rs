@@ -182,11 +182,37 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                     nf_aim_point_y: None,
                 };
 
-                if let Some(nf_aim_point) = runner.state.nf_aim_point.clone() {
-                    let nf_aim_point = nf_aim_point + runner.nf_offset;
-                    frame.nf_aim_point_x = Some(nf_aim_point.x);
-                    frame.nf_aim_point_y = Some(nf_aim_point.y);
-                }
+                let p = Point2::new(_x, _y).cast::<f64>();
+
+                // // TODO don't assume view[0]
+                // let view = &runner.markers_settings.views[0];
+                // let top = view.marker_top.position;
+                // let bottom = view.marker_bottom.position;
+                // let left = view.marker_left.position;
+                // let right = view.marker_right.position;
+
+                // let top = Point2::new(top.x, top.y).cast::<f64>();
+                // let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
+                // let left = Point2::new(left.x, left.y).cast::<f64>();
+                // let right = Point2::new(right.x, right.y).cast::<f64>();
+
+                // // TODO maybe don't recompute this in a hot loop lol
+                // let tf = get_perspective_transform(
+                //     Point2::new(0.0, -2047.0), // top
+                //     Point2::new(0.0, 2047.0), // bottom
+                //     Point2::new(-2047.0, 0.0), // left
+                //     Point2::new(2047.0, 0.0), // right
+                //     top,
+                //     bottom,
+                //     left,
+                //     right,
+                // ).unwrap();
+                // let p = tf.transform_point(&p);
+
+                let p = Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.);
+
+                frame.nf_aim_point_x = Some(p.x);
+                frame.nf_aim_point_y = Some(p.y);
 
                 datapoints.push(frame);
 
