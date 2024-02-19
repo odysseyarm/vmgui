@@ -75,6 +75,7 @@ pub fn create(
                 if let [s1, s2, s3, s4] = s[..] {
                     s.clear();
                     calibrating.set(false);
+                    mot_runner.nf_offset = Vector2::new(0.0, 0.0);
 
                     // do math
                     let transform = match get_perspective_transform(
