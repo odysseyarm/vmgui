@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
@@ -136,9 +136,9 @@ impl UsbDevice {
             info!("device writer thread exiting");
         });
 
-        let mut reader = reader;
         // Reader thread.
         std::thread::spawn(move || {
+            let mut reader = BufReader::new(reader);
             let mut buf = vec![];
             let mut io_error_count = 0;
             loop {
