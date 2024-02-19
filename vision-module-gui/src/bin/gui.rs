@@ -83,6 +83,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         window: test_win.c(),
         on_closing: Box::new(test_win_on_closing.c()),
         state: mot_runner.c(),
+        last_draw_width: None,
+        last_draw_height: None,
     }));
     let mut test_hbox = HorizontalBox::new(&ui);
     test_hbox.append(&ui, test_area.c(), LayoutStrategy::Stretchy);
