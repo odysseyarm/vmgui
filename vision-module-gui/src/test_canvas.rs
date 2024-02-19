@@ -16,10 +16,14 @@ pub struct TestCanvas {
     pub window: Window,
     pub on_closing: Box<dyn FnMut(&mut Window)>,
     pub state: Arc<Mutex<MotRunner>>,
+    pub last_draw_width: Option<f64>,
+    pub last_draw_height: Option<f64>,
 }
 
 impl AreaHandler for TestCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
+        self.last_draw_width = Some(draw_params.area_width);
+        self.last_draw_height = Some(draw_params.area_height);
         let ctx = &draw_params.context;
 
         let background = Path::new(ctx, FillMode::Winding);
@@ -161,9 +165,22 @@ impl AreaHandler for TestCanvas {
                 b'a' => self.state.blocking_lock().nf_offset.x -= 0.1,
                 b'd' => self.state.blocking_lock().nf_offset.x += 0.1,
                 b'q' => (self.on_closing)(&mut self.window),
+                // Backspace
+                8 => self.state.blocking_lock().nf_offset = Default::default(),
                 _ => (),
             }
         }
         true
+    }
+
+    fn mouse_event(&mut self, _area: &Area, mouse_event: &iui::controls::AreaMouseEvent) {
+        if mouse_event.down == 1 {
+            let Some(w) = self.last_draw_width else { return };
+            let Some(h) = self.last_draw_height else { return };
+            let mut state = self.state.blocking_lock();
+            let Some(aim_point) = state.state.nf_aim_point else { return };
+            state.nf_offset.x = mouse_event.x / w - aim_point.x;
+            state.nf_offset.y = mouse_event.y / h - aim_point.y;
+        }
     }
 }
