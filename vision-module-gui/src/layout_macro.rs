@@ -48,7 +48,7 @@ macro_rules! layout {
 
     // Button
     [ $ui:expr ,
-        let $ctl:ident = Button ( $text:expr $( , enabled: $enabled:expr )? )
+        let $ctl:ident = Button ( $text:expr $( , enabled: $enabled:expr $(,)? )? )
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::Button::new($ui, "");

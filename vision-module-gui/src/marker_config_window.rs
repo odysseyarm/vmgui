@@ -1,5 +1,7 @@
 extern crate directories;
 
+mod calibrate;
+
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Read;
@@ -22,7 +24,7 @@ use crate::mot_runner::MotRunner;
 
 pub fn marker_config_window(
     ui: &UI,
-    _tokio_handle: &tokio::runtime::Handle,
+    marker_offset_calibrating: RwSignal<bool>,
     mot_runner: Arc<Mutex<MotRunner>>,
 ) -> Window {
     let ui_ctx = ui.async_context();
@@ -47,7 +49,9 @@ pub fn marker_config_window(
     }
     let (marker_settings_form, mut marker_settings) = MarkersSettingsForm::new(&ui);
     tab_group.append(&ui, "Marker Settings", marker_settings_form.c());
+    tab_group.append(&ui, "Calibrate", calibrate::create(ui, marker_offset_calibrating));
     tab_group.set_margined(&ui, 0, true);
+    tab_group.set_margined(&ui, 1, true);
 
     config_win.set_child(&ui, vbox);
 

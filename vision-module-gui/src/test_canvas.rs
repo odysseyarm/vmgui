@@ -140,6 +140,9 @@ impl AreaHandler for TestCanvas {
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
         debug!("{:?}", area_key_event);
+        if area_key_event.up {
+            return true;
+        }
         match area_key_event.ext_key as _ {
             ui_sys::uiExtKeyUp => self.offset_y -= 1.0,
             ui_sys::uiExtKeyDown => self.offset_y += 1.0,
