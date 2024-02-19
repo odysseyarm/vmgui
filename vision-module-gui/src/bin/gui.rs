@@ -56,19 +56,20 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_update: ui_update.c(),
         ui_ctx,
     }));
+    let tracking = RwSignal::new(false);
+    let testing = RwSignal::new(false);
+    let marker_offset_calibrating = RwSignal::new(false);
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
     let (mut config_win, device_rs) = config_window(&ui, tokio_handle);
-    let mut marker_config_win = marker_config_window(&ui, tokio_handle, mot_runner.c());
+    let mut marker_config_win = marker_config_window(&ui, marker_offset_calibrating, mot_runner.c());
 
 
-    let mut test_win = Window::new(&ui, "Aimpoint Test", 10, 10, WindowType::NoMenubar);
+    let mut test_win = Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
 
-    let tracking = RwSignal::new(false);
-    let testing = RwSignal::new(false);
     let test_win_on_closing = move |_: &mut _| testing.set(false);
     test_win.on_closing(&ui, test_win_on_closing.c());
     let test_area = Area::new(&ui, Box::new(TestCanvas {

@@ -51,7 +51,7 @@ impl Drop for ResponseSlot {
 impl UsbDevice {
     /// Connect to the device using the serial port at `path`. Starts two background threads to
     /// service reads and writes.
-    pub async fn connect<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
+    pub async fn connect_serial<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
         let path = path.into();
         info!("Connecting to {path}...");
         let mut read_port = serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
@@ -67,7 +67,7 @@ impl UsbDevice {
         read_port.set_read_timeout(Duration::from_millis(10))?;
         read_port.set_write_timeout(Duration::from_millis(0))?;
 
-        let mut read_port = tokio::task::spawn_blocking(move || -> Result<_> {
+        let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
             Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
@@ -84,8 +84,18 @@ impl UsbDevice {
             Ok(read_port)
         }).await??;
 
-        read_port.set_read_timeout(Duration::from_millis(3000))?;
-        read_port.set_dtr(true).unwrap();
+        port.set_read_timeout(Duration::from_millis(3000))?;
+        port.set_dtr(true).unwrap();
+        let writer = port.try_clone().context("Failed to clone serial port")?;
+        let reader = port;
+        Ok(Self::new(reader, writer))
+    }
+
+    pub fn new<R, W>(reader: R, writer: W) -> Self
+    where
+        R: Read + Send + 'static,
+        W: Write + Send + 'static,
+    {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
@@ -97,7 +107,7 @@ impl UsbDevice {
 
         // Writer thread
         let (sender, mut receiver) = mpsc::channel::<Packet>(16);
-        let port = read_port.try_clone().context("Failed to clone serial port")?;
+        let mut writer = writer;
         std::thread::spawn(move || {
             let mut buf = vec![];
             loop {
@@ -110,7 +120,7 @@ impl UsbDevice {
                 pkt.serialize(&mut buf);
 
                 debug!("write id={} len={}", pkt.id, buf.len());
-                let r = port.write_all(&buf).and_then(|_| port.flush());
+                let r = writer.write_all(&buf).and_then(|_| writer.flush());
                 if let Err(e) = r {
                     error!("device thread failed to write: {e}");
                 }
@@ -118,6 +128,7 @@ impl UsbDevice {
             info!("device writer thread exiting");
         });
 
+        let mut reader = reader;
         // Reader thread.
         std::thread::spawn(move || {
             let mut buf = vec![];
@@ -130,10 +141,10 @@ impl UsbDevice {
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
                     buf.resize(2, 0);
-                    read_port.read_exact(&mut buf)?;
+                    reader.read_exact(&mut buf)?;
                     let len = u16::from_le_bytes([buf[0], buf[1]]);
                     buf.resize(usize::from(len * 2), 0);
-                    read_port.read_exact(&mut buf[2..])?;
+                    reader.read_exact(&mut buf[2..])?;
                     Ok(Packet::parse(&mut &buf[..]).with_context(|| format!("failed to parse packet: {:?}", buf.clone())))
                 })();
                 let reply = match reply {
@@ -181,10 +192,10 @@ impl UsbDevice {
             }
             info!("device reader thread exiting");
         });
-        Ok(Self {
+        Self {
             to_thread: sender,
             thread_state,
-        })
+        }
     }
 
     fn get_oneshot_slot(&self) -> (ResponseSlot, oneshot::Receiver<PacketData>) {
