@@ -8,7 +8,7 @@ use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
 use crate::custom_shapes::{draw_crosshair, draw_grid};
-use crate::mot_runner::{rescale, sort_clockwise, MotRunner};
+use crate::mot_runner::{rescale, sort_diamond, MotRunner};
 use crate::MotState;
 
 pub struct TestCanvas {

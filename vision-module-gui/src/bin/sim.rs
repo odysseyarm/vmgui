@@ -13,7 +13,7 @@ use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale, Scale2, Scale3, Scale4, Translation2, Translation3, Vector3, Vector4
 };
 use tracing::{error, info};
-use vision_module_gui::{custom_shapes::draw_diamond, packet::{AimPointReport, ObjectReport, Packet, PacketData, ReadConfigResponse, ReadRegisterResponse}};
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::{sort_diamond, sort_rectangle}, packet::{AimPointReport, ObjectReport, Packet, PacketData, ReadConfigResponse, ReadRegisterResponse}};
 
 fn main() {
     let mut port = 4444u16;
@@ -132,7 +132,16 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
     loop {
         std::thread::sleep(Duration::from_millis(10));
         let state = state.lock().unwrap();
-        let markers = state.calculate_marker_positions();
+
+        let mut markers = state.calculate_marker_positions();
+        let mut unsorted = [markers.bottom, markers.left, markers.top, markers.right];
+        sort_rectangle(&mut unsorted);
+        markers.bottom = unsorted[0];
+        markers.left = unsorted[1];
+        markers.top = unsorted[2];
+        markers.right = unsorted[3];
+        let markers = markers;
+
         if let Some(id) = state.stream_mot {
             let mut object_report = ObjectReport::default();
             if (0..4096).contains(&markers.top.x) && (0..4096).contains(&markers.top.y) {
@@ -218,10 +227,15 @@ impl State {
             yaw: 0.0,
             pitch: 0.0,
             marker_offset: MarkerPoints {
-                top: Point2::new(-1000, -2047),
-                right: Point2::new(2047, 1000),
-                bottom: Point2::new(1000, 2047),
-                left: Point2::new(-2047, -1000),
+                top: Point2::new(-500, -2047),
+                right: Point2::new(500, -2047),
+                bottom: Point2::new(-500, 2047),
+                left: Point2::new(500, 2047),
+
+                // top: Point2::new(-1000, -2047),
+                // right: Point2::new(2047, 1000),
+                // bottom: Point2::new(1000, 2047),
+                // left: Point2::new(-2047, -1000),
 
                 // top: Point2::new(0, -2047),
                 // right: Point2::new(2047, 0),
