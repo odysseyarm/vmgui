@@ -5,7 +5,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, Vector2, U1, U8};
+use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, Scalar, Vector2, U1, U8};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -21,12 +21,49 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
 }
 
-pub fn sort_clockwise(a: &mut [Point2<f64>]) {
+/// Given 4 points in the following shape
+///
+/// ```
+/// +--x
+/// |
+/// y                 top
+///
+///
+///   left                              right
+///
+///
+///                  bottom
+/// ```
+///
+/// Sort them into the order bottom, left, top, right
+pub fn sort_diamond<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
     if a[0].y < a[1].y { a.swap(0, 1); }
     if a[2].y > a[3].y { a.swap(2, 3); }
     if a[0].y < a[3].y { a.swap(0, 3); }
     if a[2].y > a[1].y { a.swap(2, 1); }
     if a[1].x > a[3].x { a.swap(1, 3); }
+}
+
+/// Given 4 points in the following shape
+///
+/// ```
+/// +--x
+/// |
+/// y        a              b
+///
+///
+///          c              d
+/// ```
+///
+/// Sort them into the order a, b, d, c
+pub fn sort_rectangle<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
+    if a[0].y > a[2].y { a.swap(0, 2); }
+    if a[1].y > a[3].y { a.swap(1, 3); }
+    if a[0].y > a[1].y { a.swap(0, 1); }
+    if a[2].y > a[3].y { a.swap(2, 3); }
+    if a[1].y > a[2].y { a.swap(1, 2); }
+    if a[0].x > a[1].x { a.swap(0, 1); }
+    if a[2].x < a[3].x { a.swap(2, 3); }
 }
 
 pub struct MotRunner {
