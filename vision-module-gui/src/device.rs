@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, warn};
 
-use crate::packet::{GeneralConfig, MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -334,15 +334,14 @@ impl UsbDevice {
         }))
     }
 
-    pub async fn stream_aim(&self) -> Result<impl Stream<Item = (i16, i16)> + Send + Sync> {
+    pub async fn stream_aim(&self) -> Result<impl Stream<Item = AimPointReport> + Send + Sync> {
         if self.thread_state.aim_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one aim stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b010, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
-            let obj = x.aim_point_report().unwrap();
-            (obj.x, obj.y)
+            x.aim_point_report().unwrap()
         }))
     }
 
