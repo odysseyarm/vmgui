@@ -1,11 +1,13 @@
-use iui::{controls::{Window, WindowType}, UI};
-use leptos_reactive::{create_effect, Effect, RwSignal, SignalGet, SignalSet};
-
+use iui::{
+    controls::{Window, WindowType},
+    UI,
+};
+use leptos_reactive::{create_effect, RwSignal, SignalGet};
 
 fn main() {
     let ui = UI::init().expect("Couldn't initialize UI library");
-    let ui_ctx = ui.async_context();
-    let leptos_rt = leptos_reactive::create_runtime();
+    let _ui_ctx = ui.async_context();
+    let _leptos_rt = leptos_reactive::create_runtime();
     let mut main_win = Window::new(&ui, "waow speenbox", 640, 480, WindowType::NoMenubar);
     let spinbox_value = RwSignal::new(0);
     let spinbox2_value = RwSignal::new(0);

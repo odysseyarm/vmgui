@@ -267,7 +267,7 @@ pub fn config_window(
     load_defaults_button.on_clicked(&ui, {
         let general_settings = general_settings.c();
         move |_| {
-            if let Some(device) = device.get_untracked() {
+            if let Some(_device) = device.get_untracked() {
                 general_settings.load_defaults();
                 nf_settings.load_defaults();
                 wf_settings.load_defaults();

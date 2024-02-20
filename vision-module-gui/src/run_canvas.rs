@@ -6,7 +6,7 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid};
-use crate::mot_runner::{rescale, sort_diamond, sort_points, MotRunner};
+use crate::mot_runner::{rescale, sort_points, MotRunner};
 
 pub struct RunCanvas {
     pub ctx: UI,

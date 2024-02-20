@@ -1,6 +1,4 @@
 use std::sync::Arc;
-use arrayvec::ArrayVec;
-use nalgebra::coordinates::XY;
 use nalgebra::{Point2, Scale2};
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
@@ -8,8 +6,7 @@ use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
 use crate::custom_shapes::{draw_crosshair, draw_grid};
-use crate::mot_runner::{rescale, sort_diamond, MotRunner};
-use crate::MotState;
+use crate::mot_runner::MotRunner;
 
 pub struct TestCanvas {
     pub ctx: UI,
