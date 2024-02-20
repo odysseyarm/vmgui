@@ -8,11 +8,11 @@ use nalgebra::{Point2, Scalar, Vector2};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::debug;
+use tracing::{debug, info};
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
-use crate::packet::{GeneralConfig, MarkerPattern, MotData};
+use crate::packet::{AimPointReport, GeneralConfig, MarkerPattern, MotData};
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
@@ -274,9 +274,10 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
     let mut aim_stream = device.stream_aim().await.unwrap();
     while runner.lock().await.device.is_some() {
-        if let Some((x, y)) = aim_stream.next().await {
+        if let Some(aim_report) = aim_stream.next().await {
+            let AimPointReport { x, y, screen_id } = aim_report;
             let mut runner = runner.lock().await;
-            debug!("aim: ({}, {})", x, y);
+            info!("aim: ({x}, {y}), screen_id: {screen_id}");
             let p = Point2::new(x, y).cast::<f64>();
 
             // TODO don't assume view[0]

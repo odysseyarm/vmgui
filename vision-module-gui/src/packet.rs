@@ -122,12 +122,14 @@ pub struct StreamUpdate {
 pub struct ImpactWithAimPointReport {
     pub x: i16,
     pub y: i16,
+    pub screen_id: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct AimPointReport {
     pub x: i16,
     pub y: i16,
+    pub screen_id: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -270,8 +272,8 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => 0,
             PacketData::ObjectReport(_) => 514,
             PacketData::StreamUpdate(_) => 2,
-            PacketData::AimPointReport(_) => 4,
-            PacketData::ImpactWithAimPointReport(_) => 4,
+            PacketData::AimPointReport(_) => 6,
+            PacketData::ImpactWithAimPointReport(_) => 6,
             PacketData::WriteConfig(_) => 2,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 2,
@@ -471,8 +473,9 @@ impl ImpactWithAimPointReport {
         let impact_with_aim_point = ImpactWithAimPointReport {
             x: i16::from_le_bytes([bytes[0], bytes[1]]),
             y: i16::from_le_bytes([bytes[2], bytes[3]]),
+            screen_id: bytes[4],
         };
-        *bytes = &bytes[4..];
+        *bytes = &bytes[6..];
         Ok(impact_with_aim_point)
     }
 }
@@ -482,8 +485,9 @@ impl AimPointReport {
         let aim_point = AimPointReport {
             x: i16::from_le_bytes([bytes[0], bytes[1]]),
             y: i16::from_le_bytes([bytes[2], bytes[3]]),
+            screen_id: bytes[4],
         };
-        *bytes = &bytes[4..];
+        *bytes = &bytes[6..];
         Ok(aim_point)
     }
 
