@@ -13,7 +13,7 @@ use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale, Scale2, Scale3, Scale4, Translation2, Translation3, Vector3, Vector4
 };
 use tracing::{error, info};
-use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::{sort_diamond, sort_rectangle}, packet::{AimPointReport, ObjectReport, Packet, PacketData, ReadConfigResponse, ReadRegisterResponse}};
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::{sort_diamond, sort_rectangle}, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 
 fn main() {
     let mut port = 4444u16;
@@ -114,7 +114,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::AimPointReport(_) => unreachable!(),
             PacketData::ImpactWithAimPointReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(ReadConfigResponse { impact_threshold: 0 })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: MarkerPattern::Rectangle })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 

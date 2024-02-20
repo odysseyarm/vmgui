@@ -1,6 +1,9 @@
 #![allow(unused)]
 
 use std::{fmt::Display, error::Error as StdError};
+
+use nalgebra::Point2;
+
 #[derive(Clone, Debug)]
 pub struct Packet {
     pub data: PacketData,
@@ -17,9 +20,9 @@ pub enum PacketData {
     FlashSettings,
     AimPointReport(AimPointReport),
     ImpactWithAimPointReport(ImpactWithAimPointReport),
-    WriteConfig(WriteConfig),
+    WriteConfig(GeneralConfig),
     ReadConfig,
-    ReadConfigResponse(ReadConfigResponse),
+    ReadConfigResponse(GeneralConfig),
 }
 pub enum StreamChoice {
     Object,
@@ -49,14 +52,37 @@ pub struct ReadRegisterResponse {
     pub data: u8,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct WriteConfig {
-    pub impact_threshold: u8,
+#[derive(Copy, Clone, Debug, enumn::N, Default)]
+pub enum MarkerPattern {
+    #[default]
+    Diamond,
+    Rectangle,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ReadConfigResponse {
+impl MarkerPattern {
+    // in the same order as the sort functions
+    pub fn marker_positions(self) -> [Point2<f64>; 4] {
+        match self {
+            Self::Diamond => [
+                [0.5, 1.0].into(), // bottom
+                [0.0, 0.5].into(), // left
+                [0.5, 0.0].into(), // top
+                [1.0, 0.5].into(), // right
+            ],
+            Self::Rectangle => [
+                [0.4, 0.0].into(), // top left
+                [0.6, 0.0].into(), // top right
+                [0.6, 1.0].into(), // bottom right
+                [0.4, 1.0].into(), // bottom left
+            ],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GeneralConfig {
     pub impact_threshold: u8,
+    pub marker_pattern: MarkerPattern,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -109,6 +135,7 @@ pub enum Error {
     UnexpectedEof,
     UnrecognizedPacketId,
     UnrecognizedPort,
+    UnrecognizedMarkerPattern,
 }
 
 impl Display for Error {
@@ -118,6 +145,7 @@ impl Display for Error {
             S::UnexpectedEof => write!(f, "unexpected eof"),
             S::UnrecognizedPacketId => write!(f, "unrecognized packet id"),
             S::UnrecognizedPort => write!(f, "unrecognized port"),
+            S::UnrecognizedMarkerPattern => write!(f, "unrecognized marker pattern"),
         }
     }
 }
@@ -225,9 +253,9 @@ impl Packet {
             PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
             PacketType::AimPointReport => PacketData::AimPointReport(AimPointReport::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
-            PacketType::WriteConfig => PacketData::WriteConfig(WriteConfig::parse(bytes)?),
+            PacketType::WriteConfig => PacketData::WriteConfig(GeneralConfig::parse(bytes)?),
             PacketType::ReadConfig => PacketData::ReadConfig,
-            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(ReadConfigResponse::parse(bytes)?),
+            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes)?),
             p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
@@ -278,7 +306,7 @@ impl PacketData {
         }
     }
 
-    pub fn read_config_response(self) -> Option<ReadConfigResponse> {
+    pub fn read_config_response(self) -> Option<GeneralConfig> {
         match self {
             PacketData::ReadConfigResponse(x) => Some(x),
             _ => None,
@@ -354,33 +382,20 @@ impl WriteRegister {
     }
 }
 
-impl ReadConfigResponse {
+impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        let [impact_threshold, _, ..] = **bytes else {
+        let [impact_threshold, marker_pattern, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
+        let marker_pattern = MarkerPattern::n(marker_pattern)
+            .ok_or(Error::UnrecognizedMarkerPattern)?;
         *bytes = &bytes[2..];
-        Ok(Self { impact_threshold })
+        Ok(Self { impact_threshold, marker_pattern })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.impact_threshold, 0]);
-    }
-}
-
-impl WriteConfig {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        use Error as E;
-        let [impact_threshold, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
-        };
-        *bytes = &bytes[2..];
-        Ok(Self { impact_threshold })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.impact_threshold, 0]);
+        buf.extend_from_slice(&[self.impact_threshold, self.marker_pattern as u8]);
     }
 }
 

@@ -7,7 +7,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, warn};
 
-use crate::packet::{MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteConfig, WriteRegister};
+use crate::packet::{GeneralConfig, MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -282,20 +282,18 @@ impl UsbDevice {
         Ok(())
     }
 
-    pub async fn read_config(&self) -> Result<u8> {
+    pub async fn read_config(&self) -> Result<GeneralConfig> {
         let r = self
             .request(PacketData::ReadConfig)
             .await?
             .read_config_response()
             .with_context(|| "unexpected response")?;
-        eprintln!("config: {:?}", r);
-        Ok(r.impact_threshold)
+        info!("config: {:?}", r);
+        Ok(r)
     }
 
-    pub async fn write_config(&self, impact_threshold: u8) -> Result<()> {
-        let data = PacketData::WriteConfig(WriteConfig {
-            impact_threshold,
-        });
+    pub async fn write_config(&self, config: GeneralConfig) -> Result<()> {
+        let data = PacketData::WriteConfig(config);
         let pkt = Packet {
             id: 255,
             data,
@@ -445,13 +443,4 @@ impl UsbDevice {
     write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
     write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
     write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
-
-    pub async fn impact_threshold(&self) -> Result<u8> {
-        let r = self.read_config().await?;
-        Ok(r as u8)
-    }
-
-    pub async fn set_impact_threshold(&self, value: u8) -> Result<()> {
-        self.write_config(value).await
-    }
 }

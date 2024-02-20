@@ -7,8 +7,9 @@ use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, Si
 use nalgebra::Vector2;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
-use vision_module_gui::Frame;
-use vision_module_gui::{config_window::config_window, marker_config_window::marker_config_window, CloneButShorter, MotState};
+use vision_module_gui::packet::GeneralConfig;
+use vision_module_gui::{config_window, marker_config_window, Frame};
+use vision_module_gui::{CloneButShorter, MotState};
 use tokio::sync::Mutex;
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -58,6 +59,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_update: ui_update.c(),
         ui_ctx,
         nf_offset: Vector2::default(),
+        general_config: GeneralConfig::default(),
     }));
     let tracking = RwSignal::new(false);
     let testing = RwSignal::new(false);
@@ -65,8 +67,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs) = config_window(&ui, simulator_addr, tokio_handle);
-    let mut marker_config_win = marker_config_window(&ui, marker_offset_calibrating, mot_runner.c());
+    let (mut config_win, device_rs) = config_window::config_window(&ui, simulator_addr, mot_runner.c(), tokio_handle);
+    let mut marker_config_win = marker_config_window::marker_config_window(&ui, marker_offset_calibrating, mot_runner.c());
 
 
     let mut test_win = Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);

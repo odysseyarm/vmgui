@@ -13,7 +13,7 @@ use tracing::debug;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
-use crate::packet::MotData;
+use crate::packet::{GeneralConfig, MarkerPattern, MotData};
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
@@ -66,10 +66,18 @@ pub fn sort_rectangle<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
     if a[2].x < a[3].x { a.swap(2, 3); }
 }
 
+pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>], pattern: MarkerPattern) {
+    match pattern {
+        MarkerPattern::Diamond => sort_diamond(a),
+        MarkerPattern::Rectangle => sort_rectangle(a),
+    }
+}
+
 pub struct MotRunner {
     pub state: MotState,
     pub device: Option<UsbDevice>,
     pub markers_settings: MarkersSettings,
+    pub general_config: GeneralConfig,
     pub record_impact: bool,
     pub datapoints: Arc<Mutex<Vec<crate::Frame>>>,
     pub ui_update: RwSignal<()>,
@@ -285,11 +293,12 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
             let right = Point2::new(right.x, right.y).cast::<f64>();
 
             // TODO maybe don't recompute this in a hot loop lol
+            let [bottom_m, left_m, top_m, right_m] = runner.general_config.marker_pattern.marker_positions();
             let tf = get_perspective_transform(
-                Point2::new(0.0, -2047.0), // top
-                Point2::new(0.0, 2047.0), // bottom
-                Point2::new(-2047.0, 0.0), // left
-                Point2::new(2047.0, 0.0), // right
+                top_m * 2047.0,
+                bottom_m * 2047.0,
+                left_m * 2047.0,
+                right_m * 2047.0,
                 top,
                 bottom,
                 left,
