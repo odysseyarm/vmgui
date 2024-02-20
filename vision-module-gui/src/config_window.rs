@@ -1,6 +1,6 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use crate::{device::UsbDevice, packet::Port, CloneButShorter};
+use crate::{device::UsbDevice, mot_runner::MotRunner, packet::{GeneralConfig, MarkerPattern, Port}, CloneButShorter};
 use anyhow::Result;
 use iui::{
     controls::Form,
@@ -11,12 +11,14 @@ use leptos_reactive::{
     create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet,
     SignalWith, SignalWithUntracked, SignalUpdate,
 };
-use serialport::{SerialPortInfo, SerialPortType};
+use serialport::SerialPortInfo;
 use serialport::SerialPortType::UsbPort;
+use tokio::sync::Mutex;
 
 pub fn config_window(
     ui: &UI,
     simulator_addr: Option<String>,
+    mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
 ) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
     let ui_ctx = ui.async_context();
@@ -45,7 +47,7 @@ pub fn config_window(
             }
         }
     }
-    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only());
+    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only(), mot_runner);
     let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
     tab_group.append(&ui, "General", general_form);
@@ -62,6 +64,7 @@ pub fn config_window(
         let ui = ui.c();
         let config_win = config_win.c();
         let sim_addr = simulator_addr.c();
+        let general_settings = general_settings.c();
         move |i| {
             device.set(None);
             general_settings.clear();
@@ -70,6 +73,7 @@ pub fn config_window(
             let Ok(i) = usize::try_from(i) else { return };
             let path = device_list.with_untracked(|d| Some(d.get(i)?.port_name.clone()));
             let sim_addr = sim_addr.c();
+            let general_settings = general_settings.c();
             let task = async move {
                 let usb_device = if let Some(path) = path {
                     UsbDevice::connect_serial(path).await?
@@ -162,6 +166,7 @@ pub fn config_window(
     let apply_button_on_click = {
         let config_win = config_win.c();
         let ui = ui.c();
+        let general_settings = general_settings.c();
         move |device: UsbDevice| async move {
             let mut errors = vec![];
             general_settings.validate(&mut errors);
@@ -260,8 +265,10 @@ pub fn config_window(
         }
     });
     load_defaults_button.on_clicked(&ui, {
+        let general_settings = general_settings.c();
         move |_| {
             if let Some(device) = device.get_untracked() {
+                general_settings.load_defaults();
                 nf_settings.load_defaults();
                 wf_settings.load_defaults();
             }
@@ -271,8 +278,10 @@ pub fn config_window(
     reload_button.on_clicked(&ui, {
         move |_| {
             if let Some(device) = device.get_untracked() {
+                let general_settings = general_settings.c();
                 ui_ctx.spawn(async move {
                     let _ = tokio::join!(
+                        general_settings.load_from_device(&device),
                         nf_settings.load_from_device(&device),
                         wf_settings.load_from_device(&device),
                     );
@@ -284,35 +293,42 @@ pub fn config_window(
     (config_win, device.read_only())
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 struct GeneralSettingsForm {
-    connecting_string: RwSignal<String>,
     impact_threshold: RwSignal<i32>,
+    marker_pattern: RwSignal<i32>,
+    mot_runner: Arc<Mutex<MotRunner>>,
 }
 
 impl GeneralSettingsForm {
-    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>) -> (Form, Self) {
-        let connecting_string = create_rw_signal(String::new());
+    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>) -> (Form, Self) {
+        let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
+        let marker_pattern = create_rw_signal(0);
         crate::layout! { &ui,
             let form = Form(padded: true) {
-                (Compact, "Impact threshold") : let x = Spinbox(signal: impact_threshold)
+                (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
+                (Compact, "Marker pattern")   : let marker_pattern_combobox = Combobox(enabled: connected, signal: marker_pattern) {
+                    "Diamond",
+                    "Rectangle"
+                }
             }
         }
         (
             form,
             Self {
-                connecting_string,
                 impact_threshold,
+                marker_pattern,
+                mot_runner,
             },
         )
     }
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
-        self.connecting_string.set("Connecting...".into());
-        let impact_threshold = device.impact_threshold().await?;
+        let config = device.read_config().await?;
 
-        self.impact_threshold.set(i32::from(impact_threshold));
+        self.impact_threshold.set(i32::from(config.impact_threshold));
+        self.marker_pattern.set(config.marker_pattern as i32);
         Ok(())
     }
 
@@ -347,24 +363,31 @@ impl GeneralSettingsForm {
             }
         }
         validators! {
-            //
+        }
+        if !(0..256).contains(&self.impact_threshold.get_untracked()) {
+            errors.push("impact threshold: must be between 0 and 255".into());
         }
     }
 
     /// Make sure to call `validate()` before calling this method.
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
-        tokio::try_join!(
-            device.set_impact_threshold(u8::try_from(self.impact_threshold.get_untracked()).unwrap()),
-        )?;
+        let config = GeneralConfig {
+            impact_threshold: self.impact_threshold.get_untracked() as u8,
+            marker_pattern: MarkerPattern::n(self.marker_pattern.get_untracked()).unwrap(),
+        };
+        device.write_config(config).await?;
+        self.mot_runner.lock().await.general_config = config;
         Ok(())
     }
 
     fn clear(&self) {
         self.impact_threshold.set(0);
+        self.marker_pattern.set(0);
     }
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
+        self.marker_pattern.set(0);
     }
 }
 

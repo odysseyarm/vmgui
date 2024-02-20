@@ -6,7 +6,7 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid};
-use crate::mot_runner::{rescale, sort_diamond, MotRunner};
+use crate::mot_runner::{rescale, sort_diamond, sort_points, MotRunner};
 
 pub struct RunCanvas {
     pub ctx: UI,
@@ -52,7 +52,7 @@ impl AreaHandler for RunCanvas {
                 ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
             if nf_screen_points.len() >= 4 {
-                sort_diamond(&mut nf_screen_points[..4]);
+                sort_points(&mut nf_screen_points[..4], runner.general_config.marker_pattern);
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
                 let bottom = runner.markers_settings.views[0].marker_bottom.position;

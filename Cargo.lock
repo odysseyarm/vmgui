@@ -302,6 +302,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "enumn"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fd000fd6988e73bbe993ea3db9b1aa64906ab88766d654973924340c8cddb42"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1508,6 +1519,7 @@ dependencies = [
  "ats_cv",
  "csv",
  "directories",
+ "enumn",
  "iui",
  "leptos_reactive",
  "nalgebra",
