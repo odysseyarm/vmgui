@@ -1,7 +1,6 @@
 use std::{borrow::Cow, io::{BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
-use serialport::{ClearBuffer::Input, SerialPort, SerialPortInfo};
 use serial2;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};

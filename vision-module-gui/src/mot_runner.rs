@@ -1,11 +1,10 @@
-use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix3, OMatrix, Point2, SMatrix, SVector, Scalar, Vector2, U1, U8};
+use nalgebra::{Point2, Scalar, Vector2};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -112,13 +111,13 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
 
             let mut nf_points = ArrayVec::<Point2<f64>,16>::from_iter(nf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
-            let mut wf_points = ArrayVec::<Point2<f64>,16>::from_iter(wf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
+            let _wf_points = ArrayVec::<Point2<f64>,16>::from_iter(wf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
 
-            let mut fv_aim_point = None::<Point2<f64>>;
-            let mut nf_aim_point = None::<Point2<f64>>;
-            let mut wf_aim_point = None::<Point2<f64>>;
+            let _fv_aim_point = None::<Point2<f64>>;
+            let _nf_aim_point = None::<Point2<f64>>;
+            let _wf_aim_point = None::<Point2<f64>>;
 
-            let center_aim = Point2::new(2048.0, 2048.0);
+            let _center_aim = Point2::new(2048.0, 2048.0);
 
             // kal man for nf rn
             if nf_points.len() > 3 {
@@ -319,7 +318,7 @@ fn rescale_generic(lo1: f64, hi1: f64, lo2: f64, hi2: f64, val: f64) -> f64 {
     (val - lo1) / (hi1 - lo1) * (hi2 - lo2) + lo2
 }
 
-fn dummy_nf_data() -> [MotData; 4] {
+fn _dummy_nf_data() -> [MotData; 4] {
     [
         MotData {
             cx: 1047,

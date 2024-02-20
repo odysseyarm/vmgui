@@ -6,18 +6,17 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::sync::Arc;
-use std::time::Duration;
-use directories::{BaseDirs, UserDirs, ProjectDirs};
+use directories::ProjectDirs;
 use tracing::error;
 
-use crate::{CloneButShorter};
+use crate::CloneButShorter;
 use anyhow::Result;
 use iui::{
     controls::Form,
     prelude::{Window, WindowType},
     UI,
 };
-use leptos_reactive::{create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalWith, SignalWithUntracked, SignalUpdate, SignalGet};
+use leptos_reactive::{create_rw_signal, RwSignal, SignalGetUntracked, SignalSet};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use crate::mot_runner::MotRunner;
@@ -59,13 +58,13 @@ pub fn marker_config_window(
 
     config_win.set_child(&ui, vbox);
 
-    let apply_button_on_click = {
-        let config_win = config_win.c();
-        let ui = ui.c();
+    let _apply_button_on_click = {
+        let _config_win = config_win.c();
+        let _ui = ui.c();
     };
     apply_button.on_clicked(&ui, {
         let mot_runner = mot_runner.c();
-        move |apply_button| {
+        move |_apply_button| {
             ui_ctx.spawn({
                 let mot_runner = mot_runner.c();
                 async move {
@@ -76,7 +75,7 @@ pub fn marker_config_window(
         }
     });
     save_button.on_clicked(&ui, {
-        move |save_button| {
+        move |_save_button| {
         }
     });
     load_defaults_button.on_clicked(&ui, {
@@ -205,8 +204,8 @@ impl MarkersSettingsForm {
         Ok(())
     }
 
-    fn validate(&self, errors: &mut Vec<String>) {
-        macro_rules! validators {
+    fn _validate(&self, _errors: &mut Vec<String>) {
+        macro_rules! _validators {
             ($($display:literal $reg:ident : $ty:ty $({ $( $check:expr ),* $(,)? })? ),* $(,)?) => {
                 $(
                     #[allow(unused_variables)]
@@ -235,8 +234,6 @@ impl MarkersSettingsForm {
                 )*
             }
         }
-        validators! {
-        }
     }
 
     /// Make sure to call `validate()` before calling this method.
@@ -251,7 +248,7 @@ impl MarkersSettingsForm {
         markers_settings.views[0].marker_right.position.y = self.marker_right.1.get_untracked();
     }
 
-    fn load_defaults(&self) {
+    fn _load_defaults(&self) {
         self.marker_top.0.set(0);
         self.marker_top.1.set(-2047);
         self.marker_right.0.set(2047);

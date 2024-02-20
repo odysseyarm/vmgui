@@ -10,10 +10,10 @@ use iui::{
     UI,
 };
 use nalgebra::{
-    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale, Scale2, Scale3, Scale4, Translation2, Translation3, Vector3, Vector4
+    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Translation2, Translation3, Vector3, Vector4
 };
 use tracing::{error, info};
-use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::{sort_diamond, sort_rectangle}, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 
 fn main() {
     let mut port = 4444u16;
@@ -312,11 +312,6 @@ impl State {
 
         MarkerPoints { top, left, bottom, right }
     }
-
-    fn calculate_aim_point(&self) -> Point2<i16> {
-        todo!();
-    }
-
 }
 
 struct MainCanvas {
@@ -327,7 +322,7 @@ const GRID_WIDTH: f64 = 16.0 / 9.0;
 const GRID_HEIGHT: f64 = 1.0;
 
 impl AreaHandler for MainCanvas {
-    fn draw(&mut self, area: &Area, draw_params: &AreaDrawParams) {
+    fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let thin_line = StrokeParams {
             cap: 0,  // Bevel
             join: 0, // Flat
