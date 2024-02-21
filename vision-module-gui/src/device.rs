@@ -4,7 +4,7 @@ use pin_project::{pin_project, pinned_drop};
 use serial2;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
@@ -64,7 +64,8 @@ impl UsbDevice {
         })?;
 
         read_port.set_read_timeout(Duration::from_millis(10))?;
-        read_port.set_write_timeout(Duration::from_millis(0))?;
+        // why is this here
+        // read_port.set_write_timeout(Duration::from_millis(0))?;
 
         let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
@@ -150,9 +151,12 @@ impl UsbDevice {
                     buf.resize(2, 0);
                     reader.read_exact(&mut buf)?;
                     let len = u16::from_le_bytes([buf[0], buf[1]]);
+                    trace!("read len={len}");
                     buf.resize(usize::from(len * 2), 0);
                     reader.read_exact(&mut buf[2..])?;
-                    Ok(Packet::parse(&mut &buf[..]).with_context(|| format!("failed to parse packet: {:?}", buf.clone())))
+                    Ok(Packet::parse(&mut &buf[..])
+                        .with_context(|| format!("failed to parse packet: {:?}", buf.clone()))
+                        .inspect(|p| trace!("read id={} type={:?}", p.id, p.ty())))
                 })();
                 let reply = match reply {
                     // IO error
@@ -181,7 +185,6 @@ impl UsbDevice {
                     }
                     Ok(r) => r,
                 };
-                debug!("read id={} len={}", reply.id, buf.len());
                 let mut response_channels = state.response_channels.lock().unwrap();
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {

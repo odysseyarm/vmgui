@@ -52,7 +52,7 @@ pub struct ReadRegisterResponse {
     pub data: u8,
 }
 
-#[derive(Copy, Clone, Debug, enumn::N, Default)]
+#[derive(Copy, Clone, Debug, enumn::N, Default, PartialEq, Eq)]
 pub enum MarkerPattern {
     #[default]
     Diamond,
@@ -494,7 +494,7 @@ impl AimPointReport {
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let [a, b] = self.x.to_le_bytes();
         let [c, d] = self.y.to_le_bytes();
-        buf.extend_from_slice(&[a, b, c, d]);
+        buf.extend_from_slice(&[a, b, c, d, self.screen_id, 0]);
     }
 }
 

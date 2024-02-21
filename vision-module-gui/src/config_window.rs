@@ -8,8 +8,7 @@ use iui::{
     UI,
 };
 use leptos_reactive::{
-    create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet,
-    SignalWith, SignalWithUntracked, SignalUpdate,
+    create_effect, create_memo, create_rw_signal, Memo, ReadSignal, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith, SignalWithUntracked
 };
 use serialport::SerialPortInfo;
 use serialport::SerialPortType::UsbPort;
@@ -20,7 +19,7 @@ pub fn config_window(
     simulator_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
-) -> (Window, leptos_reactive::ReadSignal<Option<UsbDevice>>) {
+) -> (Window, ReadSignal<Option<UsbDevice>>, Memo<MarkerPattern>) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -276,6 +275,7 @@ pub fn config_window(
     });
 
     reload_button.on_clicked(&ui, {
+        let general_settings = general_settings.c();
         move |_| {
             if let Some(device) = device.get_untracked() {
                 let general_settings = general_settings.c();
@@ -290,13 +290,15 @@ pub fn config_window(
         }
     });
 
-    (config_win, device.read_only())
+    let marker_pattern_memo = create_memo(move |_| general_settings.applied_marker_pattern.get());
+    (config_win, device.read_only(), marker_pattern_memo)
 }
 
 #[derive(Clone)]
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
     marker_pattern: RwSignal<i32>,
+    pub applied_marker_pattern: RwSignal<MarkerPattern>,
     mot_runner: Arc<Mutex<MotRunner>>,
 }
 
@@ -305,6 +307,7 @@ impl GeneralSettingsForm {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let marker_pattern = create_rw_signal(0);
+        let applied_marker_pattern = create_rw_signal(MarkerPattern::Diamond);
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
@@ -319,6 +322,7 @@ impl GeneralSettingsForm {
             Self {
                 impact_threshold,
                 marker_pattern,
+                applied_marker_pattern,
                 mot_runner,
             },
         )
@@ -329,6 +333,7 @@ impl GeneralSettingsForm {
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.marker_pattern.set(config.marker_pattern as i32);
+        self.applied_marker_pattern.set(config.marker_pattern);
         Ok(())
     }
 
@@ -376,6 +381,7 @@ impl GeneralSettingsForm {
             marker_pattern: MarkerPattern::n(self.marker_pattern.get_untracked()).unwrap(),
         };
         device.write_config(config).await?;
+        self.applied_marker_pattern.set(config.marker_pattern);
         self.mot_runner.lock().await.general_config = config;
         Ok(())
     }
