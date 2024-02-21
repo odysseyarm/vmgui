@@ -151,7 +151,7 @@ impl UsbDevice {
                     buf.resize(2, 0);
                     reader.read_exact(&mut buf)?;
                     let len = u16::from_le_bytes([buf[0], buf[1]]);
-                    trace!("read len={len}");
+                    trace!("read len={}", len*2);
                     buf.resize(usize::from(len * 2), 0);
                     reader.read_exact(&mut buf[2..])?;
                     Ok(Packet::parse(&mut &buf[..])
