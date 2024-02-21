@@ -7,16 +7,17 @@ use std::fs::OpenOptions;
 use std::io::Read;
 use std::sync::Arc;
 use directories::ProjectDirs;
+use nalgebra::Matrix2x4;
 use tracing::error;
 
-use crate::CloneButShorter;
+use crate::{packet::MarkerPattern, CloneButShorter};
 use anyhow::Result;
 use iui::{
     controls::Form,
     prelude::{Window, WindowType},
     UI,
 };
-use leptos_reactive::{create_rw_signal, RwSignal, SignalGetUntracked, SignalSet};
+use leptos_reactive::{create_effect, create_rw_signal, Memo, RwSignal, SignalGet, SignalGetUntracked, SignalSet};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use crate::mot_runner::MotRunner;
@@ -24,6 +25,7 @@ use crate::mot_runner::MotRunner;
 pub fn marker_config_window(
     ui: &UI,
     marker_offset_calibrating: RwSignal<bool>,
+    marker_pattern_memo: Memo<MarkerPattern>,
     mot_runner: Arc<Mutex<MotRunner>>,
 ) -> Window {
     let ui_ctx = ui.async_context();
@@ -58,13 +60,9 @@ pub fn marker_config_window(
 
     config_win.set_child(&ui, vbox);
 
-    let _apply_button_on_click = {
-        let _config_win = config_win.c();
-        let _ui = ui.c();
-    };
-    apply_button.on_clicked(&ui, {
+    let apply_button_on_click = {
         let mot_runner = mot_runner.c();
-        move |_apply_button| {
+        move || {
             ui_ctx.spawn({
                 let mot_runner = mot_runner.c();
                 async move {
@@ -73,14 +71,22 @@ pub fn marker_config_window(
                 }
             });
         }
+    };
+    apply_button.on_clicked(&ui, {
+        let apply_button_on_click = apply_button_on_click.c();
+        move |_| apply_button_on_click()
     });
     save_button.on_clicked(&ui, {
         move |_save_button| {
         }
     });
-    load_defaults_button.on_clicked(&ui, {
-        move |_| {
-        }
+    load_defaults_button.on_clicked(&ui, move |_| {
+        marker_settings.load_defaults(marker_pattern_memo.get_untracked());
+    });
+    // When the applied marker pattern changes, reload the defaults
+    create_effect(move |_| {
+        marker_settings.load_defaults(marker_pattern_memo.get());
+        apply_button_on_click();
     });
 
     reload_button.on_clicked(&ui, {
@@ -248,15 +254,24 @@ impl MarkersSettingsForm {
         markers_settings.views[0].marker_right.position.y = self.marker_right.1.get_untracked();
     }
 
-    fn _load_defaults(&self) {
-        self.marker_top.0.set(0);
-        self.marker_top.1.set(-2047);
-        self.marker_right.0.set(2047);
-        self.marker_right.1.set(0);
-        self.marker_bottom.0.set(0);
-        self.marker_bottom.1.set(2047);
-        self.marker_left.0.set(-2047);
-        self.marker_left.1.set(0);
+    fn load_defaults(&self, marker_pattern: MarkerPattern) {
+        let [bottom, left, top, right] = marker_pattern.marker_positions();
+        let m = Matrix2x4::from_columns(&[
+            bottom.coords,
+            left.coords,
+            top.coords,
+            right.coords,
+        ]);
+        let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
+        let m = m.map(|v| v.round() as i32);
+        self.marker_bottom.0.set(m.column(0).x);
+        self.marker_bottom.1.set(m.column(0).y);
+        self.marker_left.0.set(m.column(1).x);
+        self.marker_left.1.set(m.column(1).y);
+        self.marker_top.0.set(m.column(2).x);
+        self.marker_top.1.set(m.column(2).y);
+        self.marker_right.0.set(m.column(3).x);
+        self.marker_right.1.set(m.column(3).y);
     }
 }
 

@@ -186,6 +186,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::AimPointReport(AimPointReport {
                     x: (r.x * 4095. - 2047.) as i16,
                     y: (r.y * 4095. - 2047.) as i16,
+                    screen_id: 0, // TODO
                 })
             };
             buf.clear();

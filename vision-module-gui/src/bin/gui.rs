@@ -25,6 +25,8 @@ use vision_module_gui::test_canvas::TestCanvas;
 //     * Freezes the GUI
 // * Creating libui uiControls dynamically
 //     * They are leaky
+// * Holding mutexes and setting signals
+//     * Drop the mutex, or use ui_ctx.queue_main()
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -67,8 +69,18 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs) = config_window::config_window(&ui, simulator_addr, mot_runner.c(), tokio_handle);
-    let mut marker_config_win = marker_config_window::marker_config_window(&ui, marker_offset_calibrating, mot_runner.c());
+    let (mut config_win, device_rs, marker_pattern_memo) = config_window::config_window(
+        &ui,
+        simulator_addr,
+        mot_runner.c(),
+        tokio_handle,
+    );
+    let mut marker_config_win = marker_config_window::marker_config_window(
+        &ui,
+        marker_offset_calibrating,
+        marker_pattern_memo,
+        mot_runner.c(),
+    );
 
 
     let mut test_win = Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
