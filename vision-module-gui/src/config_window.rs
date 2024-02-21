@@ -80,7 +80,7 @@ pub fn config_window(
                     UsbDevice::connect_tcp(sim_addr.as_ref().unwrap())?
                 };
                 tokio::try_join!(
-                    general_settings.load_from_device(&usb_device),
+                    general_settings.load_from_device(&usb_device, true),
                     wf_settings.load_from_device(&usb_device),
                     nf_settings.load_from_device(&usb_device),
                 )?;
@@ -281,7 +281,7 @@ pub fn config_window(
                 let general_settings = general_settings.c();
                 ui_ctx.spawn(async move {
                     let _ = tokio::join!(
-                        general_settings.load_from_device(&device),
+                        general_settings.load_from_device(&device, false),
                         nf_settings.load_from_device(&device),
                         wf_settings.load_from_device(&device),
                     );
@@ -328,12 +328,15 @@ impl GeneralSettingsForm {
         )
     }
 
-    async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
+    async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
         let config = device.read_config().await?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.marker_pattern.set(config.marker_pattern as i32);
         self.applied_marker_pattern.set(config.marker_pattern);
+        if first_load {
+            self.mot_runner.lock().await.general_config = config;
+        }
         Ok(())
     }
 
