@@ -52,6 +52,11 @@ impl AreaHandler for RunCanvas {
 
                 ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
+            ctx.draw_text(
+                20.0,
+                20.0,
+                &format!("screen_id = {}", runner.state.screen_id),
+            );
             if nf_points.len() >= 4 {
                 let mut chosen = choose_rectangle_nearfield_markers(&mut nf_points, state.screen_id);
                 let points = match chosen.as_mut() {

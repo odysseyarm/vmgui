@@ -8,7 +8,7 @@ use nalgebra::{Matrix2x4, Point2, Scalar, Vector2};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::{debug, info};
+use tracing::info;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
@@ -285,7 +285,7 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some(aim_report) = aim_stream.next().await {
             let AimPointReport { x, y, screen_id } = aim_report;
             let mut runner = runner.lock().await;
-            info!("aim: ({x}, {y}), screen_id: {screen_id}");
+            debug!("aim: ({x}, {y}), screen_id: {screen_id}");
             let p = Point2::new(x, y).cast::<f64>();
 
             // TODO don't assume view[0]

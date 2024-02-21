@@ -49,6 +49,11 @@ impl AreaHandler for TestCanvas {
             20.0,
             &format!("offset = ({:.4}, {:.4})", runner.nf_offset.x, runner.nf_offset.y),
         );
+        ctx.draw_text(
+            20.0,
+            60.0,
+            &format!("screen_id = {}", runner.state.screen_id),
+        );
         if let Some(aim_point) = state.nf_aim_point {
             let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aim_point + runner.nf_offset);
             draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
