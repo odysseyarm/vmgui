@@ -39,4 +39,6 @@ pub struct MotState {
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
     pub nf_pva2ds: [Pva2d<f64>; 4],
+
+    pub screen_id: u8,
 }

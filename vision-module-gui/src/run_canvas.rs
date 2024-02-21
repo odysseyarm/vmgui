@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use arrayvec::ArrayVec;
+use ats_cv::choose_rectangle_nearfield_markers;
 use nalgebra::Point2;
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
@@ -7,6 +8,7 @@ use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid};
 use crate::mot_runner::{rescale, sort_points, MotRunner};
+use crate::packet::MarkerPattern;
 
 pub struct RunCanvas {
     pub ctx: UI,
@@ -52,14 +54,19 @@ impl AreaHandler for RunCanvas {
                 ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
             if nf_screen_points.len() >= 4 {
-                sort_points(&mut nf_screen_points[..4], runner.general_config.marker_pattern);
+                let mut chosen = choose_rectangle_nearfield_markers(&mut nf_screen_points, state.screen_id);
+                let points = match chosen.as_mut() {
+                    Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
+                    _ => &mut nf_screen_points[..4],
+                };
+                sort_points(points, runner.general_config.marker_pattern);
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
                 let bottom = runner.markers_settings.views[0].marker_bottom.position;
                 let right = runner.markers_settings.views[0].marker_right.position;
                 let transform = ats_cv::get_perspective_transform(
-                    nf_screen_points[0], nf_screen_points[1],
-                    nf_screen_points[2], nf_screen_points[3],
+                    points[0], points[1],
+                    points[2], points[3],
                     Point2::new(rescale(bottom.x as f64), rescale(bottom.y as f64)), // bottom
                     Point2::new(rescale(left.x as f64), rescale(left.y as f64)), // left
                     Point2::new(rescale(top.x as f64), rescale(top.y as f64)), // top
