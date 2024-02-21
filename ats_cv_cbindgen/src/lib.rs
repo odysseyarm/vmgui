@@ -1,15 +1,15 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use core::mem::MaybeUninit;
+use core::{ffi::c_int, mem::MaybeUninit};
 use ats_cv::kalman::Pva2d;
 use cam_geom::Pixels;
-use nalgebra::{Matrix, Vector5};
+use nalgebra::{Matrix, Point2, Vector5};
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 #[cfg(target_os = "none")]
 use panic_semihosting as _;
 
 #[repr(C)]
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Pointf32 {
     x: f32,
     y: f32,
@@ -53,6 +53,29 @@ pub extern "C" fn transform_aim_point_f32(
         }
     }
 }
+
+/// Result must have space for 4 points. Returns true on success
+#[no_mangle]
+pub extern "C" fn choose_rectangle_nearfield_markers_f32(p: *mut Pointf32, len: usize, screen_id: u8, result: *mut Pointf32) -> bool {
+    let p = unsafe { core::slice::from_raw_parts_mut(p as *mut Point2<f32>, len) };
+    let result = unsafe { core::slice::from_raw_parts_mut(result as *mut Point2<f32>, 4) };
+    let r = ats_cv::choose_rectangle_nearfield_markers::<f32>(p, screen_id);
+    if let Some(r) = r {
+        result.copy_from_slice(&r);
+        true
+    } else {
+        false
+    }
+}
+
+/// Simple kalman filter for position, velocity, and acceleration assuming constant acceleration
+#[repr(C)]
+pub union Pva2d_f32 {
+    pub _size: [u8; 176],
+    pub _align: u32,
+}
+static_assertions::assert_eq_size!(Pva2d_f32, Pva2d<f32>);
+static_assertions::assert_eq_align!(Pva2d_f32, Pva2d<f32>);
 
 #[no_mangle]
 pub extern "C" fn pva2df32_create_default(pva2df32: &mut MaybeUninit<Pva2d<f32>>) {
