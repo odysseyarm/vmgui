@@ -3,7 +3,7 @@
 use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector};
 pub mod kalman;
 
-use num::{traits::Float, FromPrimitive};
+use num::{traits::{float::TotalOrder, Float}, FromPrimitive};
 
 pub fn transform_aim_point<F: Float + FromPrimitive + 'static>(
     aim_point: Point2<F>,
@@ -54,6 +54,40 @@ where
     Some(Matrix3::new(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], F::one()))
 }
 
+fn split_column<F: Float + FromPrimitive + 'static>(p: &mut [Point2<F>], threshold: F) -> (&mut [Point2<F>], &mut [Point2<F>])
+where
+    F: ComplexField,
+    F: RealField,
+{
+    let [first, rest @ ..] = p else { return (&mut [], p) };
+    for i in 0..rest.len() {
+        if Float::abs(rest[i].x - first.x) > threshold {
+            return p.split_at_mut(i + 1);
+        }
+    }
+    (p, &mut [])
+}
+
+pub fn choose_rectangle_nearfield_markers<F: Float + FromPrimitive + 'static>(p: &mut [Point2<F>], screen_id: u8) -> Option<[Point2<F>; 4]>
+where
+    F: ComplexField + RealField + TotalOrder,
+{
+    if screen_id == 0 {
+        p.sort_unstable_by(|a, b| a.x.total_cmp(&b.x));
+    } else {
+        p.sort_unstable_by(|a, b| b.x.total_cmp(&a.x));
+    }
+    let n300 = F::from(300).unwrap();
+    let n2048 = F::from(2048).unwrap();
+    let (mut col1, rest) = split_column(p, n300);
+    let (mut col2, _) = split_column(rest, n300);
+    let &col1_down = col1.iter().filter(|p| p.y > n2048).min_by(|a, b| a.y.total_cmp(&b.y))?;
+    let &col1_up = col1.iter().filter(|p| p.y < n2048).max_by(|a, b| a.y.total_cmp(&b.y))?;
+    let &col2_down = col2.iter().filter(|p| p.y > n2048).min_by(|a, b| a.y.total_cmp(&b.y))?;
+    let &col2_up = col2.iter().filter(|p| p.y < n2048).max_by(|a, b| a.y.total_cmp(&b.y))?;
+    Some([col1_up, col2_up, col2_down, col1_down])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,8 +130,86 @@ mod tests {
             Point2::new(8., 4.),
         )
         .unwrap();
-        assert_eq!(r, Point2::new(0., 0.));
-        assert!(f64::abs(r.x - 0.5) < 0.03);
-        assert!(f64::abs(r.y - 0.5) < 0.03);
+        assert!(f64::abs(r.x - 2.) < 0.03);
+        assert!(f64::abs(r.y - 1.) < 0.03);
+    }
+
+    #[test]
+    fn columns() {
+        let mut p = &mut [
+            Point2::new(600., 3019.),
+            Point2::new(653., 1442.),
+            Point2::new(713., 799.),
+            Point2::new(1481., 3082.),
+            Point2::new(1529., 1479.),
+            Point2::new(1599., 978.),
+            Point2::new(2181., 1563.),
+            Point2::new(2221., 869.),
+            Point2::new(2231., 3154.),
+            Point2::new(2927., 3168.),
+            Point2::new(2946., 1555.),
+            Point2::new(2967., 947.),
+        ][..];
+        let mut cnt = 0;
+        loop {
+            let (a, b) = split_column(p, 400.);
+            assert_eq!(a.len(), 3, "{a:?}, {b:?}");
+            p = b;
+            cnt += 1;
+            if p.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(cnt, 4);
+    }
+
+    #[test]
+    fn rectangle_screen_0() {
+        let mut p = [
+            Point2::new(713., 799.),
+            Point2::new(1599., 978.),
+            Point2::new(1529., 1479.),
+            Point2::new(2927., 3168.),
+            Point2::new(653., 1442.),
+            Point2::new(2946., 1555.),
+            Point2::new(2967., 947.),
+            Point2::new(1481., 3082.),
+            Point2::new(2221., 869.),
+            Point2::new(600., 3019.),
+            Point2::new(2181., 1563.),
+            Point2::new(2231., 3154.),
+        ];
+        let x = choose_rectangle_nearfield_markers(&mut p, 0).unwrap();
+        assert_eq!(x, [
+            Point2::new(653., 1442.),
+            Point2::new(1529., 1479.),
+            Point2::new(1481., 3082.),
+            Point2::new(600., 3019.),
+        ]);
+    }
+
+    #[test]
+    fn rectangle_screen_1() {
+        let mut p = [
+            Point2::new(713., 799.),
+            Point2::new(1599., 978.),
+            Point2::new(1529., 1479.),
+            Point2::new(2927., 3168.),
+            Point2::new(653., 1442.),
+            Point2::new(2946., 1555.),
+            Point2::new(2967., 947.),
+            Point2::new(1481., 3082.),
+            Point2::new(2221., 869.),
+            Point2::new(600., 3019.),
+            Point2::new(2181., 1563.),
+            Point2::new(2231., 3154.),
+        ];
+        let x = choose_rectangle_nearfield_markers(&mut p, 1).unwrap();
+        assert_eq!(x, [
+            Point2::new(2946., 1555.),
+            Point2::new(2181., 1563.),
+            Point2::new(2231., 3154.),
+            Point2::new(2927., 3168.),
+        ]);
     }
 }
