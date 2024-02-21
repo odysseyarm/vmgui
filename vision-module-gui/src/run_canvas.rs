@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
-use nalgebra::Point2;
+use nalgebra::{Point2, Scale2};
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
@@ -26,15 +26,14 @@ impl AreaHandler for RunCanvas {
         let runner = self.state.blocking_lock();
         let state = &runner.state;
         if let Some(nf_data) = state.nf_data.as_ref() {
-            let mut nf_screen_points = ArrayVec::<Point2<f64>,16>::new();
+            let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
             for (i, mot_data) in nf_data.iter().enumerate() {
                 if mot_data.area == 0 {
                     break;
                 }
-                // todo don't use hardcoded 4095x4095 res assumption
+                nf_points.push(Point2::new(mot_data.cx, mot_data.cy).cast());
                 let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
                 let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
-                nf_screen_points.push(Point2::new(x, y));
 
                 let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
                 let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
@@ -53,12 +52,17 @@ impl AreaHandler for RunCanvas {
 
                 ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
-            if nf_screen_points.len() >= 4 {
-                let mut chosen = choose_rectangle_nearfield_markers(&mut nf_screen_points, state.screen_id);
+            if nf_points.len() >= 4 {
+                let mut chosen = choose_rectangle_nearfield_markers(&mut nf_points, state.screen_id);
                 let points = match chosen.as_mut() {
                     Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
-                    _ => &mut nf_screen_points[..4],
+                    _ => &mut nf_points[..4],
                 };
+                // todo don't use hardcoded 4095x4095 res assumption
+                for p in points.iter_mut() {
+                    *p = Scale2::new(draw_params.area_width, draw_params.area_height) * *p / 4095.;
+                }
+
                 sort_points(points, runner.general_config.marker_pattern);
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
