@@ -302,17 +302,24 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
 
             // TODO maybe don't recompute this in a hot loop lol
             let [bottom_m, left_m, top_m, right_m] = runner.general_config.marker_pattern.marker_positions();
-            // let tf = get_perspective_transform(
-            //     top_m * 2047.0,
-            //     bottom_m * 2047.0,
-            //     left_m * 2047.0,
-            //     right_m * 2047.0,
-            //     top,
-            //     bottom,
-            //     left,
-            //     right,
-            // ).unwrap();
-            // let p = tf.transform_point(&p);
+            let m = Matrix2x4::from_columns(&[
+                bottom_m.coords,
+                left_m.coords,
+                top_m.coords,
+                right_m.coords,
+            ]);
+            let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
+            let tf = get_perspective_transform(
+                m.column(0).xy().into(), // bottom
+                m.column(1).xy().into(), // left
+                m.column(2).xy().into(), // top
+                m.column(3).xy().into(), // right
+                bottom,
+                left,
+                top,
+                right,
+            ).unwrap();
+            let p = tf.transform_point(&p);
 
             let state = &mut runner.state;
             state.nf_aim_point = Some(Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.));
