@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Point2, Scalar, Vector2};
+use nalgebra::{Matrix2x4, Point2, Scalar, Vector2};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -241,14 +241,22 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 let right = Point2::new(right.x, right.y).cast::<f64>();
 
                 // TODO maybe don't recompute this in a hot loop lol
+                let [bottom_p, left_p, top_p, right_p] = runner.general_config.marker_pattern.marker_positions();
+                let m = Matrix2x4::from_columns(&[
+                    bottom_p.coords,
+                    left_p.coords,
+                    top_p.coords,
+                    right_p.coords,
+                ]);
+                let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
                 let tf = get_perspective_transform(
-                    Point2::new(0.0, -2047.0), // top
-                    Point2::new(0.0, 2047.0), // bottom
-                    Point2::new(-2047.0, 0.0), // left
-                    Point2::new(2047.0, 0.0), // right
-                    top,
+                    m.column(0).xy().into(), // bottom
+                    m.column(1).xy().into(), // left
+                    m.column(2).xy().into(), // top
+                    m.column(3).xy().into(), // right
                     bottom,
                     left,
+                    top,
                     right,
                 ).unwrap();
                 let p = tf.transform_point(&p);
