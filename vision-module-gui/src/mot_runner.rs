@@ -323,6 +323,7 @@ async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let state = &mut runner.state;
             state.nf_aim_point = Some(Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.));
+            state.screen_id = aim_report.screen_id;
         }
     }
 }
