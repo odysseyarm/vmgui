@@ -70,10 +70,10 @@ impl MarkerPattern {
                 [1.0, 0.5].into(), // right
             ],
             Self::Rectangle => [
-                [0.4, 0.0].into(), // top left
-                [0.6, 0.0].into(), // top right
-                [0.6, 1.0].into(), // bottom right
-                [0.4, 1.0].into(), // bottom left
+                [0.35, 0.0].into(), // top left
+                [0.65, 0.0].into(), // top right
+                [0.65, 1.0].into(), // bottom right
+                [0.35, 1.0].into(), // bottom left
             ],
         }
     }
