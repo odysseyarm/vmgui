@@ -77,10 +77,10 @@ where
     } else {
         p.sort_unstable_by(|a, b| b.x.total_cmp(&a.x));
     }
-    let n300 = F::from(300).unwrap();
+    let n300 = F::from(500).unwrap();
     let n2048 = F::from(2048).unwrap();
-    let (mut col1, rest) = split_column(p, n300);
-    let (mut col2, _) = split_column(rest, n300);
+    let (col1, rest) = split_column(p, n300);
+    let (col2, _) = split_column(rest, n300);
     let &col1_down = col1.iter().filter(|p| p.y > n2048).min_by(|a, b| a.y.total_cmp(&b.y))?;
     let &col1_up = col1.iter().filter(|p| p.y < n2048).max_by(|a, b| a.y.total_cmp(&b.y))?;
     let &col2_down = col2.iter().filter(|p| p.y > n2048).min_by(|a, b| a.y.total_cmp(&b.y))?;
