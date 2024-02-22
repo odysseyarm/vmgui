@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
-use nalgebra::{Point2, Scale2};
+use nalgebra::{Point2, Rotation2, Scale2, Vector2};
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
@@ -47,32 +47,46 @@ impl AreaHandler for RunCanvas {
         gravity_line_path.end(ctx);
         ctx.stroke(&gravity_line_path, &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }), &stroke2);
 
+        let draw_scale = Scale2::new(draw_params.area_width, draw_params.area_height);
+        let gravity_rot = Rotation2::new(-state.gravity_angle);
         if let Some(nf_data) = state.nf_data.as_ref() {
             let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
             for (i, mot_data) in nf_data.iter().enumerate() {
                 if mot_data.area == 0 {
                     break;
                 }
-                nf_points.push(Point2::new(mot_data.cx, mot_data.cy).cast());
-                let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
-                let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
+                // todo don't use hardcoded 4095x4095 res assumption
+                let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
+                    - Vector2::new(0.5, 0.5);
+                let p = gravity_rot * p;
+                let p = p + Vector2::new(0.5, 0.5);
+                nf_points.push(p * 4095.);
+                let p = draw_scale * p;
 
-                let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
-                let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
-                let right = mot_data.boundary_right as f64 / 98. * draw_params.area_width;
-                let up = mot_data.boundary_up as f64 / 98. * draw_params.area_height;
+                let left = mot_data.boundary_left as f64 / 98.;
+                let down = mot_data.boundary_down as f64 / 98.;
+                let right = mot_data.boundary_right as f64 / 98.;
+                let up = mot_data.boundary_up as f64 / 98.;
+                let corner = Point2::new(left - 0.5, up - 0.5);
+                let width = right - left;
+                let height = down - up;
+                let a = gravity_rot * corner + Vector2::new(0.5, 0.5);
+                let horiz = gravity_rot * Vector2::x() * width;
+                let vert = gravity_rot * Vector2::y() * height;
+                let b = draw_scale * (a + horiz);
+                let c = draw_scale * (a + horiz + vert);
+                let d = draw_scale * (a + vert);
+                let a = draw_scale * a;
 
-                draw_crosshair(&ctx, &ch_path, x, y, 50.);
+                draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
 
-                nf_path.add_rectangle(
-                    ctx,
-                    left,
-                    up,
-                    right-left,
-                    down-up,
-                );
+                nf_path.new_figure(ctx, a.x, a.y);
+                nf_path.line_to(ctx, b.x, b.y);
+                nf_path.line_to(ctx, c.x, c.y);
+                nf_path.line_to(ctx, d.x, d.y);
+                nf_path.close_figure(ctx);
 
-                ctx.draw_text(x+20.0, y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
+                ctx.draw_text(p.x+20.0, p.y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
             }
             ctx.draw_text(
                 20.0,
@@ -80,34 +94,12 @@ impl AreaHandler for RunCanvas {
                 &format!("screen_id = {}", runner.state.screen_id),
             );
             if nf_points.len() >= 4 {
-                {
-                    let s = state.gravity_angle.sin();
-                    let c = state.gravity_angle.cos();
-                    let (cx, cy) = (2048., 2048.);
-                    nf_points.iter_mut().for_each(|p| {
-                        let (x, y) = (p.x, p.y);
-                        p.x = (x-cx)*c-(y-cy)*s+cx;
-                        p.y = (x-cx)*s+(y-cy)*c+cy;
-                    });
-                }
                 let mut chosen = choose_rectangle_nearfield_markers(&mut nf_points, state.screen_id);
                 let points = match chosen.as_mut() {
                     Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
                     _ => &mut nf_points[..4],
                 };
                 sort_points(points, runner.general_config.marker_pattern);
-                // todo don't use hardcoded 4095x4095 res assumption
-                {
-                    let s = (-state.gravity_angle).sin();
-                    let c = (-state.gravity_angle).cos();
-                    let (cx, cy) = (2048., 2048.);
-                    for p in points.iter_mut() {
-                        let (x, y) = (p.x, p.y);
-                        p.x = (x-cx)*c-(y-cy)*s+cx;
-                        p.y = (x-cx)*s+(y-cy)*c+cy;
-                        *p = Scale2::new(draw_params.area_width, draw_params.area_height) * *p / 4095.;
-                    }
-                }
 
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
@@ -122,7 +114,7 @@ impl AreaHandler for RunCanvas {
                     points[2], points[3],
                 );
                 if let Some(transform) = transform {
-                    draw_grid(ctx, &nf_grid_path, 10, 10, transform);
+                    draw_grid(ctx, &nf_grid_path, 10, 10, (draw_scale * (1./4095.)).to_homogeneous() * transform);
                 }
             }
         }
@@ -134,23 +126,34 @@ impl AreaHandler for RunCanvas {
                     break;
                 }
                 // todo don't use hardcoded 4095x4095 res assumption
-                let x = mot_data.cx as f64 / 4095. * draw_params.area_width;
-                let y = mot_data.cy as f64 / 4095. * draw_params.area_height;
+                let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
+                    - Vector2::new(0.5, 0.5);
+                let p = gravity_rot * p;
+                let p = p + Vector2::new(0.5, 0.5);
+                let p = draw_scale * p;
 
-                let left = mot_data.boundary_left as f64 / 98. * draw_params.area_width;
-                let down = mot_data.boundary_down as f64 / 98. * draw_params.area_height;
-                let right = mot_data.boundary_right as f64 / 98. * draw_params.area_width;
-                let up = mot_data.boundary_up as f64 / 98. * draw_params.area_height;
+                let left = mot_data.boundary_left as f64 / 98.;
+                let down = mot_data.boundary_down as f64 / 98.;
+                let right = mot_data.boundary_right as f64 / 98.;
+                let up = mot_data.boundary_up as f64 / 98.;
+                let corner = Point2::new(left - 0.5, up - 0.5);
+                let width = right - left;
+                let height = down - up;
+                let a = gravity_rot * corner + Vector2::new(0.5, 0.5);
+                let horiz = gravity_rot * Vector2::x() * width;
+                let vert = gravity_rot * Vector2::y() * height;
+                let b = draw_scale * (a + horiz);
+                let c = draw_scale * (a + horiz + vert);
+                let d = draw_scale * (a + vert);
+                let a = draw_scale * a;
 
-                draw_crosshair(&ctx, &ch_path, x, y, 50.);
+                draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
 
-                wf_path.add_rectangle(
-                    ctx,
-                    left,
-                    up,
-                    right-left,
-                    down-up,
-                );
+                wf_path.new_figure(ctx, a.x, a.y);
+                wf_path.line_to(ctx, b.x, b.y);
+                wf_path.line_to(ctx, c.x, c.y);
+                wf_path.line_to(ctx, d.x, d.y);
+                wf_path.close_figure(ctx);
             }
         }
         wf_path.end(ctx);
