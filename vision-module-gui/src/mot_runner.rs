@@ -8,7 +8,7 @@ use nalgebra::{Matrix2x4, Point2, Scalar, Vector2};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::debug;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
