@@ -98,13 +98,15 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
 
 async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
-    let mut frame_stream = device.stream_mot_data().await.unwrap();
+    let mut mot_data_stream = device.stream_mot_data().await.unwrap();
     loop {
         if runner.lock().await.device.is_none() {
             return;
         }
         // if let Ok((nf_data, wf_data)) = device.get_frame().await {
-        if let Some((nf_data, wf_data)) = frame_stream.next().await {
+        if let Some(mot_data) = mot_data_stream.next().await {
+            let nf_data = mot_data.mot_data_nf;
+            let wf_data = mot_data.mot_data_wf;
             let mut runner = runner.lock().await;
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
@@ -207,6 +209,7 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             // state.wf_aim_point = wf_aim_point;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
+            state.gravity_angle = mot_data.gravity_angle as f64;
         }
         sleep(Duration::from_millis(5)).await;
     }

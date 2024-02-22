@@ -1,3 +1,4 @@
+use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
@@ -18,6 +19,14 @@ pub struct RunCanvas {
 impl AreaHandler for RunCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
+        let stroke2 = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 2.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
 
         let ch_path = Path::new(ctx, FillMode::Winding);
         let nf_path = Path::new(ctx, FillMode::Winding);
@@ -25,6 +34,19 @@ impl AreaHandler for RunCanvas {
         let nf_grid_path = Path::new(ctx, FillMode::Winding);
         let runner = self.state.blocking_lock();
         let state = &runner.state;
+
+        // Green line representing the up direction relative to the vision module.
+        let gravity_line_path = Path::new(ctx, FillMode::Winding);
+        gravity_line_path.new_figure(ctx, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height);
+        let angle = -state.gravity_angle - PI/2.;
+        gravity_line_path.line_to(
+            ctx,
+            0.5 * draw_params.area_width + 50.0 * angle.cos(),
+            0.5 * draw_params.area_height + 50.0 * angle.sin(),
+        );
+        gravity_line_path.end(ctx);
+        ctx.stroke(&gravity_line_path, &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }), &stroke2);
+
         if let Some(nf_data) = state.nf_data.as_ref() {
             let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
             for (i, mot_data) in nf_data.iter().enumerate() {
@@ -177,17 +199,9 @@ impl AreaHandler for RunCanvas {
             b: 0.,
             a: 1.,
         });
-        let stroke = StrokeParams {
-            cap: 0, // Bevel
-            join: 0, // Flat
-            thickness: 2.,
-            miter_limit: 0.,
-            dashes: vec![],
-            dash_phase: 0.,
-        };
         let center_point_path = Path::new(ctx, FillMode::Winding);
         draw_diamond(ctx, &center_point_path, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height, 8.0, 8.0);
         center_point_path.end(ctx);
-        ctx.stroke(&center_point_path, &brush, &stroke);
+        ctx.stroke(&center_point_path, &brush, &stroke2);
     }
 }

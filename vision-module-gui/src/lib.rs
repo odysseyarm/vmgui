@@ -41,4 +41,5 @@ pub struct MotState {
     pub nf_pva2ds: [Pva2d<f64>; 4],
 
     pub screen_id: u8,
+    pub gravity_angle: f64,
 }

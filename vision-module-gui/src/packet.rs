@@ -108,6 +108,7 @@ pub struct MotData {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectReport {
+    pub gravity_angle: f32,
     pub mot_data_nf: [MotData; 16],
     pub mot_data_wf: [MotData; 16],
 }
@@ -270,7 +271,7 @@ impl Packet {
             PacketData::ReadRegister(_) => 4,
             PacketData::ReadRegisterResponse(_) => 4,
             PacketData::ObjectReportRequest(_) => 0,
-            PacketData::ObjectReport(_) => 514,
+            PacketData::ObjectReport(_) => 518,
             PacketData::StreamUpdate(_) => 2,
             PacketData::AimPointReport(_) => 6,
             PacketData::ImpactWithAimPointReport(_) => 6,
@@ -448,16 +449,25 @@ impl MotData {
 impl ObjectReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
+        let g = &bytes[..4];
+        let gravity_angle = f32::from_le_bytes([g[0], g[1], g[2], g[3]]);
+        *bytes = &bytes[4..];
+
         let mut data = &mut &bytes[..512];
         *bytes = &bytes[512..];
         let [format, _, ..] = **bytes else {
             return Err(E::UnexpectedEof);
         };
         *bytes = &bytes[2..];
-        Ok(Self { mot_data_nf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")), mot_data_wf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")) })
+        Ok(Self {
+            gravity_angle,
+            mot_data_nf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
+            mot_data_wf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.gravity_angle.to_le_bytes());
         for i in 0..16 {
             self.mot_data_nf[i].serialize(buf);
         }
