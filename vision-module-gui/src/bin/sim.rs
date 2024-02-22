@@ -118,7 +118,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::AimPointReport(_) => unreachable!(),
             PacketData::ImpactWithAimPointReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: state.marker_pattern })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: state.marker_pattern, wf_offset_x: 0 })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
@@ -227,18 +227,18 @@ impl State {
             pitch: 0.0,
             markers: vec![
                 tf * Point3::new(0.35, 1.0, 0.0),
-                tf * Point3::new(0.65, 1.0, 0.0),
+                tf * Point3::new(0.8, 1.0, 0.0),
                 tf * Point3::new(0.65, 0.0, 0.0),
                 tf * Point3::new(0.35, 0.0, 0.0),
-                tf * Point3::new(0.35, -0.2, 0.0),
-                tf * Point3::new(0.65, -0.2, 0.0),
+                // tf * Point3::new(0.35, -0.2, 0.0),
+                // tf * Point3::new(0.65, -0.2, 0.0),
 
                 tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
                 tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
                 tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
                 tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
             ],
             prev_mouse: Point2::new(0., 0.),
             moving_fwd: false,

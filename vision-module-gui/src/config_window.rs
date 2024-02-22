@@ -298,6 +298,7 @@ pub fn config_window(
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
     marker_pattern: RwSignal<i32>,
+    wf_offset_x: RwSignal<i32>,
     pub applied_marker_pattern: RwSignal<MarkerPattern>,
     mot_runner: Arc<Mutex<MotRunner>>,
 }
@@ -307,6 +308,7 @@ impl GeneralSettingsForm {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let marker_pattern = create_rw_signal(0);
+        let wf_offset_x = create_rw_signal(0);
         let applied_marker_pattern = create_rw_signal(MarkerPattern::Diamond);
         crate::layout! { &ui,
             let form = Form(padded: true) {
@@ -315,6 +317,7 @@ impl GeneralSettingsForm {
                     "Diamond",
                     "Rectangle"
                 }
+                (Compact, "WF offset X") : let x = Spinbox(enabled: connected, signal: wf_offset_x)
             }
         }
         (
@@ -322,6 +325,7 @@ impl GeneralSettingsForm {
             Self {
                 impact_threshold,
                 marker_pattern,
+                wf_offset_x,
                 applied_marker_pattern,
                 mot_runner,
             },
@@ -333,6 +337,7 @@ impl GeneralSettingsForm {
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.marker_pattern.set(config.marker_pattern as i32);
+        self.wf_offset_x.set(config.wf_offset_x as i32);
         self.applied_marker_pattern.set(config.marker_pattern);
         if first_load {
             self.mot_runner.lock().await.general_config = config;
@@ -382,6 +387,7 @@ impl GeneralSettingsForm {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             marker_pattern: MarkerPattern::n(self.marker_pattern.get_untracked()).unwrap(),
+            wf_offset_x: self.wf_offset_x.get_untracked() as i16,
         };
         device.write_config(config).await?;
         self.applied_marker_pattern.set(config.marker_pattern);
@@ -392,11 +398,13 @@ impl GeneralSettingsForm {
     fn clear(&self) {
         self.impact_threshold.set(0);
         self.marker_pattern.set(0);
+        self.wf_offset_x.set(0);
     }
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
         self.marker_pattern.set(0);
+        self.wf_offset_x.set(-56);
     }
 }
 
