@@ -137,13 +137,21 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         std::thread::sleep(Duration::from_millis(10));
         let state = state.lock().unwrap();
 
-        let mut markers: Vec<_> = state.calculate_marker_positions();
-        sort_rectangle(&mut markers);
-        let markers = markers;
+        let mut nf_markers: Vec<_> = state.calculate_nf_positions();
+        sort_rectangle(&mut nf_markers);
+        let nf_markers = nf_markers;
+        let wf_markers: Vec<_> = state.calculate_wf_positions();
 
         if let Some(id) = state.stream_mot {
             let mut object_report = ObjectReport::default();
-            for (marker, mot_data) in markers.iter().zip(&mut object_report.mot_data_nf) {
+            for (marker, mot_data) in nf_markers.iter().zip(&mut object_report.mot_data_nf) {
+                if (0..4096).contains(&marker.x) && (0..4096).contains(&marker.y) {
+                    mot_data.area = 1;
+                    mot_data.cx = marker.x as u16;
+                    mot_data.cy = marker.y as u16;
+                }
+            }
+            for (marker, mot_data) in wf_markers.iter().zip(&mut object_report.mot_data_wf) {
                 if (0..4096).contains(&marker.x) && (0..4096).contains(&marker.y) {
                     mot_data.area = 1;
                     mot_data.cx = marker.x as u16;
@@ -159,10 +167,10 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let marker_pattern = state.marker_pattern.marker_positions();
             let r = transform_aim_point(
                 [2048.0, 2048.0].into(),
-                markers[0].cast(),
-                markers[1].cast(),
-                markers[2].cast(),
-                markers[3].cast(),
+                nf_markers[0].cast(),
+                nf_markers[1].cast(),
+                nf_markers[2].cast(),
+                nf_markers[3].cast(),
                 marker_pattern[0],
                 marker_pattern[1],
                 marker_pattern[2],
@@ -173,7 +181,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::AimPointReport(AimPointReport {
                     x: (r.x * 4095. - 2047.) as i16,
                     y: (r.y * 4095. - 2047.) as i16,
-                    screen_id: 0, // TODO
+                    screen_id: 1, // TODO
                 })
             };
             buf.clear();
@@ -188,7 +196,6 @@ struct State {
     yaw: f64,
     pitch: f64,
     markers: Vec<Point3<f64>>,
-    fov: f64,
     prev_mouse: Point2<f64>,
     moving_fwd: bool,
     moving_back: bool,
@@ -217,8 +224,14 @@ impl State {
                 tf * Point3::new(0.35, 0.0, 0.0),
                 tf * Point3::new(0.35, -0.2, 0.0),
                 tf * Point3::new(0.65, -0.2, 0.0),
+
+                tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
+                tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
+                tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
+                tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
+                tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
+                tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
             ],
-            fov: 38.3 / 180.0 * std::f64::consts::PI,
             prev_mouse: Point2::new(0., 0.),
             moving_fwd: false,
             moving_back: false,
@@ -254,7 +267,9 @@ impl State {
     }
 
     fn perspective_matrix(&self) -> Matrix4<f64> {
-        let f = 1. / (self.fov / 2.).tan();
+        let fov_deg = 38.3;
+        let fov = fov_deg / 180.0 * std::f64::consts::PI;
+        let f = 1. / (fov / 2.).tan();
         #[rustfmt::skip]
         let r = Matrix4::new(
             f, 0.,  0., 0.,
@@ -265,7 +280,21 @@ impl State {
         r
     }
 
-    fn calculate_marker_positions(&self) -> Vec<Point2<i16>> {
+    fn wf_perspective_matrix(&self) -> Matrix4<f64> {
+        let fov_deg = 111.3;
+        let fov = fov_deg / 180.0 * std::f64::consts::PI;
+        let f = 1. / (fov / 2.).tan();
+        #[rustfmt::skip]
+        let r = Matrix4::new(
+            f, 0.,  0., 0.,
+            0., f,  0., 0.,
+            0., 0., 1., 0.,
+            0., 0.,-1., 0.,
+        );
+        r
+    }
+
+    fn calculate_nf_positions(&self) -> Vec<Point2<i16>> {
         let transform = self.perspective_matrix()
             * self.camera_matrix();
         let device_transform =
@@ -275,22 +304,18 @@ impl State {
             let p = device_transform.transform_point(&(p.xy() / p.w).into());
             Point2::new(p.x.round() as i16, p.y.round() as i16)
         }).collect()
-        // let top = transform * Vector4::new(off.top.x, -off.top.y, 0, 1).cast::<f64>();
-        // let left = transform * Vector4::new(off.left.x, -off.left.y, 0, 1).cast::<f64>();
-        // let bottom = transform * Vector4::new(off.bottom.x, -off.bottom.y, 0, 1).cast::<f64>();
-        // let right = transform * Vector4::new(off.right.x, -off.right.y, 0, 1).cast::<f64>();
+    }
 
-        // let top = device_transform.transform_point(&(top.xy() / top.w).into());
-        // let left = device_transform.transform_point(&(left.xy() / left.w).into());
-        // let bottom = device_transform.transform_point(&(bottom.xy() / bottom.w).into());
-        // let right = device_transform.transform_point(&(right.xy() / right.w).into());
-
-        // let top = Point2::new(top.x.round() as i16, top.y.round() as i16);
-        // let left = Point2::new(left.x.round() as i16, left.y.round() as i16);
-        // let bottom = Point2::new(bottom.x.round() as i16, bottom.y.round() as i16);
-        // let right = Point2::new(right.x.round() as i16, right.y.round() as i16);
-
-        // MarkerPoints { top, left, bottom, right }
+    fn calculate_wf_positions(&self) -> Vec<Point2<i16>> {
+        let transform = self.wf_perspective_matrix()
+            * self.camera_matrix();
+        let device_transform =
+            Scale2::new(2047.5, -2047.5).to_homogeneous() * Translation2::new(1.0, -1.0).to_homogeneous();
+        self.markers.iter().map(|p| {
+            let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
+            let p = device_transform.transform_point(&(p.xy() / p.w).into());
+            Point2::new(p.x.round() as i16, p.y.round() as i16)
+        }).collect()
     }
 }
 
@@ -394,7 +419,7 @@ impl AreaHandler for MainCanvas {
             state.pitch += d.y / 5000.0;
         }
         if mouse_event.down == 2 {
-            dbg!(state.calculate_marker_positions());
+            dbg!(state.calculate_nf_positions());
         }
     }
 
