@@ -95,6 +95,7 @@ impl AreaHandler for RunCanvas {
                     Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
                     _ => &mut nf_points[..4],
                 };
+                sort_points(points, runner.general_config.marker_pattern);
                 // todo don't use hardcoded 4095x4095 res assumption
                 {
                     let s = (-state.gravity_angle).sin();
@@ -108,20 +109,19 @@ impl AreaHandler for RunCanvas {
                     }
                 }
 
-                sort_points(points, runner.general_config.marker_pattern);
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
                 let bottom = runner.markers_settings.views[0].marker_bottom.position;
                 let right = runner.markers_settings.views[0].marker_right.position;
                 let transform = ats_cv::get_perspective_transform(
-                    points[0], points[1],
-                    points[2], points[3],
                     Point2::new(rescale(bottom.x as f64), rescale(bottom.y as f64)), // bottom
                     Point2::new(rescale(left.x as f64), rescale(left.y as f64)), // left
                     Point2::new(rescale(top.x as f64), rescale(top.y as f64)), // top
                     Point2::new(rescale(right.x as f64), rescale(right.y as f64)), // right
+                    points[0], points[1],
+                    points[2], points[3],
                 );
-                if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
+                if let Some(transform) = transform {
                     draw_grid(ctx, &nf_grid_path, 10, 10, transform);
                 }
             }
