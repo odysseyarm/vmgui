@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -313,15 +313,14 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
-    pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ([MotData; 16], [MotData; 16])> + Send + Sync> {
+    pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
         if self.thread_state.mot_data_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one mot data stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b001, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
-            let obj = x.object_report().unwrap();
-            (obj.mot_data_nf, obj.mot_data_wf)
+            x.object_report().unwrap()
         }))
     }
 
