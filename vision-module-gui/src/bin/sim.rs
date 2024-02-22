@@ -10,7 +10,7 @@ use iui::{
     UI,
 };
 use nalgebra::{
-    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Translation2, Translation3, Vector3, Vector4
+    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4
 };
 use tracing::{error, info};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
@@ -133,36 +133,18 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         std::thread::sleep(Duration::from_millis(10));
         let state = state.lock().unwrap();
 
-        let mut markers = state.calculate_marker_positions();
-        let mut unsorted = [markers.bottom, markers.left, markers.top, markers.right];
-        sort_rectangle(&mut unsorted);
-        markers.bottom = unsorted[0];
-        markers.left = unsorted[1];
-        markers.top = unsorted[2];
-        markers.right = unsorted[3];
+        let mut markers: Vec<_> = state.calculate_marker_positions();
+        sort_rectangle(&mut markers);
         let markers = markers;
 
         if let Some(id) = state.stream_mot {
             let mut object_report = ObjectReport::default();
-            if (0..4096).contains(&markers.top.x) && (0..4096).contains(&markers.top.y) {
-                object_report.mot_data_nf[0].area = 1;
-                object_report.mot_data_nf[0].cx = markers.top.x as u16;
-                object_report.mot_data_nf[0].cy = markers.top.y as u16;
-            }
-            if (0..4096).contains(&markers.left.x) && (0..4096).contains(&markers.left.y) {
-                object_report.mot_data_nf[1].area = 1;
-                object_report.mot_data_nf[1].cx = markers.left.x as u16;
-                object_report.mot_data_nf[1].cy = markers.left.y as u16;
-            }
-            if (0..4096).contains(&markers.bottom.x) && (0..4096).contains(&markers.bottom.y) {
-                object_report.mot_data_nf[2].area = 1;
-                object_report.mot_data_nf[2].cx = markers.bottom.x as u16;
-                object_report.mot_data_nf[2].cy = markers.bottom.y as u16;
-            }
-            if (0..4096).contains(&markers.right.x) && (0..4096).contains(&markers.right.y) {
-                object_report.mot_data_nf[3].area = 1;
-                object_report.mot_data_nf[3].cx = markers.right.x as u16;
-                object_report.mot_data_nf[3].cy = markers.right.y as u16;
+            for (marker, mot_data) in markers.iter().zip(&mut object_report.mot_data_nf) {
+                if (0..4096).contains(&marker.x) && (0..4096).contains(&marker.y) {
+                    mot_data.area = 1;
+                    mot_data.cx = marker.x as u16;
+                    mot_data.cy = marker.y as u16;
+                }
             }
             buf.clear();
             Packet { id, data: PacketData::ObjectReport(object_report) }.serialize(&mut buf);
@@ -172,14 +154,19 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         if let Some(id) = state.stream_aim {
             let r = transform_aim_point(
                 [2048.0, 2048.0].into(),
-                markers.top.cast(),
-                markers.bottom.cast(),
-                markers.left.cast(),
-                markers.right.cast(),
-                [0.5, 0.0].into(),
-                [0.5, 1.0].into(),
-                [0.0, 0.5].into(),
-                [1.0, 0.5].into(),
+                markers[0].cast(),
+                markers[1].cast(),
+                markers[2].cast(),
+                markers[3].cast(),
+                // TODO change pattern based on setting
+                [0.35, 0.0].into(),
+                [0.65, 0.0].into(),
+                [0.65, 1.0].into(),
+                [0.35, 1.0].into(),
+                // [0.5, 0.0].into(),
+                // [0.5, 1.0].into(),
+                // [0.0, 0.5].into(),
+                // [1.0, 0.5].into(),
             ).unwrap();
             let pkt = Packet {
                 id,
@@ -196,19 +183,11 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-struct MarkerPoints {
-    top: Point2<i16>,
-    right: Point2<i16>,
-    bottom: Point2<i16>,
-    left: Point2<i16>,
-}
-
 struct State {
     camera_pos: Point3<f64>,
     yaw: f64,
     pitch: f64,
-    marker_offset: MarkerPoints,
+    markers: Vec<Point3<f64>>,
     fov: f64,
     prev_mouse: Point2<f64>,
     moving_fwd: bool,
@@ -223,26 +202,23 @@ struct State {
 
 impl State {
     fn new() -> Self {
+        let tf = Scale3::new(GRID_WIDTH, GRID_HEIGHT, 1.0).to_homogeneous()
+            * Translation3::new(-0.5, -0.5, 0.0).to_homogeneous();
+        let tf = Transform3::from_matrix_unchecked(tf);
         Self {
             camera_pos: Point3::new(0., 0., 10.),
             yaw: 0.0,
             pitch: 0.0,
-            marker_offset: MarkerPoints {
-                top: Point2::new(-500, -2047),
-                right: Point2::new(500, -2047),
-                bottom: Point2::new(-500, 2047),
-                left: Point2::new(500, 2047),
-
-                // top: Point2::new(-1000, -2047),
-                // right: Point2::new(2047, 1000),
-                // bottom: Point2::new(1000, 2047),
-                // left: Point2::new(-2047, -1000),
-
+            markers: vec![
+                tf * Point3::new(0.35, 1.0, 0.0),
+                tf * Point3::new(0.65, 1.0, 0.0),
+                tf * Point3::new(0.65, 0.0, 0.0),
+                tf * Point3::new(0.35, 0.0, 0.0),
                 // top: Point2::new(0, -2047),
                 // right: Point2::new(2047, 0),
                 // bottom: Point2::new(0, 2047),
                 // left: Point2::new(-2047, 0),
-            },
+            ],
             fov: 38.3 / 180.0 * std::f64::consts::PI,
             prev_mouse: Point2::new(0., 0.),
             moving_fwd: false,
@@ -289,29 +265,32 @@ impl State {
         r
     }
 
-    fn calculate_marker_positions(&self) -> MarkerPoints {
+    fn calculate_marker_positions(&self) -> Vec<Point2<i16>> {
         let transform = self.perspective_matrix()
-            * self.camera_matrix()
-            * Scale3::new(GRID_WIDTH / 2.0 / 2047.0, GRID_HEIGHT / 2.0 / 2047.0, 1.0).to_homogeneous();
+            * self.camera_matrix();
         let device_transform =
             Scale2::new(2047.5, -2047.5).to_homogeneous() * Translation2::new(1.0, -1.0).to_homogeneous();
-        let off = self.marker_offset;
-        let top = transform * Vector4::new(off.top.x, -off.top.y, 0, 1).cast::<f64>();
-        let left = transform * Vector4::new(off.left.x, -off.left.y, 0, 1).cast::<f64>();
-        let bottom = transform * Vector4::new(off.bottom.x, -off.bottom.y, 0, 1).cast::<f64>();
-        let right = transform * Vector4::new(off.right.x, -off.right.y, 0, 1).cast::<f64>();
+        self.markers.iter().map(|p| {
+            let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
+            let p = device_transform.transform_point(&(p.xy() / p.w).into());
+            Point2::new(p.x.round() as i16, p.y.round() as i16)
+        }).collect()
+        // let top = transform * Vector4::new(off.top.x, -off.top.y, 0, 1).cast::<f64>();
+        // let left = transform * Vector4::new(off.left.x, -off.left.y, 0, 1).cast::<f64>();
+        // let bottom = transform * Vector4::new(off.bottom.x, -off.bottom.y, 0, 1).cast::<f64>();
+        // let right = transform * Vector4::new(off.right.x, -off.right.y, 0, 1).cast::<f64>();
 
-        let top = device_transform.transform_point(&(top.xy() / top.w).into());
-        let left = device_transform.transform_point(&(left.xy() / left.w).into());
-        let bottom = device_transform.transform_point(&(bottom.xy() / bottom.w).into());
-        let right = device_transform.transform_point(&(right.xy() / right.w).into());
+        // let top = device_transform.transform_point(&(top.xy() / top.w).into());
+        // let left = device_transform.transform_point(&(left.xy() / left.w).into());
+        // let bottom = device_transform.transform_point(&(bottom.xy() / bottom.w).into());
+        // let right = device_transform.transform_point(&(right.xy() / right.w).into());
 
-        let top = Point2::new(top.x.round() as i16, top.y.round() as i16);
-        let left = Point2::new(left.x.round() as i16, left.y.round() as i16);
-        let bottom = Point2::new(bottom.x.round() as i16, bottom.y.round() as i16);
-        let right = Point2::new(right.x.round() as i16, right.y.round() as i16);
+        // let top = Point2::new(top.x.round() as i16, top.y.round() as i16);
+        // let left = Point2::new(left.x.round() as i16, left.y.round() as i16);
+        // let bottom = Point2::new(bottom.x.round() as i16, bottom.y.round() as i16);
+        // let right = Point2::new(right.x.round() as i16, right.y.round() as i16);
 
-        MarkerPoints { top, left, bottom, right }
+        // MarkerPoints { top, left, bottom, right }
     }
 }
 
@@ -388,15 +367,8 @@ impl AreaHandler for MainCanvas {
         );
 
         let markers_path = Path::new(ctx, FillMode::Winding);
-        for marker in [
-            state.marker_offset.top,
-            state.marker_offset.bottom,
-            state.marker_offset.left,
-            state.marker_offset.right,
-        ] {
-            let p = Scale3::new(GRID_WIDTH / 2.0, GRID_HEIGHT / 2.0, 0.0)
-                * (Point3::new(marker.x, -marker.y, 0).cast::<f64>() / 2047.0);
-            draw_marker(p, 0.05, ctx, &markers_path, transform, device_transform);
+        for &marker in &state.markers {
+            draw_marker(marker, 0.05, ctx, &markers_path, transform, device_transform);
         }
         markers_path.end(ctx);
         ctx.stroke(
