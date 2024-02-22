@@ -276,7 +276,7 @@ impl Packet {
             PacketData::StreamUpdate(_) => 2,
             PacketData::AimPointReport(_) => 6,
             PacketData::ImpactWithAimPointReport(_) => 6,
-            PacketData::WriteConfig(_) => 2,
+            PacketData::WriteConfig(_) => 4,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 2,
             PacketData::FlashSettings => 0,
