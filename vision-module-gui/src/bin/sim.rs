@@ -145,10 +145,14 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         if let Some(id) = state.stream_mot {
             let mut object_report = ObjectReport::default();
             for (marker, mot_data) in nf_markers.iter().zip(&mut object_report.mot_data_nf) {
-                if (0..4096).contains(&marker.x) && (0..4096).contains(&marker.y) {
+                if (0..4095).contains(&marker.x) && (0..4095).contains(&marker.y) {
                     mot_data.area = 1;
                     mot_data.cx = marker.x as u16;
                     mot_data.cy = marker.y as u16;
+                    mot_data.boundary_left = ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_right = mot_data.boundary_left + 3;
+                    mot_data.boundary_up = ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_down = mot_data.boundary_up + 3;
                 }
             }
             for (marker, mot_data) in wf_markers.iter().zip(&mut object_report.mot_data_wf) {
@@ -156,6 +160,10 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     mot_data.area = 1;
                     mot_data.cx = marker.x as u16;
                     mot_data.cy = marker.y as u16;
+                    mot_data.boundary_left = ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_right = mot_data.boundary_left + 3;
+                    mot_data.boundary_up = ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_down = mot_data.boundary_up + 3;
                 }
             }
             buf.clear();
