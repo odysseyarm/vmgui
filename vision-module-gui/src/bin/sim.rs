@@ -15,6 +15,10 @@ use nalgebra::{
 use tracing::{error, info};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 
+// Positive x is right
+// Positive y is up
+// Right hand rule (z is out from the screen)
+
 fn main() {
     let mut port = 4444u16;
     if let Some(port_arg) = std::env::args().nth(1) {
@@ -114,7 +118,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::AimPointReport(_) => unreachable!(),
             PacketData::ImpactWithAimPointReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: MarkerPattern::Rectangle })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: state.marker_pattern })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
@@ -152,21 +156,17 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         }
 
         if let Some(id) = state.stream_aim {
+            let marker_pattern = state.marker_pattern.marker_positions();
             let r = transform_aim_point(
                 [2048.0, 2048.0].into(),
                 markers[0].cast(),
                 markers[1].cast(),
                 markers[2].cast(),
                 markers[3].cast(),
-                // TODO change pattern based on setting
-                [0.35, 0.0].into(),
-                [0.65, 0.0].into(),
-                [0.65, 1.0].into(),
-                [0.35, 1.0].into(),
-                // [0.5, 0.0].into(),
-                // [0.5, 1.0].into(),
-                // [0.0, 0.5].into(),
-                // [1.0, 0.5].into(),
+                marker_pattern[0],
+                marker_pattern[1],
+                marker_pattern[2],
+                marker_pattern[3],
             ).unwrap();
             let pkt = Packet {
                 id,
@@ -198,6 +198,7 @@ struct State {
     moving_down: bool,
     stream_mot: Option<u8>,
     stream_aim: Option<u8>,
+    marker_pattern: MarkerPattern,
 }
 
 impl State {
@@ -206,7 +207,7 @@ impl State {
             * Translation3::new(-0.5, -0.5, 0.0).to_homogeneous();
         let tf = Transform3::from_matrix_unchecked(tf);
         Self {
-            camera_pos: Point3::new(0., 0., 10.),
+            camera_pos: Point3::new(0., 0., 5.),
             yaw: 0.0,
             pitch: 0.0,
             markers: vec![
@@ -214,10 +215,8 @@ impl State {
                 tf * Point3::new(0.65, 1.0, 0.0),
                 tf * Point3::new(0.65, 0.0, 0.0),
                 tf * Point3::new(0.35, 0.0, 0.0),
-                // top: Point2::new(0, -2047),
-                // right: Point2::new(2047, 0),
-                // bottom: Point2::new(0, 2047),
-                // left: Point2::new(-2047, 0),
+                tf * Point3::new(0.35, -0.2, 0.0),
+                tf * Point3::new(0.65, -0.2, 0.0),
             ],
             fov: 38.3 / 180.0 * std::f64::consts::PI,
             prev_mouse: Point2::new(0., 0.),
@@ -229,6 +228,7 @@ impl State {
             moving_down: false,
             stream_mot: None,
             stream_aim: None,
+            marker_pattern: MarkerPattern::Rectangle,
         }
     }
 
