@@ -80,14 +80,32 @@ impl AreaHandler for RunCanvas {
                 &format!("screen_id = {}", runner.state.screen_id),
             );
             if nf_points.len() >= 4 {
+                {
+                    let s = state.gravity_angle.sin();
+                    let c = state.gravity_angle.cos();
+                    let (cx, cy) = (2048., 2048.);
+                    nf_points.iter_mut().for_each(|p| {
+                        let (x, y) = (p.x, p.y);
+                        p.x = (x-cx)*c-(y-cy)*s+cx;
+                        p.y = (x-cx)*s+(y-cy)*c+cy;
+                    });
+                }
                 let mut chosen = choose_rectangle_nearfield_markers(&mut nf_points, state.screen_id);
                 let points = match chosen.as_mut() {
                     Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
                     _ => &mut nf_points[..4],
                 };
                 // todo don't use hardcoded 4095x4095 res assumption
-                for p in points.iter_mut() {
-                    *p = Scale2::new(draw_params.area_width, draw_params.area_height) * *p / 4095.;
+                {
+                    let s = (-state.gravity_angle).sin();
+                    let c = (-state.gravity_angle).cos();
+                    let (cx, cy) = (2048., 2048.);
+                    for p in points.iter_mut() {
+                        let (x, y) = (p.x, p.y);
+                        p.x = (x-cx)*c-(y-cy)*s+cx;
+                        p.y = (x-cx)*s+(y-cy)*c+cy;
+                        *p = Scale2::new(draw_params.area_width, draw_params.area_height) * *p / 4095.;
+                    }
                 }
 
                 sort_points(points, runner.general_config.marker_pattern);
