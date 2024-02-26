@@ -6,4 +6,5 @@ members = [
     "libui-rs/ui-sys",
     "ats_cv",
     "ats_cv_cbindgen",
-    "vision-module-gui"]
+    "vision-module-gui",
+]
