@@ -1,9 +1,10 @@
 #![cfg_attr(target_os = "none", no_std)]
 
-use core::{ffi::c_int, mem::MaybeUninit};
+use core::mem::MaybeUninit;
+use ahrs::{Ahrs as _, Madgwick};
 use ats_cv::kalman::Pva2d;
 use cam_geom::Pixels;
-use nalgebra::{Matrix, Point2, Vector5};
+use nalgebra::{Matrix, Point2, Vector3, Vector5};
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 #[cfg(target_os = "none")]
 use panic_semihosting as _;
@@ -18,6 +19,24 @@ pub struct Pointf32 {
 impl From<Pointf32> for nalgebra::Point2<f32> {
     fn from(p: Pointf32) -> Self {
         nalgebra::Point2::new(p.x, p.y)
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Point3f32 {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+impl From<Vector3<f32>> for Point3f32 {
+    fn from(p: Vector3<f32>) -> Self {
+        Self {
+            x: p.x,
+            y: p.y,
+            z: p.z,
+        }
     }
 }
 
@@ -161,4 +180,55 @@ pub extern "C" fn ats_cv_camera_undistort_4(
         rx.write(undistorted.data.data.0[0]);
         ry.write(undistorted.data.data.0[1]);
     }
+}
+
+#[repr(C)]
+pub union AtsCvMadgwick {
+    pub _size: [u8; 24],
+    pub _align: u32,
+}
+
+static_assertions::assert_eq_size!(AtsCvMadgwick, Madgwick<f32>);
+static_assertions::assert_eq_align!(AtsCvMadgwick, Madgwick<f32>);
+
+impl AtsCvMadgwick {
+    fn as_madgwick_mut(p: *mut Self) -> *mut Madgwick<f32> {
+        p as _
+    }
+    fn as_madgwick(p: *const Self) -> *const Madgwick<f32> {
+        p as _
+    }
+}
+#[no_mangle]
+pub extern "C" fn ats_cv_madgwick_init(
+    period: f32,
+    beta: f32,
+    p: *mut AtsCvMadgwick,
+) {
+    let p = AtsCvMadgwick::as_madgwick_mut(p);
+    unsafe { p.write(Madgwick::new(period, beta)); }
+}
+
+/// Returns false on failure.
+///
+/// Failure occurs when the norm of the accelerometer measurement is zero.
+#[no_mangle]
+pub extern "C" fn ats_cv_madgwick_update_imu(
+    ax: f32,
+    ay: f32,
+    az: f32,
+    gx: f32,
+    gy: f32,
+    gz: f32,
+    p: *mut AtsCvMadgwick,
+) -> bool {
+    let p = unsafe { &mut *AtsCvMadgwick::as_madgwick_mut(p) };
+    p.update_imu(&Vector3::new(gx, gy, gz), &Vector3::new(ax, ay, az)).is_ok()
+}
+
+/// Calculate gravity vector.
+#[no_mangle]
+pub extern "C" fn ats_cv_madgwick_gravity_vector(p: *const AtsCvMadgwick) -> Point3f32 {
+    let p = unsafe { &*AtsCvMadgwick::as_madgwick(p) };
+    p.quat.inverse_transform_vector(&Vector3::z()).into()
 }

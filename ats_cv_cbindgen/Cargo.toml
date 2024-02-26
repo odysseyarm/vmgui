@@ -9,6 +9,7 @@ edition = "2021"
 crate-type = ["staticlib", "lib"] # C
 
 [dependencies]
+ahrs = { git = "https://github.com/jmagnuson/ahrs-rs", version = "0.6.0", default-features = false }
 ats_cv = { path = "../ats_cv", default-features = false }
 cam-geom = { version = "0.14.1", default-features = false }
 nalgebra = {  version = "0.32.3", default-features = false, features = [ "libm" ] }
