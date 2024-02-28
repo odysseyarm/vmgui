@@ -481,10 +481,11 @@ impl CombinedMarkersReport {
         *bytes = &bytes[50..];
         let mut positions = [Point2::new(0, 0); 16];
         for i in 0..16 {
-            let x = u16::from_le_bytes([data[0], data[1]]);
-            let y = u16::from_le_bytes([data[2], data[3]]);
+            // x, y is 12 bits each
+            let x = u16::from_le_bytes([data[0], data[1] & 0x0f]);
+            let y = u16::from_le_bytes([data[1] >> 4, data[2]]);
             positions[i] = Point2::new(x, y);
-            *data = &data[4..];
+            *data = &data[3..];
         }
         let sensors = u16::from_le_bytes([data[0], data[1]]);
         let sensors = (0..16).map(|i| ((sensors >> i) & 1) as u8).collect::<Vec<_>>().try_into().unwrap();

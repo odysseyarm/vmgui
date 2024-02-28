@@ -27,7 +27,7 @@ struct State {
     response_channels: Mutex<[ResponseChannel; 255]>,
     mot_data_stream: AtomicBool,
     impact_stream: AtomicBool,
-    aim_stream: AtomicBool,
+    combined_markers_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -109,7 +109,7 @@ impl UsbDevice {
             response_channels: Mutex::new(response_channels),
             mot_data_stream: AtomicBool::new(false),
             impact_stream: AtomicBool::new(false),
-            aim_stream: AtomicBool::new(false),
+            combined_markers_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -336,7 +336,7 @@ impl UsbDevice {
     }
 
     pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
-        if self.thread_state.aim_stream.swap(true, Ordering::Relaxed) {
+        if self.thread_state.combined_markers_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one aim stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
@@ -383,7 +383,7 @@ impl PinnedDrop for PacketStream {
         } else if self.stream_type == 1 {
             self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
         } else if self.stream_type == 2 {
-            self.slot.thread_state.aim_stream.store(false, Ordering::Relaxed);
+            self.slot.thread_state.combined_markers_stream.store(false, Ordering::Relaxed);
         }
     }
 }
