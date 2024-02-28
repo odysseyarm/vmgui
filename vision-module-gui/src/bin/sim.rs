@@ -110,7 +110,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     state.stream_mot = if s.active { Some(pkt.id) } else { None };
                 }
                 if s.mask & 0b010 != 0 {
-                    state.stream_aim = if s.active { Some(pkt.id) } else { None };
+                    state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
                 }
                 None
             }
@@ -172,7 +172,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             sock.write_all(&buf).unwrap();
         }
 
-        if let Some(id) = state.stream_aim {
+        if let Some(id) = state.stream_combined_markers {
             let marker_pattern = state.marker_pattern.marker_positions();
             let r = transform_aim_point(
                 [2048.0, 2048.0].into(),
@@ -212,7 +212,7 @@ struct State {
     moving_up: bool,
     moving_down: bool,
     stream_mot: Option<u8>,
-    stream_aim: Option<u8>,
+    stream_combined_markers: Option<u8>,
     marker_pattern: MarkerPattern,
 }
 
@@ -248,7 +248,7 @@ impl State {
             moving_up: false,
             moving_down: false,
             stream_mot: None,
-            stream_aim: None,
+            stream_combined_markers: None,
             marker_pattern: MarkerPattern::Rectangle,
         }
     }
