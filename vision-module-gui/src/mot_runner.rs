@@ -12,7 +12,7 @@ use tracing::debug;
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
-use crate::packet::{AimPointReport, GeneralConfig, MarkerPattern, MotData};
+use crate::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
@@ -92,7 +92,7 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
         // impact_loop(&halt, runner.clone()),
         frame_loop(runner.clone()),
         impact_loop(runner.clone()),
-        aim_loop(runner.clone()),
+        combined_markers_loop(runner.clone()),
     );
 }
 
@@ -209,7 +209,7 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             // state.wf_aim_point = wf_aim_point;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
-            state.gravity_angle = mot_data.gravity_angle as f64;
+            // todo state.gravity_angle = mot_data.gravity_angle as f64;
         }
         sleep(Duration::from_millis(5)).await;
     }
@@ -219,114 +219,23 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
     let mut frame_stream = device.stream_impact().await.unwrap();
     while runner.lock().await.device.is_some() {
-        if let Some((_x, _y)) = frame_stream.next().await {
-            let runner = runner.lock().await;
-            if runner.record_impact {
-                let mut datapoints = runner.datapoints.lock().await;
-
-                let mut frame = crate::Frame {
-                    nf_aim_point_x: None,
-                    nf_aim_point_y: None,
-                };
-
-                let p = Point2::new(_x, _y).cast::<f64>();
-
-                // TODO don't assume view[0]
-                let view = &runner.markers_settings.views[0];
-                let top = view.marker_top.position;
-                let bottom = view.marker_bottom.position;
-                let left = view.marker_left.position;
-                let right = view.marker_right.position;
-
-                let top = Point2::new(top.x, top.y).cast::<f64>();
-                let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
-                let left = Point2::new(left.x, left.y).cast::<f64>();
-                let right = Point2::new(right.x, right.y).cast::<f64>();
-
-                // TODO maybe don't recompute this in a hot loop lol
-                let [bottom_p, left_p, top_p, right_p] = runner.general_config.marker_pattern.marker_positions();
-                let m = Matrix2x4::from_columns(&[
-                    bottom_p.coords,
-                    left_p.coords,
-                    top_p.coords,
-                    right_p.coords,
-                ]);
-                let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
-                let tf = get_perspective_transform(
-                    m.column(0).xy().into(), // bottom
-                    m.column(1).xy().into(), // left
-                    m.column(2).xy().into(), // top
-                    m.column(3).xy().into(), // right
-                    bottom,
-                    left,
-                    top,
-                    right,
-                ).unwrap();
-                let p = tf.transform_point(&p);
-
-                let p = Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.);
-
-                frame.nf_aim_point_x = Some(p.x);
-                frame.nf_aim_point_y = Some(p.y);
-
-                datapoints.push(frame);
-
-                let ui_update = runner.ui_update.c();
-
-                runner.ui_ctx.queue_main(move || {
-                    leptos_reactive::SignalSet::set(&ui_update, ());
-                });
-            }
+        if let Some(()) = frame_stream.next().await {
+            // todo
         }
     }
 }
 
-async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
+async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
-    let mut aim_stream = device.stream_aim().await.unwrap();
+    let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
     while runner.lock().await.device.is_some() {
-        if let Some(aim_report) = aim_stream.next().await {
-            let AimPointReport { x, y, screen_id } = aim_report;
+        if let Some(combined_markers_report) = combined_markers_stream.next().await {
+            let CombinedMarkersReport { positions, sensors } = combined_markers_report;
             let mut runner = runner.lock().await;
-            debug!("aim: ({x}, {y}), screen_id: {screen_id}");
-            let p = Point2::new(x, y).cast::<f64>();
+            debug!("positions: {:?}, sensors: {:?}", positions, sensors);
 
-            // TODO don't assume view[0]
-            let view = &mut runner.markers_settings.views[0];
-            let top = view.marker_top.position;
-            let bottom = view.marker_bottom.position;
-            let left = view.marker_left.position;
-            let right = view.marker_right.position;
-
-            let top = Point2::new(top.x, top.y).cast::<f64>();
-            let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
-            let left = Point2::new(left.x, left.y).cast::<f64>();
-            let right = Point2::new(right.x, right.y).cast::<f64>();
-
-            // TODO maybe don't recompute this in a hot loop lol
-            let [bottom_m, left_m, top_m, right_m] = runner.general_config.marker_pattern.marker_positions();
-            let m = Matrix2x4::from_columns(&[
-                bottom_m.coords,
-                left_m.coords,
-                top_m.coords,
-                right_m.coords,
-            ]);
-            let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
-            let tf = get_perspective_transform(
-                m.column(0).xy().into(), // bottom
-                m.column(1).xy().into(), // left
-                m.column(2).xy().into(), // top
-                m.column(3).xy().into(), // right
-                bottom,
-                left,
-                top,
-                right,
-            ).unwrap();
-            let p = tf.transform_point(&p);
-
-            let state = &mut runner.state;
-            state.nf_aim_point = Some(Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.));
-            state.screen_id = aim_report.screen_id;
+            // todo
+            // todo state.screen_id = aim_report.screen_id;
         }
     }
 }

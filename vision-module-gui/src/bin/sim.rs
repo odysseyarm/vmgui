@@ -13,7 +13,7 @@ use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4
 };
 use tracing::{error, info};
-use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 
 // Positive x is right
 // Positive y is up
@@ -115,8 +115,9 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 None
             }
             PacketData::FlashSettings => None,
-            PacketData::AimPointReport(_) => unreachable!(),
-            PacketData::ImpactWithAimPointReport(_) => unreachable!(),
+            PacketData::CombinedMarkersReport(_) => unreachable!(),
+            PacketData::AccelReport(_) => unreachable!(),
+            PacketData::ImpactReport => unreachable!(),
             PacketData::WriteConfig(_) => None,
             PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: state.marker_pattern, wf_offset_x: 0 })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
@@ -186,10 +187,9 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             ).unwrap();
             let pkt = Packet {
                 id,
-                data: PacketData::AimPointReport(AimPointReport {
-                    x: (r.x * 4095. - 2047.) as i16,
-                    y: (r.y * 4095. - 2047.) as i16,
-                    screen_id: 1, // TODO
+                data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
+                    positions: todo!(),
+                    sensors: todo!(),
                 })
             };
             buf.clear();
