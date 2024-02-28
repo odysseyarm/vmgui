@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use std::{fmt::Display, error::Error as StdError};
 
 use nalgebra::Point2;
@@ -14,20 +12,22 @@ pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
-    ObjectReportRequest(ObjectReportRequest),
-    ObjectReport(ObjectReport),
-    StreamUpdate(StreamUpdate),
-    FlashSettings,
-    AimPointReport(AimPointReport),
-    ImpactWithAimPointReport(ImpactWithAimPointReport),
     WriteConfig(GeneralConfig),
     ReadConfig,
     ReadConfigResponse(GeneralConfig),
+    ObjectReportRequest(ObjectReportRequest),
+    ObjectReport(ObjectReport),
+    CombinedMarkersReport(CombinedMarkersReport),
+    AccelReport(AccelReport),
+    ImpactReport,
+    StreamUpdate(StreamUpdate),
+    FlashSettings,
 }
 pub enum StreamChoice {
     Object,
-    AimPoint,
-    ImpactWithAimPoint,
+    CombinedMarkers,
+    Accel,
+    Impact,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -109,22 +109,26 @@ pub struct MotData {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectReport {
-    pub gravity_angle: f32,
     pub mot_data_nf: [MotData; 16],
     pub mot_data_wf: [MotData; 16],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CombinedMarkersReport {
+    pub positions: [Point2<u16>; 16],
+    pub sensors: [u8; 16],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AccelReport {
+    pub accel: [f32; 3],
+    pub gyro: [f32; 3],
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct StreamUpdate {
     pub mask: u8,
     pub active: bool,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct ImpactWithAimPointReport {
-    pub x: i16,
-    pub y: i16,
-    pub screen_id: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -179,15 +183,16 @@ pub enum PacketType {
     WriteRegister, // a.k.a. Poke
     ReadRegister,  // a.k.a. Peek
     ReadRegisterResponse,
-    ObjectReportRequest,
-    ObjectReport,
-    StreamUpdate,
-    FlashSettings,
-    AimPointReport,
-    ImpactWithAimPointReport,
     WriteConfig,
     ReadConfig,
     ReadConfigResponse,
+    ObjectReportRequest,
+    ObjectReport,
+    CombinedMarkersReport,
+    AccelReport,
+    ImpactReport,
+    StreamUpdate,
+    FlashSettings,
     End,
 }
 
@@ -198,45 +203,44 @@ impl TryFrom<u8> for PacketType {
             0 => Ok(Self::WriteRegister),
             1 => Ok(Self::ReadRegister),
             2 => Ok(Self::ReadRegisterResponse),
-            3 => Ok(Self::ObjectReportRequest),
-            4 => Ok(Self::ObjectReport),
-            5 => Ok(Self::StreamUpdate),
-            6 => Ok(Self::FlashSettings),
-            7 => Ok(Self::AimPointReport),
-            8 => Ok(Self::ImpactWithAimPointReport),
-            9 => Ok(Self::WriteConfig),
-            10 => Ok(Self::ReadConfig),
-            11 => Ok(Self::ReadConfigResponse),
-            12 => Ok(Self::End),
+            3 => Ok(Self::WriteConfig),
+            4 => Ok(Self::ReadConfig),
+            5 => Ok(Self::ReadConfigResponse),
+            6 => Ok(Self::ObjectReportRequest),
+            7 => Ok(Self::ObjectReport),
+            8 => Ok(Self::CombinedMarkersReport),
+            9 => Ok(Self::AccelReport),
+            10 => Ok(Self::ImpactReport),
+            11 => Ok(Self::StreamUpdate),
+            12 => Ok(Self::FlashSettings),
+            13 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
 }
 
 impl Packet {
-
     pub fn ty(&self) -> PacketType {
-        use PacketType as P;
         match self.data {
-            PacketData::WriteRegister(_) => P::WriteRegister,
-            PacketData::ReadRegister(_) => P::ReadRegister,
-            PacketData::ReadRegisterResponse(_) => P::ReadRegisterResponse,
-            PacketData::ObjectReportRequest(_) => P::ObjectReportRequest,
-            PacketData::ObjectReport(_) => P::ObjectReport,
-            PacketData::StreamUpdate(_) => P::StreamUpdate,
-            PacketData::AimPointReport(_) => P::AimPointReport,
-            PacketData::ImpactWithAimPointReport(_) => P::ImpactWithAimPointReport,
-            PacketData::FlashSettings => P::FlashSettings,
-            PacketData::WriteConfig(_) => P::WriteConfig,
-            PacketData::ReadConfig => P::ReadConfig,
-            PacketData::ReadConfigResponse(_) => P::ReadConfigResponse,
+            PacketData::WriteRegister(_) => PacketType::WriteRegister,
+            PacketData::ReadRegister(_) => PacketType::ReadRegister,
+            PacketData::ReadRegisterResponse(_) => PacketType::ReadRegisterResponse,
+            PacketData::WriteConfig(_) => PacketType::WriteConfig,
+            PacketData::ReadConfig => PacketType::ReadConfig,
+            PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse,
+            PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
+            PacketData::ObjectReport(_) => PacketType::ObjectReport,
+            PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
+            PacketData::AccelReport(_) => PacketType::AccelReport,
+            PacketData::ImpactReport => PacketType::ImpactReport,
+            PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
+            PacketData::FlashSettings => PacketType::FlashSettings,
         }
     }
 
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        use Error as E;
         let [words1, words2, ty, id, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+            return Err(Error::UnexpectedEof);
         };
 
         let words = u16::from_le_bytes([words1, words2]);
@@ -244,41 +248,42 @@ impl Packet {
 
         let len = usize::from(words)*2;
         if bytes.len() < len {
-            return Err(E::UnexpectedEof);
+            return Err(Error::UnexpectedEof);
         }
         *bytes = &bytes[4..];
         let data = match ty {
             PacketType::WriteRegister => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
             PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes)?),
             PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
-            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
-            PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
-            PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
-            PacketType::ImpactWithAimPointReport => PacketData::ImpactWithAimPointReport(ImpactWithAimPointReport::parse(bytes)?),
-            PacketType::AimPointReport => PacketData::AimPointReport(AimPointReport::parse(bytes)?),
-            PacketType::FlashSettings => PacketData::FlashSettings,
             PacketType::WriteConfig => PacketData::WriteConfig(GeneralConfig::parse(bytes)?),
             PacketType::ReadConfig => PacketData::ReadConfig,
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes)?),
+            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
+            PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
+            PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
+            PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
+            PacketType::ImpactReport => PacketData::ImpactReport,
+            PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
+            PacketType::FlashSettings => PacketData::FlashSettings,
             p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        // (u16 words/2, u8 tag, u8 id)
-        let len = match self.data {
+        let len = match &self.data {
             PacketData::WriteRegister(_) => 4,
             PacketData::ReadRegister(_) => 4,
             PacketData::ReadRegisterResponse(_) => 4,
-            PacketData::ObjectReportRequest(_) => 0,
-            PacketData::ObjectReport(_) => 518,
-            PacketData::StreamUpdate(_) => 2,
-            PacketData::AimPointReport(_) => 6,
-            PacketData::ImpactWithAimPointReport(_) => 6,
             PacketData::WriteConfig(_) => 4,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 2,
+            PacketData::ObjectReportRequest(_) => 0,
+            PacketData::ObjectReport(_) => 514,
+            PacketData::CombinedMarkersReport(_) => 50,
+            PacketData::AccelReport(_) => 12,
+            PacketData::ImpactReport => 0,
+            PacketData::StreamUpdate(_) => 2,
             PacketData::FlashSettings => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
@@ -289,16 +294,17 @@ impl Packet {
             PacketData::WriteRegister(x) => x.serialize(buf),
             PacketData::ReadRegister(x) => x.serialize(buf),
             PacketData::ReadRegisterResponse(x) => x.serialize(buf),
-            PacketData::ObjectReportRequest(_) => (),
-            PacketData::ObjectReport(x) => x.serialize(buf),
-            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
-            PacketData::AimPointReport(x) => x.serialize(buf),
-            PacketData::ImpactWithAimPointReport(_) => unimplemented!(),
             PacketData::WriteConfig(x) => x.serialize(buf),
             PacketData::ReadConfig => (),
             PacketData::ReadConfigResponse(x) => x.serialize(buf),
+            PacketData::ObjectReportRequest(_) => (),
+            PacketData::ObjectReport(x) => x.serialize(buf),
+            PacketData::CombinedMarkersReport(x) => unimplemented!(),
+            PacketData::AccelReport(x) => unimplemented!(),
+            PacketData::ImpactReport => (),
+            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::FlashSettings => (),
-        };
+        }
     }
 }
 
@@ -324,16 +330,9 @@ impl PacketData {
         }
     }
 
-    pub fn impact_with_aim_point_report(self) -> Option<ImpactWithAimPointReport> {
+    pub fn combined_markers_report(self) -> Option<CombinedMarkersReport> {
         match self {
-            PacketData::ImpactWithAimPointReport(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    pub fn aim_point_report(self) -> Option<AimPointReport> {
-        match self {
-            PacketData::AimPointReport(x) => Some(x),
+            PacketData::CombinedMarkersReport(x) => Some(x),
             _ => None,
         }
     }
@@ -453,10 +452,6 @@ impl MotData {
 impl ObjectReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        let g = &bytes[..4];
-        let gravity_angle = f32::from_le_bytes([g[0], g[1], g[2], g[3]]);
-        *bytes = &bytes[4..];
-
         let mut data = &mut &bytes[..512];
         *bytes = &bytes[512..];
         let [format, _, ..] = **bytes else {
@@ -464,14 +459,12 @@ impl ObjectReport {
         };
         *bytes = &bytes[2..];
         Ok(Self {
-            gravity_angle,
             mot_data_nf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
             mot_data_wf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
         })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.gravity_angle.to_le_bytes());
         for i in 0..16 {
             self.mot_data_nf[i].serialize(buf);
         }
@@ -482,33 +475,43 @@ impl ObjectReport {
     }
 }
 
-impl ImpactWithAimPointReport {
+impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let impact_with_aim_point = ImpactWithAimPointReport {
-            x: i16::from_le_bytes([bytes[0], bytes[1]]),
-            y: i16::from_le_bytes([bytes[2], bytes[3]]),
-            screen_id: bytes[4],
-        };
-        *bytes = &bytes[6..];
-        Ok(impact_with_aim_point)
+        let mut data = &mut &bytes[..50];
+        *bytes = &bytes[50..];
+        let mut positions = [Point2::new(0, 0); 16];
+        for i in 0..16 {
+            let x = u16::from_le_bytes([data[0], data[1]]);
+            let y = u16::from_le_bytes([data[2], data[3]]);
+            positions[i] = Point2::new(x, y);
+            *data = &data[4..];
+        }
+        let sensors = u16::from_le_bytes([data[0], data[1]]);
+        let sensors = (0..16).map(|i| ((sensors >> i) & 1) as u8).collect::<Vec<_>>().try_into().unwrap();
+        *data = &data[2..];
+        Ok(Self { positions, sensors })
     }
 }
 
-impl AimPointReport {
+impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let aim_point = AimPointReport {
-            x: i16::from_le_bytes([bytes[0], bytes[1]]),
-            y: i16::from_le_bytes([bytes[2], bytes[3]]),
-            screen_id: bytes[4],
-        };
-        *bytes = &bytes[6..];
-        Ok(aim_point)
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let [a, b] = self.x.to_le_bytes();
-        let [c, d] = self.y.to_le_bytes();
-        buf.extend_from_slice(&[a, b, c, d, self.screen_id, 0]);
+        // accel: x, y, z, 16384 = 1g
+        // gyro: x, y, z, 65.5 = 1dps
+        let mut data = &mut &bytes[..24];
+        let accel = [(); 3].map(|_| {
+            let x = i16::from_le_bytes([data[0], data[1]]);
+            let x = x as f32 / 16384.0;
+            *data = &data[2..];
+            x
+        });
+        let gyro = [(); 3].map(|_| {
+            let x = i16::from_le_bytes([data[0], data[1]]);
+            let x = x as f32 / 65.5;
+            *data = &data[2..];
+            x
+        });
+        *bytes = &bytes[24..];
+        Ok(Self { accel, gyro })
     }
 }
 

@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::packet::{CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -324,26 +324,25 @@ impl UsbDevice {
         }))
     }
 
-    pub async fn stream_impact(&self) -> Result<impl Stream<Item = (i16, i16)> + Send + Sync> {
+    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
         if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one impact stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b100, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
-            let obj = x.impact_with_aim_point_report().unwrap();
-            (obj.x, obj.y)
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|_| {
+            ()
         }))
     }
 
-    pub async fn stream_aim(&self) -> Result<impl Stream<Item = AimPointReport> + Send + Sync> {
+    pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
         if self.thread_state.aim_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one aim stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b010, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
-            x.aim_point_report().unwrap()
+            x.combined_markers_report().unwrap()
         }))
     }
 
