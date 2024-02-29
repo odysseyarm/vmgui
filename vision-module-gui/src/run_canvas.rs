@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
-use nalgebra::{Point2, Rotation2, Scale2, Vector2};
+use nalgebra::{Point2, Rotation2, Scale2, Vector2, Vector3};
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
@@ -35,10 +35,13 @@ impl AreaHandler for RunCanvas {
         let runner = self.state.blocking_lock();
         let state = &runner.state;
 
+        let gravity: Vector3<f64> = state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();
+        let gravity_angle = -gravity.x.atan2(gravity.z);
+
         // Green line representing the up direction relative to the vision module.
         let gravity_line_path = Path::new(ctx, FillMode::Winding);
         gravity_line_path.new_figure(ctx, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height);
-        let angle = -state.gravity_angle - PI/2.;
+        let angle = -gravity_angle - PI/2.;
         gravity_line_path.line_to(
             ctx,
             0.5 * draw_params.area_width + 50.0 * angle.cos(),
@@ -48,7 +51,7 @@ impl AreaHandler for RunCanvas {
         ctx.stroke(&gravity_line_path, &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }), &stroke2);
 
         let draw_scale = Scale2::new(draw_params.area_width, draw_params.area_height);
-        let gravity_rot = Rotation2::new(-state.gravity_angle);
+        let gravity_rot = Rotation2::new(-gravity_angle);
         if let Some(nf_data) = state.nf_data.as_ref() {
             let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
             for (i, mot_data) in nf_data.iter().enumerate() {

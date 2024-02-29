@@ -1,3 +1,4 @@
+use ahrs::Madgwick;
 use arrayvec::ArrayVec;
 use nalgebra::Point2;
 use ats_cv::kalman::Pva2d;
@@ -29,7 +30,6 @@ pub struct Frame {
     pub nf_aim_point_y: Option<f64>,
 }
 
-#[derive(Default)]
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aim_point: Option<Point2<f64>>,
@@ -41,5 +41,20 @@ pub struct MotState {
     pub nf_pva2ds: [Pva2d<f64>; 4],
 
     pub screen_id: u8,
-    pub gravity_angle: f64,
+    pub orientation: Madgwick<f64>,
+}
+
+impl Default for MotState {
+    fn default() -> Self {
+        Self {
+            fv_aim_point: None,
+            nf_aim_point: None,
+            wf_aim_point: None,
+            nf_data: None,
+            wf_data: None,
+            nf_pva2ds: Default::default(),
+            screen_id: 0,
+            orientation: Madgwick::new(1./100., 0.1),
+        }
+    }
 }

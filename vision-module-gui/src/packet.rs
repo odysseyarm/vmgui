@@ -121,8 +121,8 @@ pub struct CombinedMarkersReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
-    pub accel: [f32; 3],
-    pub gyro: [f32; 3],
+    pub accel: [f64; 3],
+    pub gyro: [f64; 3],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -505,16 +505,16 @@ impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
         // gyro: x, y, z, 65.5 = 1dps
-        let mut data = &mut &bytes[..12];
+        let data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f32 / 16384.0;
+            let x = x as f64 / 16384.0;
             *data = &data[2..];
             x
         });
         let gyro = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f32 / 65.5;
+            let x = x as f64 / 65.5;
             *data = &data[2..];
             x
         });
