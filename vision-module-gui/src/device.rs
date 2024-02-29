@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::packet::{CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -28,6 +28,7 @@ struct State {
     mot_data_stream: AtomicBool,
     impact_stream: AtomicBool,
     combined_markers_stream: AtomicBool,
+    accel_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -110,6 +111,7 @@ impl UsbDevice {
             mot_data_stream: AtomicBool::new(false),
             impact_stream: AtomicBool::new(false),
             combined_markers_stream: AtomicBool::new(false),
+            accel_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -318,20 +320,9 @@ impl UsbDevice {
             return Err(anyhow!("cannot have more than one mot data stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b001, active: true }) }).await?;
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0001, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
             x.object_report().unwrap()
-        }))
-    }
-
-    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
-        if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one impact stream"));
-        }
-        let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b100, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|_| {
-            ()
         }))
     }
 
@@ -340,9 +331,31 @@ impl UsbDevice {
             return Err(anyhow!("cannot have more than one aim stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b010, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0010, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
             x.combined_markers_report().unwrap()
+        }))
+    }
+
+    pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
+        if self.thread_state.accel_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one accel stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
+            x.accel_report().unwrap()
+        }))
+    }
+
+    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
+        if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one impact stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1000, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 3 }.map(|_| {
+            ()
         }))
     }
 
@@ -381,9 +394,11 @@ impl PinnedDrop for PacketStream {
         if self.stream_type == 0 {
             self.slot.thread_state.mot_data_stream.store(false, Ordering::Relaxed);
         } else if self.stream_type == 1 {
-            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
-        } else if self.stream_type == 2 {
             self.slot.thread_state.combined_markers_stream.store(false, Ordering::Relaxed);
+        } else if self.stream_type == 2 {
+            self.slot.thread_state.accel_stream.store(false, Ordering::Relaxed);
+        } else if self.stream_type == 3 {
+            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
         }
     }
 }
