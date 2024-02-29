@@ -1,10 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
+use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix2x4, Point2, Scalar, Vector2};
+use nalgebra::{Matrix2x4, Point2, Scalar, Vector2, Vector3};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -238,7 +239,7 @@ async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock().await;
             debug!("accel: {:?}", accel);
-            // todo
+            runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
         }
     }
 }
