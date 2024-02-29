@@ -91,8 +91,9 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
         // frame_loop(&halt, runner.clone()),
         // impact_loop(&halt, runner.clone()),
         frame_loop(runner.clone()),
-        impact_loop(runner.clone()),
         combined_markers_loop(runner.clone()),
+        accel_loop(runner.clone()),
+        impact_loop(runner.clone()),
     );
 }
 
@@ -215,16 +216,6 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
-    let mut frame_stream = device.stream_impact().await.unwrap();
-    while runner.lock().await.device.is_some() {
-        if let Some(()) = frame_stream.next().await {
-            // todo
-        }
-    }
-}
-
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().await.device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
@@ -236,6 +227,28 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             // todo
             // todo state.screen_id = aim_report.screen_id;
+        }
+    }
+}
+
+async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().await.device.c().unwrap();
+    let mut accel_stream = device.stream_accel().await.unwrap();
+    while runner.lock().await.device.is_some() {
+        if let Some(accel) = accel_stream.next().await {
+            let mut runner = runner.lock().await;
+            debug!("accel: {:?}", accel);
+            // todo
+        }
+    }
+}
+
+async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().await.device.c().unwrap();
+    let mut frame_stream = device.stream_impact().await.unwrap();
+    while runner.lock().await.device.is_some() {
+        if let Some(()) = frame_stream.next().await {
+            // todo
         }
     }
 }

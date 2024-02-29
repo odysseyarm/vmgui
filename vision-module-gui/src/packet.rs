@@ -336,6 +336,13 @@ impl PacketData {
             _ => None,
         }
     }
+
+    pub fn accel_report(self) -> Option<AccelReport> {
+        match self {
+            PacketData::AccelReport(x) => Some(x),
+            _ => None,
+        }
+    }
 }
 
 impl Register {
@@ -483,7 +490,7 @@ impl CombinedMarkersReport {
         for i in 0..16 {
             // x, y is 12 bits each
             let x = u16::from_le_bytes([data[0], data[1] & 0x0f]);
-            let y = u16::from_le_bytes([data[1] >> 4, data[2]]);
+            let y = (data[1] >> 4) as u16 | ((data[2] as u16) << 4);
             positions[i] = Point2::new(x, y);
             *data = &data[3..];
         }
@@ -498,7 +505,7 @@ impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
         // gyro: x, y, z, 65.5 = 1dps
-        let mut data = &mut &bytes[..24];
+        let mut data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
             let x = x as f32 / 16384.0;
@@ -511,7 +518,7 @@ impl AccelReport {
             *data = &data[2..];
             x
         });
-        *bytes = &bytes[24..];
+        *bytes = &bytes[12..];
         Ok(Self { accel, gyro })
     }
 }
