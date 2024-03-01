@@ -1,6 +1,6 @@
 use iui::draw;
 use iui::draw::Path;
-use nalgebra::{Point2, SMatrix};
+use nalgebra::{Point2, SMatrix, Transform2};
 
 pub fn draw_crosshair(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, r: f64) {
     path.new_figure(ctx, x-r, y);
@@ -35,5 +35,18 @@ pub fn draw_diamond(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, w: f64
     path.line_to(ctx, x + w/2., y);
     path.line_to(ctx, x, y + h/2.);
     path.line_to(ctx, x - w/2., y);
+    path.close_figure(ctx);
+}
+
+/// Draw a square in the xy region \[0.5, 0.5\] transformed by `transform`.
+pub fn draw_square(ctx: &draw::DrawContext, path: &Path, transform: Transform2<f64>) {
+    let p1 = transform * Point2::new(-0.5, -0.5);
+    let p2 = transform * Point2::new(0.5, -0.5);
+    let p3 = transform * Point2::new(0.5, 0.5);
+    let p4 = transform * Point2::new(-0.5, 0.5);
+    path.new_figure(ctx, p1.x, p1.y);
+    path.line_to(ctx, p2.x, p2.y);
+    path.line_to(ctx, p3.x, p3.y);
+    path.line_to(ctx, p4.x, p4.y);
     path.close_figure(ctx);
 }
