@@ -153,6 +153,9 @@ impl UsbDevice {
                     buf.resize(2, 0);
                     reader.read_exact(&mut buf)?;
                     let len = u16::from_le_bytes([buf[0], buf[1]]);
+                    if len == 0 {
+                        return Err(std::io::Error::new(ErrorKind::InvalidData, anyhow!("packet length is 0")));
+                    }
                     trace!("read len={}", len*2);
                     buf.resize(usize::from(len * 2), 0);
                     reader.read_exact(&mut buf[2..])?;

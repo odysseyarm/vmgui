@@ -2,12 +2,12 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
-use nalgebra::{Point2, Rotation2, Scale2, Vector2, Vector3};
+use nalgebra::{Point2, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
 use tokio::sync::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid};
+use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid, draw_square};
 use crate::mot_runner::{rescale, sort_points, MotRunner};
 use crate::packet::MarkerPattern;
 
@@ -19,6 +19,9 @@ pub struct RunCanvas {
 impl AreaHandler for RunCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
         let ctx = &draw_params.context;
+        let awidth = draw_params.area_width;
+        let aheight = draw_params.area_height;
+        let draw_size = (awidth.min(aheight).powi(2)/2.0).sqrt();
         let stroke2 = StrokeParams {
             cap: 0, // Bevel
             join: 0, // Flat
@@ -27,7 +30,12 @@ impl AreaHandler for RunCanvas {
             dashes: vec![],
             dash_phase: 0.,
         };
+        let stroke1 = StrokeParams {
+            thickness: 1.,
+            ..stroke2.clone()
+        };
 
+        let border_path = Path::new(ctx, FillMode::Winding);
         let ch_path = Path::new(ctx, FillMode::Winding);
         let nf_path = Path::new(ctx, FillMode::Winding);
         let wf_path = Path::new(ctx, FillMode::Winding);
@@ -38,19 +46,35 @@ impl AreaHandler for RunCanvas {
         let gravity: Vector3<f64> = state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();
         let gravity_angle = -gravity.x.atan2(gravity.z);
 
-        // Green line representing the up direction relative to the vision module.
-        let gravity_line_path = Path::new(ctx, FillMode::Winding);
-        gravity_line_path.new_figure(ctx, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height);
-        let angle = -gravity_angle - PI/2.;
-        gravity_line_path.line_to(
-            ctx,
-            0.5 * draw_params.area_width + 50.0 * angle.cos(),
-            0.5 * draw_params.area_height + 50.0 * angle.sin(),
-        );
-        gravity_line_path.end(ctx);
-        ctx.stroke(&gravity_line_path, &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }), &stroke2);
+        // Border around the square drawing area
+        {
+            draw_square(ctx, &border_path, Transform2::from_matrix_unchecked(
+                Translation2::new(awidth/2., aheight/2.).to_homogeneous()
+                * Rotation2::new(-gravity_angle).to_homogeneous()
+                * Scale2::new(draw_size, draw_size).to_homogeneous()
+            ));
+            border_path.end(ctx);
+            ctx.stroke(&border_path, &Brush::Solid(SolidBrush { r: 0., g: 0., b: 0., a: 1. }), &stroke1);
+        }
 
-        let draw_scale = Scale2::new(draw_params.area_width, draw_params.area_height);
+        // Green line representing the up direction relative to the vision module.
+        {
+            let gravity_line_path = Path::new(ctx, FillMode::Winding);
+            gravity_line_path.new_figure(ctx, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height);
+            let angle = -gravity_angle - PI/2.;
+            gravity_line_path.line_to(
+                ctx,
+                0.5 * draw_params.area_width + 50.0 * angle.cos(),
+                0.5 * draw_params.area_height + 50.0 * angle.sin(),
+            );
+            gravity_line_path.end(ctx);
+            ctx.stroke(&gravity_line_path, &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }), &stroke2);
+        }
+
+        let draw_tf = Transform2::from_matrix_unchecked(
+            Translation2::new(awidth/2.0, aheight/2.0).to_homogeneous()
+            * Scale2::new(draw_size, draw_size).to_homogeneous()
+        );
         let gravity_rot = Rotation2::new(-gravity_angle);
         if let Some(nf_data) = state.nf_data.as_ref() {
             let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
@@ -62,24 +86,23 @@ impl AreaHandler for RunCanvas {
                 let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
                     - Vector2::new(0.5, 0.5);
                 let p = gravity_rot * p;
-                let p = p + Vector2::new(0.5, 0.5);
-                nf_points.push(p * 4095.);
-                let p = draw_scale * p;
+                nf_points.push((p + Vector2::new(0.5, 0.5)) * 4095.);
+                let p = draw_tf * p;
 
                 let left = mot_data.boundary_left as f64 / 98.;
                 let down = mot_data.boundary_down as f64 / 98.;
                 let right = mot_data.boundary_right as f64 / 98.;
                 let up = mot_data.boundary_up as f64 / 98.;
                 let corner = Point2::new(left - 0.5, up - 0.5);
-                let width = right - left;
-                let height = down - up;
-                let a = gravity_rot * corner + Vector2::new(0.5, 0.5);
-                let horiz = gravity_rot * Vector2::x() * width;
-                let vert = gravity_rot * Vector2::y() * height;
-                let b = draw_scale * (a + horiz);
-                let c = draw_scale * (a + horiz + vert);
-                let d = draw_scale * (a + vert);
-                let a = draw_scale * a;
+                let w = right - left;
+                let h = down - up;
+                let a = gravity_rot * corner;
+                let horiz = gravity_rot * Vector2::x() * w;
+                let vert = gravity_rot * Vector2::y() * h;
+                let b = draw_tf * (a + horiz);
+                let c = draw_tf * (a + horiz + vert);
+                let d = draw_tf * (a + vert);
+                let a = draw_tf * a;
 
                 draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
 
@@ -117,7 +140,7 @@ impl AreaHandler for RunCanvas {
                     points[2], points[3],
                 );
                 if let Some(transform) = transform {
-                    draw_grid(ctx, &nf_grid_path, 10, 10, (draw_scale * (1./4095.)).to_homogeneous() * transform);
+                    draw_grid(ctx, &nf_grid_path, 10, 10, draw_tf.to_homogeneous() * Scale2::new(1./4095., 1./4095.).to_homogeneous() * transform);
                 }
             }
         }
@@ -132,8 +155,7 @@ impl AreaHandler for RunCanvas {
                 let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
                     - Vector2::new(0.5, 0.5);
                 let p = gravity_rot * p;
-                let p = p + Vector2::new(0.5, 0.5);
-                let p = draw_scale * p;
+                let p = draw_tf * p;
 
                 let left = mot_data.boundary_left as f64 / 98.;
                 let down = mot_data.boundary_down as f64 / 98.;
@@ -142,13 +164,13 @@ impl AreaHandler for RunCanvas {
                 let corner = Point2::new(left - 0.5, up - 0.5);
                 let width = right - left;
                 let height = down - up;
-                let a = gravity_rot * corner + Vector2::new(0.5, 0.5);
+                let a = gravity_rot * corner;
                 let horiz = gravity_rot * Vector2::x() * width;
                 let vert = gravity_rot * Vector2::y() * height;
-                let b = draw_scale * (a + horiz);
-                let c = draw_scale * (a + horiz + vert);
-                let d = draw_scale * (a + vert);
-                let a = draw_scale * a;
+                let b = draw_tf * (a + horiz);
+                let c = draw_tf * (a + horiz + vert);
+                let d = draw_tf * (a + vert);
+                let a = draw_tf * a;
 
                 draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
 
