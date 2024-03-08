@@ -271,21 +271,7 @@ impl Packet {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let len = match &self.data {
-            PacketData::WriteRegister(_) => 4,
-            PacketData::ReadRegister(_) => 4,
-            PacketData::ReadRegisterResponse(_) => 4,
-            PacketData::WriteConfig(_) => 4,
-            PacketData::ReadConfig => 0,
-            PacketData::ReadConfigResponse(_) => 2,
-            PacketData::ObjectReportRequest(_) => 0,
-            PacketData::ObjectReport(_) => 514,
-            PacketData::CombinedMarkersReport(_) => 50,
-            PacketData::AccelReport(_) => 12,
-            PacketData::ImpactReport => 0,
-            PacketData::StreamUpdate(_) => 2,
-            PacketData::FlashSettings => 0,
-        };
+        let len = std::mem::size_of_val(&self.data) as u16 - std::mem::align_of_val(&self.data) as u16;
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
         buf.reserve(4 + usize::from(len));
