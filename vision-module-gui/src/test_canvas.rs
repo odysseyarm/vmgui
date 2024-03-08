@@ -176,7 +176,7 @@ impl AreaHandler for TestCanvas {
     }
 
     fn mouse_event(&mut self, _area: &Area, mouse_event: &iui::controls::AreaMouseEvent) {
-        if mouse_event.down == 1 {
+        if mouse_event.down == 1 && mouse_event.modifiers.contains(Modifiers::MODIFIER_CTRL) {
             let Some(w) = self.last_draw_width else { return };
             let Some(h) = self.last_draw_height else { return };
             let mut state = self.state.blocking_lock();
