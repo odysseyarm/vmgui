@@ -154,7 +154,7 @@ impl AreaHandler for RunCanvas {
                 let magic = 4.5;
                 let p = Point2::new(mot_data.cx as f64, mot_data.cy as f64);
                 // scale p by magic where 2048,2048 is the center
-                let p = ((p - Point2::new(2048., 2048.)) * magic);
+                let p = (p - Point2::new(2048., 2048.)) * magic;
                 // todo don't use hardcoded 4095x4095 res assumption
                 let p = Point2::new(p.x + 2048., p.y + 2048.) / 4095.
                     - Vector2::new(0.5, 0.5);
