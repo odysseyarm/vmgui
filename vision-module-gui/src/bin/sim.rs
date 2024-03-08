@@ -188,8 +188,9 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
-                    positions: todo!(),
-                    sensors: todo!(),
+                    nf_positions: todo!(),
+                    wf_positions: todo!(),
+                    radii: todo!(),
                 })
             };
             buf.clear();

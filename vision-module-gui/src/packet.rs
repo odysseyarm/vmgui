@@ -115,8 +115,9 @@ pub struct ObjectReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CombinedMarkersReport {
-    pub positions: [Point2<u16>; 16],
-    pub sensors: [u8; 16],
+    pub nf_positions: [Point2<u16>; 16],
+    pub wf_positions: [Point2<u16>; 16],
+    pub radii: [u8; 16],
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -473,17 +474,27 @@ impl CombinedMarkersReport {
         let mut data = &mut &bytes[..50];
         *bytes = &bytes[50..];
         let mut positions = [Point2::new(0, 0); 16];
-        for i in 0..16 {
+        for i in 0..16*2 {
             // x, y is 12 bits each
             let x = u16::from_le_bytes([data[0], data[1] & 0x0f]);
             let y = (data[1] >> 4) as u16 | ((data[2] as u16) << 4);
             positions[i] = Point2::new(x, y);
             *data = &data[3..];
         }
-        let sensors = u16::from_le_bytes([data[0], data[1]]);
-        let sensors = (0..16).map(|i| ((sensors >> i) & 1) as u8).collect::<Vec<_>>().try_into().unwrap();
-        *data = &data[2..];
-        Ok(Self { positions, sensors })
+        let nf_positions = positions[..16].try_into().unwrap();
+        let wf_positions = positions[16..].try_into().unwrap();
+
+        // lower nibble and upper nibble are both radiuses, so we need both as separate elements in the final array
+        let mut radii = [0; 16];
+        for i in 0..8 {
+            let r = data[0] & 0x0f;
+            radii[i] = r;
+            let r = data[0] >> 4;
+            radii[i+1] = r;
+            *data = &data[1..];
+        }
+
+        Ok(Self { nf_positions, wf_positions, radii })
     }
 }
 
