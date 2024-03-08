@@ -114,6 +114,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if !tracking.get() { "Start Tracking" } else { "Stop Tracking" }
                 })
                 (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
+                (4, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
             }
             Compact: let separator = HorizontalSeparator()
             Compact: let spacer = Spacer()
@@ -141,6 +142,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     form_vbox.hide(&ui);
     run_hbox.hide(&ui);
     main_win.set_child(&ui, vert_box.clone());
+
+    windowed_checkbox.on_toggled(&ui, {
+        let test_win = test_win.c();
+        let ui = ui.c();
+        move |checked| {
+            let mut test_win = test_win.c();
+            if checked {
+                test_win.set_fullscreen(&ui, false);
+            } else {
+                test_win.set_fullscreen(&ui, true);
+            }
+        }
+    });
 
     create_effect({
         let ui = ui.c();
