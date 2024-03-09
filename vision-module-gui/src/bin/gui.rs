@@ -148,10 +148,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui = ui.c();
         move |checked| {
             let mut test_win = test_win.c();
+            let is_visible = test_win.visible(&ui);
             if checked {
                 test_win.set_fullscreen(&ui, false);
             } else {
                 test_win.set_fullscreen(&ui, true);
+            }
+            if !is_visible {
+                test_win.hide(&ui);
             }
         }
     });
