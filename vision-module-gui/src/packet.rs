@@ -272,7 +272,28 @@ impl Packet {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let len = std::mem::size_of_val(&self.data) as u16 - std::mem::align_of_val(&self.data) as u16;
+        macro_rules! calculate_length {
+            ($ty:ty) => {{
+                assert_eq!(std::mem::align_of::<$ty>(), 1);
+                std::mem::size_of::<$ty>() as u16
+            }};
+        }
+
+        let len = match &self.data {
+            PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
+            PacketData::ReadRegister(_) => calculate_length!(Register)+1,
+            PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
+            PacketData::WriteConfig(_) => 4,
+            PacketData::ReadConfig => 0,
+            PacketData::ReadConfigResponse(_) => 4,
+            PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
+            PacketData::ObjectReport(_) => 514,
+            PacketData::CombinedMarkersReport(_) => 116,
+            PacketData::AccelReport(_) => 16,
+            PacketData::ImpactReport => 0,
+            PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
+            PacketData::FlashSettings => 0,
+        };
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
         buf.reserve(4 + usize::from(len));
@@ -471,10 +492,10 @@ impl ObjectReport {
 
 impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let mut data = &mut &bytes[..50];
+        let mut data = &mut &bytes[..112];
         *bytes = &bytes[50..];
-        let mut positions = [Point2::new(0, 0); 16];
-        for i in 0..16*2 {
+        let mut positions = [Point2::new(0, 0); 16*2];
+        for i in 0..positions.len() {
             // x, y is 12 bits each
             let x = u16::from_le_bytes([data[0], data[1] & 0x0f]);
             let y = (data[1] >> 4) as u16 | ((data[2] as u16) << 4);
