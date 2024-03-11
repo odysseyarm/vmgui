@@ -222,9 +222,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
     while runner.lock().await.device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
-            let CombinedMarkersReport { nf_positions, wf_positions, radii } = combined_markers_report;
+            let CombinedMarkersReport { nf_positions, wf_positions, nf_radii, wf_radii } = combined_markers_report;
             let mut runner = runner.lock().await;
-            debug!("nf_positions: {:?}, wf_positions: {:?}, radii: {:?}", nf_positions, wf_positions, radii);
+            debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_positions, wf_positions, nf_radii, wf_radii);
 
             // todo
             // todo state.screen_id = aim_report.screen_id;
