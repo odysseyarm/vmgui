@@ -492,8 +492,8 @@ impl ObjectReport {
 
 impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let mut data = &mut &bytes[..112];
-        *bytes = &bytes[50..];
+        let data = &mut &bytes[..112];
+        *bytes = &bytes[112..];
         let mut positions = [Point2::new(0, 0); 16*2];
         for i in 0..positions.len() {
             // x, y is 12 bits each
@@ -507,11 +507,13 @@ impl CombinedMarkersReport {
 
         // lower nibble and upper nibble are both radiuses, so we need both as separate elements in the final array
         let mut radii = [0; 16];
-        for i in 0..8 {
+        let mut i = 0;
+        for _ in 0..8 {
             let r = data[0] & 0x0f;
             radii[i] = r;
             let r = data[0] >> 4;
             radii[i+1] = r;
+            i += 2;
             *data = &data[1..];
         }
 
