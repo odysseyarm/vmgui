@@ -226,8 +226,18 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let mut runner = runner.lock().await;
             debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_positions, wf_positions, nf_radii, wf_radii);
 
-            // todo
-            // todo state.screen_id = aim_report.screen_id;
+            let nf_positions = nf_positions.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
+            let nf_positions = nf_positions.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
+
+            let nf_aim_point = if nf_positions.len() > 3 {
+                let mut nf_positions = nf_positions.clone();
+                sort_points(&mut nf_positions, MarkerPattern::Diamond);
+                let center_aim = Point2::new(2048.0, 2048.0);
+                transform_aim_point_to_identity(center_aim, nf_positions[0], nf_positions[1], nf_positions[2], nf_positions[3])
+            } else {
+                None
+            };
+            runner.state.nf_aim_point = nf_aim_point;
         }
     }
 }
