@@ -117,7 +117,8 @@ pub struct ObjectReport {
 pub struct CombinedMarkersReport {
     pub nf_positions: [Point2<u16>; 16],
     pub wf_positions: [Point2<u16>; 16],
-    pub radii: [u8; 16],
+    pub nf_radii: [u8; 16],
+    pub wf_radii: [u8; 16],
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -506,9 +507,9 @@ impl CombinedMarkersReport {
         let wf_positions = positions[16..].try_into().unwrap();
 
         // lower nibble and upper nibble are both radiuses, so we need both as separate elements in the final array
-        let mut radii = [0; 16];
+        let mut radii = [0; 32];
         let mut i = 0;
-        for _ in 0..8 {
+        for _ in 0..16 {
             let r = data[0] & 0x0f;
             radii[i] = r;
             let r = data[0] >> 4;
@@ -517,7 +518,10 @@ impl CombinedMarkersReport {
             *data = &data[1..];
         }
 
-        Ok(Self { nf_positions, wf_positions, radii })
+        let nf_radii = radii[..16].try_into().unwrap();
+        let wf_radii = radii[16..].try_into().unwrap();
+
+        Ok(Self { nf_positions, wf_positions, nf_radii, wf_radii })
     }
 }
 
