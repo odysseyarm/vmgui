@@ -2,6 +2,18 @@ use std::fs::File;
 use std::sync::Arc;
 
 use anyhow::Result;
+use bevy::app::{App, Startup, Update};
+use bevy::ecs::query::With;
+use bevy::ecs::schedule::IntoSystemConfigs;
+use bevy::ecs::system::{Commands, Query};
+use bevy::window::WindowPlugin;
+use bevy::winit::WinitPlugin;
+use bevy::DefaultPlugins;
+use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+    window::{CursorGrabMode, PresentMode, WindowLevel, WindowTheme},
+};
 use iui::prelude::*;
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
 use nalgebra::Vector2;
@@ -27,6 +39,81 @@ use vision_module_gui::test_canvas::TestCanvas;
 //     * They are leaky
 // * Holding mutexes and setting signals
 //     * Drop the mutex, or use ui_ctx.queue_main()
+
+#[derive(bevy::ecs::component::Component)]
+struct Name(String);
+
+#[derive(bevy::ecs::component::Component)]
+struct Person;
+
+enum Event {
+    OpenWindow,
+}
+
+#[derive(Resource, Deref)]
+struct StreamReceiver(crossbeam::channel::Receiver<Event>);
+
+#[derive(Event)]
+struct StreamEvent(Event);
+
+fn read_stream(receiver: Res<StreamReceiver>, mut events: EventWriter<StreamEvent>) {
+    for from_stream in receiver.try_iter() {
+        events.send(StreamEvent(from_stream));
+    }
+}
+
+fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut window: Query<&mut bevy::window::Window>) {
+    for (per_frame, event) in reader.read().enumerate() {
+        match event.0 {
+            Event::OpenWindow => {
+                if window.iter().len() == 0 {
+                    commands.spawn(create_bevy_window(true));
+                } else {
+                    window.single_mut().visible = true;
+                }
+            }
+        }
+    }
+}
+
+fn hello_world() {
+    println!("hello world!");
+}
+
+fn update_people(mut query: Query<&mut Name, With<Person>>) {
+    for mut name in &mut query {
+        if name.0 == "Elaina Proctor" {
+            name.0 = "Elaina Hume".to_string();
+            break; // We don’t need to change any other names
+        }
+    }
+}
+
+fn greet_people(query: Query<&Name, With<Person>>) {
+    for name in &query {
+        println!("hello {}!", name.0);
+    }
+}
+
+fn create_bevy_window(visible: bool) -> bevy::window::Window {
+    bevy::window::Window {
+        title: "I am a window!".into(),
+        name: Some("bevy.app".into()),
+        resolution: (500., 300.).into(),
+        present_mode: PresentMode::AutoVsync,
+        // Tells wasm not to override default event handling, like F5, Ctrl+R etc.
+        prevent_default_event_handling: false,
+        window_theme: Some(WindowTheme::Dark),
+        enabled_buttons: bevy::window::EnabledButtons {
+            maximize: false,
+            ..Default::default()
+        },
+        // This will spawn an invisible window
+        // This is useful when you want to avoid the white window that shows up before the GPU is ready to render the app.
+        visible,
+        ..default()
+    }
+}
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -68,7 +155,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let marker_offset_calibrating = RwSignal::new(false);
 
     // Create a main_window into which controls can be placed
-    let mut main_win = Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
+    let mut main_win = iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
     let (mut config_win, device_rs, marker_pattern_memo) = config_window::config_window(
         &ui,
         simulator_addr,
@@ -83,7 +170,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
 
-    let mut test_win = Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
+    let mut test_win = iui::prelude::Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
 
@@ -115,6 +202,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
                 (4, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
+                (5, 0)(1, 1) Vertical (Fill, Fill) : let bevy_button = Button("Launch Bevy")
             }
             Compact: let separator = HorizontalSeparator()
             Compact: let spacer = Spacer()
@@ -142,6 +230,31 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     form_vbox.hide(&ui);
     run_hbox.hide(&ui);
     main_win.set_child(&ui, vert_box.clone());
+
+    let (tx, rx) = crossbeam::channel::bounded(10);
+
+    std::thread::spawn(|| {
+        App::new().add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(create_bevy_window(false)), 
+                exit_condition: bevy::window::ExitCondition::DontExit,
+                ..default()
+            }).set(WinitPlugin {
+                run_on_any_thread: true,
+                ..default()
+            }),
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin,
+        ))
+        .add_systems(Update, (hello_world, (update_people, greet_people).chain(), read_stream, show_window))
+        .add_event::<StreamEvent>()
+        .insert_resource(StreamReceiver(rx))
+        .run();
+    });
+
+    bevy_button.on_clicked(&ui, move |_| {
+        tx.send(Event::OpenWindow).unwrap();
+    });
 
     windowed_checkbox.on_toggled(&ui, {
         let test_win = test_win.c();
