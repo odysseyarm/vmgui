@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use ahrs::Ahrs;
 use arrayvec::ArrayVec;
-use ats_cv::get_perspective_transform;
+use ats_cv::{get_perspective_transform, pnp};
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix2x4, Point2, Scalar, Vector2, Vector3};
+use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -17,8 +17,19 @@ use crate::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
-                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
-                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
+                        Point2::new(0.35, 0.), Point2::new(0.65, 1.),
+                        Point2::new(0.65, 1.), Point2::new(0.35, 0.))
+}
+
+pub fn my_pnp(nf_positions: &[Point2<f64>]) {
+    let _3dpoints = [
+        Point3::new(0.35, 0., 0.),
+        Point3::new(0.65, 1., 0.),
+        Point3::new(0.65, 1., 0.),
+        Point3::new(0.35, 0., 0.),
+    ];
+    let _nf_positions_vec = nf_positions.iter().map(|x| Vector2::new(x.x, x.y)).collect::<Vec<_>>();
+    ats_cv::pnp(&_3dpoints, &_nf_positions_vec);
 }
 
 /// Given 4 points in the following shape
@@ -231,8 +242,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let nf_aim_point = if nf_positions.len() > 3 {
                 let mut nf_positions = nf_positions.clone();
-                sort_points(&mut nf_positions, MarkerPattern::Diamond);
+                sort_points(&mut nf_positions, MarkerPattern::Rectangle);
                 let center_aim = Point2::new(2048.0, 2048.0);
+                my_pnp(&nf_positions);
                 transform_aim_point_to_identity(center_aim, nf_positions[0], nf_positions[1], nf_positions[2], nf_positions[3])
             } else {
                 None

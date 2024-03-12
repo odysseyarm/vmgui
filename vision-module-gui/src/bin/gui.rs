@@ -293,8 +293,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     run_on_any_thread: true,
                     ..default()
                 }),
-                LogDiagnosticsPlugin::default(),
-                FrameTimeDiagnosticsPlugin,
+                // LogDiagnosticsPlugin::default(),
+                // FrameTimeDiagnosticsPlugin,
             ))
             .add_systems(Startup, setup)
             .add_systems(Update, (read_stream, show_window, rotate_cube))
