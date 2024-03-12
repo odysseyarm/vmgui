@@ -14,9 +14,12 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, PresentMode, WindowLevel, WindowTheme},
 };
+use bevy_infinite_grid::{
+    GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
+};
 use iui::prelude::*;
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
-use nalgebra::Vector2;
+use nalgebra::{Const, Vector2};
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use vision_module_gui::packet::GeneralConfig;
@@ -118,12 +121,6 @@ fn create_bevy_window(visible: bool) -> bevy::window::Window {
     }
 }
 
-// Define a component to designate a rotation speed to an entity.
-#[derive(Component)]
-struct Rotatable {
-    speed: f32,
-}
-
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -137,14 +134,24 @@ fn setup(
             transform: Transform::from_translation(Vec3::ZERO),
             ..default()
         },
-        Rotatable { speed: 0.3 },
     ));
 
-    // Spawn a camera looking at the entities to show what's happening in this example.
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 10.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+    commands.spawn(InfiniteGridBundle {
+        settings: InfiniteGridSettings {
+            // shadow_color: None,
+            ..default()
+        },
         ..default()
     });
+
+    // Spawn a camera looking at the entities to show what's happening in this example.
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 10.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        GridShadowCamera,
+    ));
 
     // Add a light source so we can see clearly.
     commands.spawn(DirectionalLightBundle {
@@ -154,13 +161,27 @@ fn setup(
 }
 
 // This system will rotate any entity in the scene with a Rotatable component around its y-axis.
-fn rotate_cube(mut cubes: Query<(&mut Transform, &Rotatable)>, timer: Res<Time>) {
-    for (mut transform, cube) in &mut cubes {
-        // The speed is first multiplied by TAU which is a full rotation (360deg) in radians,
-        // and then multiplied by delta_seconds which is the time that passed last frame.
-        // In other words. Speed is equal to the amount of rotations per second.
-        transform.rotate_y(cube.speed * std::f32::consts::TAU * timer.delta_seconds());
-    }
+fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<MotRunnerResource>) {
+    let runner = runner.0.blocking_lock();
+    let rotation = runner.state.rotation_mat.c();
+    let rotation = rotation.reshape_generic(Const::<3>, Const::<3>).transpose();
+    let translation = runner.state.translation_mat.c();
+
+    let (camera, mut camera_transform) = camera_query.single_mut();
+    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32);
+    let rotation = Mat3::from_cols_array(&[
+        rotation[(0, 0)] as f32,
+        rotation[(0, 1)] as f32,
+        rotation[(0, 2)] as f32,
+        rotation[(1, 0)] as f32,
+        rotation[(1, 1)] as f32,
+        rotation[(1, 2)] as f32,
+        rotation[(2, 0)] as f32,
+        rotation[(2, 1)] as f32,
+        rotation[(2, 2)] as f32,
+    ]);
+    camera_transform.rotation = Quat::from_mat3(&rotation);
+    println!("translation: {:?}", camera_transform.translation);
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -295,6 +316,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }),
                 // LogDiagnosticsPlugin::default(),
                 // FrameTimeDiagnosticsPlugin,
+                InfiniteGridPlugin,
             ))
             .add_systems(Startup, setup)
             .add_systems(Update, (read_stream, show_window, rotate_cube))

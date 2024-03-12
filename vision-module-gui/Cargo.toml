@@ -26,9 +26,12 @@ toml = "0.8.9"
 ats_cv = { path = "../ats_cv" }
 tokio-stream = "0.1.14"
 pin-project = "1.1.4"
+sqpnp = { git = "https://github.com/0e4ef622/sqpnp.git" }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 enumn = "0.1.13"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["commapi"] }
+
+bevy_infinite_grid = { git = "https://github.com/XYCaptain/bevy_infinite_grid.git", branch = "main" }

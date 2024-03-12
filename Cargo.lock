@@ -678,6 +678,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_infinite_grid"
+version = "0.10.0"
+source = "git+https://github.com/XYCaptain/bevy_infinite_grid.git?branch=main#1e5259a52a7dfaca65402c2c57c1d81c2bc443e9"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_input"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4199,6 +4207,7 @@ dependencies = [
  "arrayvec",
  "ats_cv",
  "bevy",
+ "bevy_infinite_grid",
  "crossbeam",
  "csv",
  "directories",
@@ -4210,6 +4219,7 @@ dependencies = [
  "serde",
  "serial2",
  "serialport",
+ "sqpnp",
  "tokio",
  "tokio-stream",
  "toml",

@@ -1,6 +1,6 @@
 use ahrs::Madgwick;
 use arrayvec::ArrayVec;
-use nalgebra::Point2;
+use nalgebra::{Matrix3x1, Point2, SMatrix};
 use ats_cv::kalman::Pva2d;
 use serde::Serialize;
 use crate::packet::MotData;
@@ -42,6 +42,9 @@ pub struct MotState {
 
     pub screen_id: u8,
     pub orientation: Madgwick<f64>,
+
+    pub rotation_mat: SMatrix<f64, 9, 1>,
+    pub translation_mat: Matrix3x1<f64>,
 }
 
 impl Default for MotState {
@@ -55,6 +58,8 @@ impl Default for MotState {
             nf_pva2ds: Default::default(),
             screen_id: 0,
             orientation: Madgwick::new(1./100., 0.1),
+            rotation_mat: Default::default(),
+            translation_mat: Default::default(),
         }
     }
 }
