@@ -13,7 +13,7 @@ use crate::packet::MarkerPattern;
 
 pub struct RunCanvas {
     pub ctx: UI,
-    pub state: Arc<Mutex<MotRunner>>,
+    pub runner: Arc<Mutex<MotRunner>>,
 }
 
 impl AreaHandler for RunCanvas {
@@ -40,7 +40,7 @@ impl AreaHandler for RunCanvas {
         let nf_path = Path::new(ctx, FillMode::Winding);
         let wf_path = Path::new(ctx, FillMode::Winding);
         let nf_grid_path = Path::new(ctx, FillMode::Winding);
-        let runner = self.state.blocking_lock();
+        let runner = self.runner.blocking_lock();
         let state = &runner.state;
 
         let gravity: Vector3<f64> = state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();

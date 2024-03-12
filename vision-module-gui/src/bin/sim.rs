@@ -190,7 +190,8 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     nf_positions: todo!(),
                     wf_positions: todo!(),
-                    radii: todo!(),
+                    nf_radii: todo!(),
+                    wf_radii: todo!(),
                 })
             };
             buf.clear();
