@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 nalgebra = {  version = "0.32.3", default-features = false, features = [ "libm" ] }
 num = { version = "0.4.1", default-features = false, features = [ "libm" ] }
+sqpnp = { git = "https://github.com/0e4ef622/sqpnp.git" }
