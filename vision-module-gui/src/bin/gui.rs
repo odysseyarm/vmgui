@@ -46,6 +46,9 @@ struct Name(String);
 #[derive(bevy::ecs::component::Component)]
 struct Person;
 
+#[derive(Resource)]
+struct MotRunnerResource(Arc<Mutex<MotRunner>>);
+
 enum Event {
     OpenWindow,
 }
@@ -71,7 +74,7 @@ fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut
                 } else {
                     window.single_mut().visible = true;
                 }
-            }
+            },
         }
     }
 }
@@ -112,6 +115,51 @@ fn create_bevy_window(visible: bool) -> bevy::window::Window {
         // This is useful when you want to avoid the white window that shows up before the GPU is ready to render the app.
         visible,
         ..default()
+    }
+}
+
+// Define a component to designate a rotation speed to an entity.
+#[derive(Component)]
+struct Rotatable {
+    speed: f32,
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // Spawn a cube to rotate.
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Cuboid::default()),
+            material: materials.add(Color::WHITE),
+            transform: Transform::from_translation(Vec3::ZERO),
+            ..default()
+        },
+        Rotatable { speed: 0.3 },
+    ));
+
+    // Spawn a camera looking at the entities to show what's happening in this example.
+    commands.spawn(Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 10.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+
+    // Add a light source so we can see clearly.
+    commands.spawn(DirectionalLightBundle {
+        transform: Transform::from_xyz(3.0, 3.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..default()
+    });
+}
+
+// This system will rotate any entity in the scene with a Rotatable component around its y-axis.
+fn rotate_cube(mut cubes: Query<(&mut Transform, &Rotatable)>, timer: Res<Time>) {
+    for (mut transform, cube) in &mut cubes {
+        // The speed is first multiplied by TAU which is a full rotation (360deg) in radians,
+        // and then multiplied by delta_seconds which is the time that passed last frame.
+        // In other words. Speed is equal to the amount of rotations per second.
+        transform.rotate_y(cube.speed * std::f32::consts::TAU * timer.delta_seconds());
     }
 }
 
@@ -183,7 +231,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         ctx: ui.c(),
         window: test_win.c(),
         on_closing: Box::new(test_win_on_closing.c()),
-        state: mot_runner.c(),
+        runner: mot_runner.c(),
         last_draw_width: None,
         last_draw_height: None,
     }));
@@ -222,7 +270,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             Stretchy: let run_hbox = HorizontalBox() {
                 Stretchy: let run_area = Area(Box::new(RunCanvas {
                     ctx: ui.c(),
-                    state: mot_runner.c(),
+                    runner: mot_runner.c(),
                 }))
             }
         }
@@ -233,23 +281,28 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (tx, rx) = crossbeam::channel::bounded(10);
 
-    std::thread::spawn(|| {
-        App::new().add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(create_bevy_window(false)), 
-                exit_condition: bevy::window::ExitCondition::DontExit,
-                ..default()
-            }).set(WinitPlugin {
-                run_on_any_thread: true,
-                ..default()
-            }),
-            LogDiagnosticsPlugin::default(),
-            FrameTimeDiagnosticsPlugin,
-        ))
-        .add_systems(Update, (hello_world, (update_people, greet_people).chain(), read_stream, show_window))
-        .add_event::<StreamEvent>()
-        .insert_resource(StreamReceiver(rx))
-        .run();
+    std::thread::spawn({
+        let mot_runner = mot_runner.c();
+        move || {
+            App::new().add_plugins((
+                DefaultPlugins.set(WindowPlugin {
+                    primary_window: Some(create_bevy_window(false)), 
+                    exit_condition: bevy::window::ExitCondition::DontExit,
+                    ..default()
+                }).set(WinitPlugin {
+                    run_on_any_thread: true,
+                    ..default()
+                }),
+                LogDiagnosticsPlugin::default(),
+                FrameTimeDiagnosticsPlugin,
+            ))
+            .add_systems(Startup, setup)
+            .add_systems(Update, (read_stream, show_window, rotate_cube))
+            .add_event::<StreamEvent>()
+            .insert_resource(StreamReceiver(rx))
+            .insert_resource(MotRunnerResource(mot_runner))
+            .run();
+        }
     });
 
     bevy_button.on_clicked(&ui, move |_| {
