@@ -17,8 +17,8 @@ use crate::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
-                        Point2::new(0.35, 0.), Point2::new(0.65, 1.),
-                        Point2::new(0.65, 1.), Point2::new(0.35, 0.))
+                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
+                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
 }
 
 pub fn my_pnp(nf_positions: &[Point2<f64>]) {
