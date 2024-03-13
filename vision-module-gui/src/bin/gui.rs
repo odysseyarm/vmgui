@@ -25,12 +25,12 @@ use tracing_subscriber::EnvFilter;
 use vision_module_gui::packet::GeneralConfig;
 use vision_module_gui::{config_window, marker_config_window, Frame};
 use vision_module_gui::{CloneButShorter, MotState};
-use tokio::sync::Mutex;
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
+use parking_lot::Mutex;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -170,7 +170,7 @@ fn setup(
 
 // This system will rotate any entity in the scene with a Rotatable component around its y-axis.
 fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<MotRunnerResource>) {
-    let runner = runner.0.blocking_lock();
+    let runner = runner.0.lock();
     let rotation = runner.state.rotation_mat.c();
     let rotation = rotation.reshape_generic(Const::<3>, Const::<3>).transpose();
     let translation = runner.state.translation_mat.c();
@@ -364,7 +364,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             ui_update.with(|_| {
                 let datapoints = datapoints.c();
-                let datapoints = datapoints.blocking_lock();
+                let datapoints = datapoints.lock();
 
                 let mut collected_text = collected_text.c();
 
@@ -422,7 +422,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let view = mot_runner.c();
         move |_| {
             let view = view.c();
-            view.blocking_lock().device = device_rs.get();
+            view.lock().device = device_rs.get();
         }
     });
 
@@ -462,7 +462,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let state = mot_runner.c();
         move |_| {
             let datapoints = datapoints.c();
-            let mut datapoints = datapoints.blocking_lock();
+            let mut datapoints = datapoints.lock();
             let mut collected_text = collected_text.c();
 
             let mut frame = Frame {
@@ -470,7 +470,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                               nf_aim_point_y: None,
                               };
 
-            let runner = state.blocking_lock();
+            let runner = state.lock();
             let state = &runner.state;
 
             if let Some(nf_aim_point) = state.nf_aim_point {
@@ -490,7 +490,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let collected_text = collected_text.c();
         move |_| {
             let datapoints = datapoints.c();
-            let mut datapoints = datapoints.blocking_lock();
+            let mut datapoints = datapoints.lock();
             let mut collected_text = collected_text.c();
             datapoints.pop();
             collected_text.set_text(&ui, datapoints.len().to_string().as_str());
@@ -502,7 +502,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let datapoints = datapoints.c();
         move |_| {
             let datapoints = datapoints.c();
-            let mut datapoints = datapoints.blocking_lock();
+            let mut datapoints = datapoints.lock();
             datapoints.clear();
             collected_text.set_text(&ui, datapoints.len().to_string().as_str());
         }
@@ -511,7 +511,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     record_impacts_cbx.on_toggled(&ui, {
         let mot_runner = mot_runner.c();
         move |checked| {
-            mot_runner.blocking_lock().record_impact = checked;
+            mot_runner.lock().record_impact = checked;
         }
     });
 
@@ -520,7 +520,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let main_win = main_win.c();
         move |_| {
             let datapoints = datapoints.c();
-            let datapoints = datapoints.blocking_lock();
+            let datapoints = datapoints.lock();
             let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("csv").extension("csv")]);
             if let Some(mut path_buf) = path_buf {
                 if path_buf.extension() != Some("csv".as_ref()) {

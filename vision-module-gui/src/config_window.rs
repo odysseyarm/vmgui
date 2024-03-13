@@ -12,7 +12,7 @@ use leptos_reactive::{
 };
 use serialport::SerialPortInfo;
 use serialport::SerialPortType::UsbPort;
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 
 pub fn config_window(
     ui: &UI,
@@ -340,7 +340,7 @@ impl GeneralSettingsForm {
         self.wf_offset_x.set(config.wf_offset_x as i32);
         self.applied_marker_pattern.set(config.marker_pattern);
         if first_load {
-            self.mot_runner.lock().await.general_config = config;
+            self.mot_runner.lock().general_config = config;
         }
         Ok(())
     }
@@ -391,7 +391,7 @@ impl GeneralSettingsForm {
         };
         device.write_config(config).await?;
         self.applied_marker_pattern.set(config.marker_pattern);
-        self.mot_runner.lock().await.general_config = config;
+        self.mot_runner.lock().general_config = config;
         Ok(())
     }
 

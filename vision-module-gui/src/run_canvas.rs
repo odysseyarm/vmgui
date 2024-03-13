@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrayvec::ArrayVec;
 use ats_cv::choose_rectangle_nearfield_markers;
 use nalgebra::{Point2, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
@@ -40,7 +40,7 @@ impl AreaHandler for RunCanvas {
         let nf_path = Path::new(ctx, FillMode::Winding);
         let wf_path = Path::new(ctx, FillMode::Winding);
         let nf_grid_path = Path::new(ctx, FillMode::Winding);
-        let runner = self.runner.blocking_lock();
+        let runner = self.runner.lock();
         let state = &runner.state;
 
         let gravity: Vector3<f64> = state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();

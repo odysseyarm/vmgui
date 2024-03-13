@@ -4225,6 +4225,7 @@ dependencies = [
  "iui",
  "leptos_reactive",
  "nalgebra",
+ "parking_lot",
  "pin-project",
  "serde",
  "serial2",
