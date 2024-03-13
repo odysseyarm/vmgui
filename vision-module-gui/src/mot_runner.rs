@@ -25,9 +25,9 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
 pub fn my_pnp(nf_positions: &[Point2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
         Point3::new(0.35, 0., 0.),
+        Point3::new(0.65, 0., 0.),
         Point3::new(0.65, 1., 0.),
-        Point3::new(0.65, 1., 0.),
-        Point3::new(0.35, 0., 0.),
+        Point3::new(0.35, 1., 0.),
     ];
     let _projections = nf_positions.iter().map(|x| Vector2::new(x.x, x.y)).collect::<Vec<_>>();
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
