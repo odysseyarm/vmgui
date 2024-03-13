@@ -19,7 +19,7 @@ use iui::{
 };
 use leptos_reactive::{create_effect, create_rw_signal, Memo, RwSignal, SignalGet, SignalGetUntracked, SignalSet};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 use crate::mot_runner::MotRunner;
 
 pub fn marker_config_window(
@@ -63,13 +63,9 @@ pub fn marker_config_window(
     let apply_button_on_click = {
         let mot_runner = mot_runner.c();
         move || {
-            ui_ctx.spawn({
-                let mot_runner = mot_runner.c();
-                async move {
-                    let runner = &mut mot_runner.lock().await;
-                    marker_settings.apply(&mut runner.markers_settings);
-                }
-            });
+            let mot_runner = mot_runner.c();
+            let runner = &mut mot_runner.lock();
+            marker_settings.apply(&mut runner.markers_settings);
         }
     };
     apply_button.on_clicked(&ui, {

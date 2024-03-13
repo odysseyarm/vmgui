@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use nalgebra::{Point2, Scale2};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
@@ -38,7 +38,7 @@ impl AreaHandler for TestCanvas {
         // let fv_ch_path = Path::new(ctx, FillMode::Winding);
         let nf_ch_path = Path::new(ctx, FillMode::Winding);
         let wf_ch_path = Path::new(ctx, FillMode::Winding);
-        let runner = self.runner.blocking_lock();
+        let runner = self.runner.lock();
         let state = &runner.state;
         // if let Some(aim_point) = state.fv_aim_point {
         //     draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
@@ -156,19 +156,19 @@ impl AreaHandler for TestCanvas {
             slow_speed = 0.0001;
         }
         match area_key_event.ext_key as _ {
-            ui_sys::uiExtKeyUp => self.runner.blocking_lock().nf_offset.y -= slow_speed,
-            ui_sys::uiExtKeyDown => self.runner.blocking_lock().nf_offset.y += slow_speed,
-            ui_sys::uiExtKeyLeft => self.runner.blocking_lock().nf_offset.x -= slow_speed,
-            ui_sys::uiExtKeyRight => self.runner.blocking_lock().nf_offset.x += slow_speed,
+            ui_sys::uiExtKeyUp => self.runner.lock().nf_offset.y -= slow_speed,
+            ui_sys::uiExtKeyDown => self.runner.lock().nf_offset.y += slow_speed,
+            ui_sys::uiExtKeyLeft => self.runner.lock().nf_offset.x -= slow_speed,
+            ui_sys::uiExtKeyRight => self.runner.lock().nf_offset.x += slow_speed,
             ui_sys::uiExtKeyEscape => (self.on_closing)(&mut self.window),
             _ => match area_key_event.key {
-                b'w' => self.runner.blocking_lock().nf_offset.y -= 0.1,
-                b's' => self.runner.blocking_lock().nf_offset.y += 0.1,
-                b'a' => self.runner.blocking_lock().nf_offset.x -= 0.1,
-                b'd' => self.runner.blocking_lock().nf_offset.x += 0.1,
+                b'w' => self.runner.lock().nf_offset.y -= 0.1,
+                b's' => self.runner.lock().nf_offset.y += 0.1,
+                b'a' => self.runner.lock().nf_offset.x -= 0.1,
+                b'd' => self.runner.lock().nf_offset.x += 0.1,
                 b'q' => (self.on_closing)(&mut self.window),
                 // Backspace
-                8 => self.runner.blocking_lock().nf_offset = Default::default(),
+                8 => self.runner.lock().nf_offset = Default::default(),
                 _ => (),
             }
         }
@@ -179,7 +179,7 @@ impl AreaHandler for TestCanvas {
         if mouse_event.down == 1 && mouse_event.modifiers.contains(Modifiers::MODIFIER_CTRL) {
             let Some(w) = self.last_draw_width else { return };
             let Some(h) = self.last_draw_height else { return };
-            let mut state = self.runner.blocking_lock();
+            let mut state = self.runner.lock();
             let Some(aim_point) = state.state.nf_aim_point else { return };
             state.nf_offset.x = mouse_event.x / w - aim_point.x;
             state.nf_offset.y = mouse_event.y / h - aim_point.y;

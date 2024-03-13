@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Duration;
 use ahrs::Ahrs;
 use arrayvec::ArrayVec;
@@ -7,7 +8,6 @@ use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
 use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3};
 use sqpnp::types::SQPSolution;
-use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::debug;
@@ -111,17 +111,17 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
 }
 
 async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
+    let device = runner.lock().device.c().unwrap();
     let mut mot_data_stream = device.stream_mot_data().await.unwrap();
     loop {
-        if runner.lock().await.device.is_none() {
+        if runner.lock().device.is_none() {
             return;
         }
         // if let Ok((nf_data, wf_data)) = device.get_frame().await {
         if let Some(mot_data) = mot_data_stream.next().await {
             let nf_data = mot_data.mot_data_nf;
             let wf_data = mot_data.mot_data_wf;
-            let mut runner = runner.lock().await;
+            let mut runner = runner.lock();
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
@@ -230,12 +230,12 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 }
 
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
+    let device = runner.lock().device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
-    while runner.lock().await.device.is_some() {
+    while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
             let CombinedMarkersReport { nf_positions, wf_positions, nf_radii, wf_radii } = combined_markers_report;
-            let mut runner = runner.lock().await;
+            let mut runner = runner.lock();
             debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_positions, wf_positions, nf_radii, wf_radii);
 
             let nf_positions = nf_positions.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
@@ -260,11 +260,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 }
 
 async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
+    let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
-    while runner.lock().await.device.is_some() {
+    while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
-            let mut runner = runner.lock().await;
+            let mut runner = runner.lock();
             debug!("accel: {:?}", accel);
             runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
         }
@@ -272,9 +272,9 @@ async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
 }
 
 async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
+    let device = runner.lock().device.c().unwrap();
     let mut frame_stream = device.stream_impact().await.unwrap();
-    while runner.lock().await.device.is_some() {
+    while runner.lock().device.is_some() {
         if let Some(()) = frame_stream.next().await {
             // todo
         }

@@ -10,7 +10,7 @@ use iui::{
     UI,
 };
 use nalgebra::{
-    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4
+    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
 };
 use tracing::{error, info};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
@@ -91,6 +91,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
     loop {
         buf.resize(1024, 0);
         sock.read_exact(&mut buf[..3]).unwrap();
+        assert_eq!(buf[0], 0xff);
         let len = u16::from_le_bytes([buf[1], buf[2]]);
         let len = usize::from(len) * 2;
         sock.read_exact(&mut buf[3..][..len - 2]).unwrap();
@@ -185,13 +186,23 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 marker_pattern[2],
                 marker_pattern[3],
             ).unwrap();
+            let nf_positions = std::array::from_fn(|i| {
+                let Some(XY { x, y }) = nf_markers.get(i).map(|x| **x) else {
+                    return Point2::default()
+                };
+                if (0..4096).contains(&x) && (0..4096).contains(&y) {
+                    Point2::new(x as u16, y as u16)
+                } else {
+                    Point2::default()
+                }
+            });
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
-                    nf_positions: todo!(),
-                    wf_positions: todo!(),
-                    nf_radii: todo!(),
-                    wf_radii: todo!(),
+                    nf_positions,
+                    wf_positions: Default::default(),
+                    nf_radii: Default::default(),
+                    wf_radii: Default::default(),
                 })
             };
             buf.clear();
