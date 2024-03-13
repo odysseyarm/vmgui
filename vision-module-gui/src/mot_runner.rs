@@ -255,7 +255,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 let mut nf_positions = nf_positions.clone();
                 sort_points(&mut nf_positions, MarkerPattern::Rectangle);
                 let center_aim = Point2::new(2048.0, 2048.0);
-                let solution = my_pnp(&nf_positions);
+                let solution = my_pnp(&nf_positions[0..4]);
                 if let Some(solution) = solution {
                     runner.state.rotation_mat = solution.r_hat;
                     runner.state.translation_mat = solution.t;
