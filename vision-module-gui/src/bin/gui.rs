@@ -6,7 +6,7 @@ use bevy::app::{App, Startup, Update};
 use bevy::ecs::query::With;
 use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Query};
-use bevy::window::WindowPlugin;
+use bevy::window::{WindowPlugin, WindowCloseRequested};
 use bevy::winit::WinitPlugin;
 use bevy::DefaultPlugins;
 use bevy::{
@@ -78,6 +78,14 @@ fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut
                     window.single_mut().visible = true;
                 }
             },
+        }
+    }
+}
+
+pub fn hide_instead_of_close(mut closed: EventReader<WindowCloseRequested>, mut window: Query<&mut bevy::window::Window>) {
+    for event in closed.read() {
+        if let Ok(mut window) = window.get_mut(event.window) {
+            window.visible = false;
         }
     }
 }
@@ -307,8 +315,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move || {
             App::new().add_plugins((
                 DefaultPlugins.set(WindowPlugin {
-                    primary_window: Some(create_bevy_window(false)), 
+                    primary_window: Some(create_bevy_window(false)),
                     exit_condition: bevy::window::ExitCondition::DontExit,
+                    close_when_requested: false,
                     ..default()
                 }).set(WinitPlugin {
                     run_on_any_thread: true,
@@ -319,7 +328,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 InfiniteGridPlugin,
             ))
             .add_systems(Startup, setup)
-            .add_systems(Update, (read_stream, show_window, rotate_cube))
+            .add_systems(Update, (read_stream, show_window, rotate_cube, hide_instead_of_close))
             .add_event::<StreamEvent>()
             .insert_resource(StreamReceiver(rx))
             .insert_resource(MotRunnerResource(mot_runner))
