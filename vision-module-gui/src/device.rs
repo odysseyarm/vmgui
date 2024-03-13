@@ -129,7 +129,7 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                debug!("write id={} len={}", pkt.id, buf.len());
+                debug!("write id={} len={} ty={:?}", pkt.id, buf.len(), pkt.ty());
                 let r = writer.write_all(&buf).and_then(|_| writer.flush());
                 if let Err(e) = r {
                     error!("device thread failed to write: {e}");

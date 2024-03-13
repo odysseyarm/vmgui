@@ -3,14 +3,14 @@ use parking_lot::Mutex;
 use std::time::Duration;
 use ahrs::Ahrs;
 use arrayvec::ArrayVec;
-use ats_cv::{get_perspective_transform, pnp};
+use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
 use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3};
-use sqpnp::types::SQPSolution;
+use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::debug;
+use tracing::{debug, info};
 use crate::{CloneButShorter, MotState};
 use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
@@ -29,8 +29,18 @@ pub fn my_pnp(nf_positions: &[Point2<f64>]) -> Option<SQPSolution> {
         Point3::new(0.65, 1., 0.),
         Point3::new(0.35, 0., 0.),
     ];
-    let _nf_positions_vec = nf_positions.iter().map(|x| Vector2::new(x.x, x.y)).collect::<Vec<_>>();
-    pnp(&_3dpoints, &_nf_positions_vec)
+    let _projections = nf_positions.iter().map(|x| Vector2::new(x.x, x.y)).collect::<Vec<_>>();
+    let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
+    if let Some(mut solver) = solver {
+        solver.Solve();
+        info!("pnp found {} solutions", solver.NumberOfSolutions());
+        if solver.NumberOfSolutions() == 1 {
+            return Some(solver.SolutionPtr(0).unwrap().clone());
+        }
+    } else {
+        info!("pnp solver failed");
+    }
+    None
 }
 
 /// Given 4 points in the following shape

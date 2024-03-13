@@ -1,6 +1,6 @@
 use std::{fmt::Display, error::Error as StdError};
 
-use nalgebra::Point2;
+use nalgebra::{Point2, coordinates::XY};
 
 #[derive(Clone, Debug)]
 pub struct Packet {
@@ -290,7 +290,7 @@ impl Packet {
             PacketData::ReadConfigResponse(_) => 4,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
-            PacketData::CombinedMarkersReport(_) => 116,
+            PacketData::CombinedMarkersReport(_) => 112,
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport => 0,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
@@ -309,7 +309,7 @@ impl Packet {
             PacketData::ReadConfigResponse(x) => x.serialize(buf),
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
-            PacketData::CombinedMarkersReport(x) => unimplemented!(),
+            PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => unimplemented!(),
             PacketData::ImpactReport => (),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
@@ -494,6 +494,11 @@ impl ObjectReport {
 
 impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        use Error as E;
+        if bytes.len() < 112 {
+            return Err(E::UnexpectedEof { packet_type: Some(PacketType::CombinedMarkersReport) });
+        }
+
         let data = &mut &bytes[..112];
         *bytes = &bytes[112..];
         let mut positions = [Point2::new(0, 0); 16*2];
@@ -523,6 +528,22 @@ impl CombinedMarkersReport {
         let wf_radii = radii[16..].try_into().unwrap();
 
         Ok(Self { nf_positions, wf_positions, nf_radii, wf_radii })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        let before = buf.len();
+        for p in self.nf_positions.iter().chain(&self.wf_positions) {
+            let XY { x, y } = **p;
+            let byte0 = x & 0xff;
+            let byte1 = ((x >> 8) & 0x0f) | ((y & 0x0f) << 4);
+            let byte2 = y >> 4;
+            buf.extend_from_slice(&[byte0 as u8, byte1 as u8, byte2 as u8]);
+        }
+
+        for w in self.nf_radii.chunks(2).chain(self.wf_radii.chunks(2)) {
+            buf.push((w[0] & 0x0f) | (w[1] << 4));
+        }
+        let after = buf.len();
     }
 }
 
