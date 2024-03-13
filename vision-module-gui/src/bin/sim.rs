@@ -175,22 +175,24 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
 
         if let Some(id) = state.stream_combined_markers {
             let marker_pattern = state.marker_pattern.marker_positions();
-            let r = transform_aim_point(
-                [2048.0, 2048.0].into(),
-                nf_markers[0].cast(),
-                nf_markers[1].cast(),
-                nf_markers[2].cast(),
-                nf_markers[3].cast(),
-                marker_pattern[0],
-                marker_pattern[1],
-                marker_pattern[2],
-                marker_pattern[3],
-            ).unwrap();
+            // let r = transform_aim_point(
+            //     [2048.0, 2048.0].into(),
+            //     nf_markers[0].cast(),
+            //     nf_markers[1].cast(),
+            //     nf_markers[2].cast(),
+            //     nf_markers[3].cast(),
+            //     marker_pattern[0],
+            //     marker_pattern[1],
+            //     marker_pattern[2],
+            //     marker_pattern[3],
+            // ).unwrap();
+            let mut nf_radii = [0; 16];
             let nf_positions = std::array::from_fn(|i| {
                 let Some(XY { x, y }) = nf_markers.get(i).map(|x| **x) else {
                     return Point2::default()
                 };
                 if (0..4096).contains(&x) && (0..4096).contains(&y) {
+                    nf_radii[i] = 1;
                     Point2::new(x as u16, y as u16)
                 } else {
                     Point2::default()
@@ -201,7 +203,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     nf_positions,
                     wf_positions: Default::default(),
-                    nf_radii: Default::default(),
+                    nf_radii,
                     wf_radii: Default::default(),
                 })
             };
@@ -240,7 +242,7 @@ impl State {
             pitch: 0.0,
             markers: vec![
                 tf * Point3::new(0.35, 1.0, 0.0),
-                tf * Point3::new(0.8, 1.0, 0.0),
+                tf * Point3::new(0.65, 1.0, 0.0),
                 tf * Point3::new(0.65, 0.0, 0.0),
                 tf * Point3::new(0.35, 0.0, 0.0),
                 // tf * Point3::new(0.35, -0.2, 0.0),
