@@ -142,7 +142,7 @@ pub struct AimPointReport {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
-    UnexpectedEof,
+    UnexpectedEof { packet_type: Option<PacketType> },
     UnrecognizedPacketId,
     UnrecognizedPort,
     UnrecognizedMarkerPattern,
@@ -152,7 +152,8 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Error as S;
         match self {
-            S::UnexpectedEof => write!(f, "unexpected eof"),
+            S::UnexpectedEof { packet_type: None } => write!(f, "unexpected eof"),
+            S::UnexpectedEof { packet_type: Some(p) } => write!(f, "unexpected eof, packet id {p:?}"),
             S::UnrecognizedPacketId => write!(f, "unrecognized packet id"),
             S::UnrecognizedPort => write!(f, "unrecognized port"),
             S::UnrecognizedMarkerPattern => write!(f, "unrecognized marker pattern"),
@@ -242,7 +243,7 @@ impl Packet {
 
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         let [words1, words2, ty, id, ..] = **bytes else {
-            return Err(Error::UnexpectedEof);
+            return Err(Error::UnexpectedEof { packet_type: None });
         };
 
         let words = u16::from_le_bytes([words1, words2]);
@@ -250,16 +251,16 @@ impl Packet {
 
         let len = usize::from(words)*2;
         if bytes.len() < len {
-            return Err(Error::UnexpectedEof);
+            return Err(Error::UnexpectedEof { packet_type: Some(ty) });
         }
         *bytes = &bytes[4..];
         let data = match ty {
             PacketType::WriteRegister => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
-            PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes)?),
+            PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes, ty)?),
             PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
-            PacketType::WriteConfig => PacketData::WriteConfig(GeneralConfig::parse(bytes)?),
+            PacketType::WriteConfig => PacketData::WriteConfig(GeneralConfig::parse(bytes, ty)?),
             PacketType::ReadConfig => PacketData::ReadConfig,
-            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes)?),
+            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
@@ -355,10 +356,10 @@ impl PacketData {
 }
 
 impl Register {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let [port, bank, address, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+            return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
         let port = port.try_into()?;
         *bytes = &bytes[4..];
@@ -374,7 +375,7 @@ impl ReadRegisterResponse {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let [bank, address, data, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+            return Err(E::UnexpectedEof { packet_type: Some(PacketType::ReadRegisterResponse) });
         };
         *bytes = &bytes[4..];
         Ok(Self { bank, address, data })
@@ -389,7 +390,7 @@ impl WriteRegister {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let [port, bank, address, data, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+            return Err(E::UnexpectedEof { packet_type: Some(PacketType::WriteRegister) });
         };
         let port = port.try_into()?;
         *bytes = &bytes[4..];
@@ -402,10 +403,10 @@ impl WriteRegister {
 }
 
 impl GeneralConfig {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let [impact_threshold, marker_pattern, wfx0, wfx1, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+            return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
         let wf_offset_x: [u8; 2] = [wfx0, wfx1];
         let wf_offset_x = i16::from_le_bytes(wf_offset_x);
@@ -468,10 +469,10 @@ impl MotData {
 impl ObjectReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        let mut data = &mut &bytes[..512];
+        let data = &mut &bytes[..512];
         *bytes = &bytes[512..];
-        let [format, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof);
+        let [_format, _, ..] = **bytes else {
+            return Err(E::UnexpectedEof { packet_type: Some(PacketType::ObjectReport) });
         };
         *bytes = &bytes[2..];
         Ok(Self {
