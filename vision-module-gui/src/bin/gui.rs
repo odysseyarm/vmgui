@@ -189,7 +189,6 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
         rotation[(2, 2)] as f32,
     ]);
     camera_transform.rotation = Quat::from_mat3(&rotation);
-    println!("translation: {:?}", camera_transform.translation);
 }
 
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
