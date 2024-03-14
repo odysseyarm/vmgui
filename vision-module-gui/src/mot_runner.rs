@@ -32,7 +32,7 @@ pub fn my_pnp(_projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
     if let Some(mut solver) = solver {
         solver.Solve();
-        info!("pnp found {} solutions", solver.NumberOfSolutions());
+        debug!("pnp found {} solutions", solver.NumberOfSolutions());
         if solver.NumberOfSolutions() == 1 {
             return Some(solver.SolutionPtr(0).unwrap().clone());
         }
@@ -256,8 +256,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 let center_aim = Point2::new(2048.0, 2048.0);
                 let projections = nf_positions.iter().map(|pos| {
                     let f = 1.484307;
-                    let x = (pos.x - center_aim.x)/f;
-                    let y = (pos.y - center_aim.y)/f;
+                    let x = (rescale(pos.x - center_aim.x))/f;
+                    let y = (rescale(pos.y - center_aim.y))/f;
                     Vector2::new(x, y)
                 }).collect::<Vec<Vector2<_>>>();
                 let solution = my_pnp(&projections);
