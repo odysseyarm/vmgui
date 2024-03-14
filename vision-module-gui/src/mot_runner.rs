@@ -22,14 +22,13 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
 }
 
-pub fn my_pnp(nf_positions: &[Point2<f64>]) -> Option<SQPSolution> {
+pub fn my_pnp(_projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
         Point3::new(0.35, 0., 0.),
         Point3::new(0.65, 0., 0.),
         Point3::new(0.65, 1., 0.),
         Point3::new(0.35, 1., 0.),
     ];
-    let _projections = nf_positions.iter().map(|x| Vector2::new(x.x, x.y)).collect::<Vec<_>>();
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
     if let Some(mut solver) = solver {
         solver.Solve();
@@ -255,7 +254,13 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 let mut nf_positions = nf_positions.clone();
                 sort_points(&mut nf_positions, MarkerPattern::Rectangle);
                 let center_aim = Point2::new(2048.0, 2048.0);
-                let solution = my_pnp(&nf_positions[0..4]);
+                let projections = nf_positions.iter().map(|pos| {
+                    let f = 1.484307;
+                    let x = (pos.x - center_aim.x)/f;
+                    let y = (pos.y - center_aim.y)/f;
+                    Vector2::new(x, y)
+                }).collect::<Vec<Vector2<_>>>();
+                let solution = my_pnp(&projections);
                 if let Some(solution) = solution {
                     runner.state.rotation_mat = solution.r_hat;
                     runner.state.translation_mat = solution.t;
