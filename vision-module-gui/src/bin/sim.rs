@@ -35,6 +35,7 @@ fn main() {
     let state = Arc::new(Mutex::new(State::new()));
     vision_module_gui::layout! { &ui,
         let vbox = VerticalBox(padded: false) {
+            Compact : let text = Label("")
             Stretchy : let area = Area(Box::new(MainCanvas { state: state.clone() }))
         }
     }
@@ -43,7 +44,10 @@ fn main() {
     ui.ui_timer(16, {
         let ui = ui.clone();
         let area = area.clone();
+        let state = state.clone();
         move || {
+            let p = *state.lock().unwrap().camera_pos;
+            text.set_text(&ui, &format!("p: ({:.4}, {:.4}, {:.4})", p.x, p.y, p.z));
             area.queue_redraw_all(&ui);
             true
         }
@@ -248,10 +252,10 @@ impl State {
                 // tf * Point3::new(0.35, -0.2, 0.0),
                 // tf * Point3::new(0.65, -0.2, 0.0),
 
-                tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
             ],
@@ -457,6 +461,13 @@ impl AreaHandler for MainCanvas {
             b'd' => &mut state.moving_right,
             b'e' | b' ' => &mut state.moving_up,
             b'q' => &mut state.moving_down,
+            b'\x08' => { // backspace
+                // reset the camera
+                state.camera_pos = Point3::new(0., 0., 5.);
+                state.yaw = 0.0;
+                state.pitch = 0.0;
+                return true;
+            }
             _ if key_event.modifier.contains(Modifiers::MODIFIER_SHIFT)
             || key_event.modifier.contains(Modifiers::MODIFIER_CTRL) => &mut state.moving_down,
             _ => return true,

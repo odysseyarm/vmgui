@@ -6,7 +6,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3};
+use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3, Const, Rotation3, Matrix3, Transform3, Translation3, Matrix4};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -24,10 +24,10 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
 
 pub fn my_pnp(_projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
-        Point3::new(0.35, 0., 0.),
-        Point3::new(0.65, 0., 0.),
-        Point3::new(0.65, 1., 0.),
-        Point3::new(0.35, 1., 0.),
+        Point3::new((0.35 - 0.5) * 16./9., -0.5, 0.),
+        Point3::new((0.65 - 0.5) * 16./9., -0.5, 0.),
+        Point3::new((0.65 - 0.5) * 16./9., 0.5, 0.),
+        Point3::new((0.35 - 0.5) * 16./9., 0.5, 0.),
     ];
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
     if let Some(mut solver) = solver {
@@ -255,15 +255,28 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 sort_points(&mut nf_positions, MarkerPattern::Rectangle);
                 let center_aim = Point2::new(2048.0, 2048.0);
                 let projections = nf_positions.iter().map(|pos| {
-                    let f = 1.484307;
-                    let x = rescale_generic(0., 4095.0, -1./(2.*f), 1./(2.*f), pos.x);
-                    let y = rescale_generic(0., 4095.0, -1./(2.*f), 1./(2.*f), pos.y);
+                    // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+                    let f = 5896.181431117499;
+                    let x = (pos.x - 2047.5) / f;
+                    let y = (pos.y - 2047.5) / f;
                     Vector2::new(x, y)
                 }).collect::<Vec<Vector2<_>>>();
                 let solution = my_pnp(&projections);
                 if let Some(solution) = solution {
-                    runner.state.rotation_mat = solution.r_hat;
-                    runner.state.translation_mat = solution.t;
+                    let r_hat = Rotation3::from_matrix_unchecked(solution.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+                    let t = Translation3::from(solution.t);
+                    let tf = t * r_hat;
+                    let ctf = tf.inverse();
+
+                    let flip_yz = Matrix3::new(
+                        1., 0., 0.,
+                        0., -1., 0.,
+                        0., 0., -1.,
+                    );
+                    runner.state.rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                    runner.state.translation_mat = flip_yz * ctf.translation.vector;
+                    let p = runner.state.translation_mat;
+                    info!("p = ({:.4}, {:.4}, {:.4})", p.x, p.y, p.z);
                 }
                 transform_aim_point_to_identity(center_aim, nf_positions[0], nf_positions[1], nf_positions[2], nf_positions[3])
             } else {

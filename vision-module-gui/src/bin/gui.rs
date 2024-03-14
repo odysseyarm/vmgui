@@ -152,23 +152,12 @@ fn setup(
 // This system will rotate any entity in the scene with a Rotatable component around its y-axis.
 fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<MotRunnerResource>) {
     let runner = runner.0.lock();
-    let rotation = runner.state.rotation_mat.c();
-    let rotation = rotation.reshape_generic(Const::<3>, Const::<3>).transpose();
-    let translation = runner.state.translation_mat.c();
+    let rotation = runner.state.rotation_mat;
+    let translation = runner.state.translation_mat;
 
-    let (camera, mut camera_transform) = camera_query.single_mut();
+    let (_camera, mut camera_transform) = camera_query.single_mut();
     camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32);
-    let rotation = Mat3::from_cols_array(&[
-        rotation[(0, 0)] as f32,
-        rotation[(0, 1)] as f32,
-        rotation[(0, 2)] as f32,
-        rotation[(1, 0)] as f32,
-        rotation[(1, 1)] as f32,
-        rotation[(1, 2)] as f32,
-        rotation[(2, 0)] as f32,
-        rotation[(2, 1)] as f32,
-        rotation[(2, 2)] as f32,
-    ]);
+    let rotation = Mat3::from_cols_slice(rotation.cast().as_slice());
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
 
