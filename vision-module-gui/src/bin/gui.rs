@@ -90,25 +90,6 @@ pub fn hide_instead_of_close(mut closed: EventReader<WindowCloseRequested>, mut 
     }
 }
 
-fn hello_world() {
-    println!("hello world!");
-}
-
-fn update_people(mut query: Query<&mut Name, With<Person>>) {
-    for mut name in &mut query {
-        if name.0 == "Elaina Proctor" {
-            name.0 = "Elaina Hume".to_string();
-            break; // We don’t need to change any other names
-        }
-    }
-}
-
-fn greet_people(query: Query<&Name, With<Person>>) {
-    for name in &query {
-        println!("hello {}!", name.0);
-    }
-}
-
 fn create_bevy_window(visible: bool) -> bevy::window::Window {
     bevy::window::Window {
         title: "I am a window!".into(),
