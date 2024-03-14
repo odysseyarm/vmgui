@@ -256,8 +256,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 let center_aim = Point2::new(2048.0, 2048.0);
                 let projections = nf_positions.iter().map(|pos| {
                     let f = 1.484307;
-                    let x = (rescale(pos.x - center_aim.x))/f;
-                    let y = (rescale(pos.y - center_aim.y))/f;
+                    let x = rescale_generic(0., 4095.0, -1./(2.*f), 1./(2.*f), pos.x);
+                    let y = rescale_generic(0., 4095.0, -1./(2.*f), 1./(2.*f), pos.y);
                     Vector2::new(x, y)
                 }).collect::<Vec<Vector2<_>>>();
                 let solution = my_pnp(&projections);
