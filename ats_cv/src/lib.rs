@@ -1,21 +1,18 @@
 #![no_std]
 
-extern crate alloc;
-
-use alloc::vec;
-use nalgebra::{ComplexField, Matrix3, Point2, Point3, RealField, SMatrix, SVector, Vector2};
+use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector, Vector2, Vector3};
 pub mod kalman;
 
 use num::{traits::{float::TotalOrder, Float}, FromPrimitive};
 use sqpnp::types::{SQPSolution, SolverParameters};
 
-pub fn pnp(_3dpoints: &[Point3<f64>], _projections: &[Vector2<f64>]) -> Option<SQPSolution>
+pub fn pnp(_3dpoints: &[Vector3<f64>], projections: &[Vector2<f64>]) -> Option<SQPSolution>
 {
-    let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
+    let solver = sqpnp::PnpSolver::new(_3dpoints, projections, None, SolverParameters::default());
     if let Some(mut solver) = solver {
-        solver.Solve();
-        if solver.NumberOfSolutions() == 1 {
-            return Some(solver.SolutionPtr(0).unwrap().clone());
+        solver.solve();
+        if solver.number_of_solutions() == 1 {
+            return Some(solver.solution_ptr(0).unwrap().clone());
         }
     }
     None

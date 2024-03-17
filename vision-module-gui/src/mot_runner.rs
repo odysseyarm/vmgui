@@ -6,7 +6,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix2x4, Point2, Point3, Scalar, Vector2, Vector3, Const, Rotation3, Matrix3, Transform3, Translation3, Matrix4};
+use nalgebra::{Point2, Scalar, Vector2, Vector3, Const, Rotation3, Matrix3, Translation3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -22,19 +22,19 @@ pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>,
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
 }
 
-pub fn my_pnp(_projections: &[Vector2<f64>]) -> Option<SQPSolution> {
+pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
-        Point3::new((0.35 - 0.5) * 16./9., -0.5, 0.),
-        Point3::new((0.65 - 0.5) * 16./9., -0.5, 0.),
-        Point3::new((0.65 - 0.5) * 16./9., 0.5, 0.),
-        Point3::new((0.35 - 0.5) * 16./9., 0.5, 0.),
+        Vector3::new((0.35 - 0.5) * 16./9., -0.5, 0.),
+        Vector3::new((0.65 - 0.5) * 16./9., -0.5, 0.),
+        Vector3::new((0.65 - 0.5) * 16./9., 0.5, 0.),
+        Vector3::new((0.35 - 0.5) * 16./9., 0.5, 0.),
     ];
-    let solver = sqpnp::PnpSolver::new(&_3dpoints, &_projections, vec![], SolverParameters::default());
+    let solver = sqpnp::PnpSolver::new(&_3dpoints, &projections, None, SolverParameters::default());
     if let Some(mut solver) = solver {
-        solver.Solve();
-        debug!("pnp found {} solutions", solver.NumberOfSolutions());
-        if solver.NumberOfSolutions() == 1 {
-            return Some(solver.SolutionPtr(0).unwrap().clone());
+        solver.solve();
+        debug!("pnp found {} solutions", solver.number_of_solutions());
+        if solver.number_of_solutions() == 1 {
+            return Some(solver.solution_ptr(0).unwrap().clone());
         }
     } else {
         info!("pnp solver failed");
