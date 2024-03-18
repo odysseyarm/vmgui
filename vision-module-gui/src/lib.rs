@@ -57,7 +57,7 @@ impl Default for MotState {
             wf_data: None,
             nf_pva2ds: Default::default(),
             screen_id: 0,
-            orientation: Madgwick::new(1./100., 0.1),
+            orientation: Madgwick::new(1./500., 0.1),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
         }

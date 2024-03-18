@@ -122,10 +122,10 @@ impl AreaHandler for RunCanvas {
             if nf_points.len() >= 4 {
                 let mut chosen = choose_rectangle_nearfield_markers(&mut nf_points, state.screen_id);
                 let points = match chosen.as_mut() {
-                    Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
+                    // Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
                     _ => &mut nf_points[..4],
                 };
-                sort_points(points, runner.general_config.marker_pattern);
+                // sort_points(points, runner.general_config.marker_pattern);
 
                 let top = runner.markers_settings.views[0].marker_top.position;
                 let left = runner.markers_settings.views[0].marker_left.position;
