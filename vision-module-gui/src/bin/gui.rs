@@ -202,7 +202,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs, marker_pattern_memo) = config_window::config_window(
+    let (mut config_win, device_rs, accel_odr_memo) = config_window::config_window(
         &ui,
         simulator_addr,
         mot_runner.c(),
@@ -211,7 +211,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut marker_config_win = marker_config_window::marker_config_window(
         &ui,
         marker_offset_calibrating,
-        marker_pattern_memo,
+        // marker_pattern_memo,
         mot_runner.c(),
     );
 
@@ -392,6 +392,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             view.lock().device = device_rs.get();
+        }
+    });
+
+    create_effect({
+        let view = mot_runner.c();
+        move |_| {
+            let view = view.c();
+            view.lock().state.orientation = ahrs::Madgwick::new(1. / accel_odr_memo.get() as f64, 0.1);
         }
     });
 

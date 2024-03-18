@@ -25,7 +25,7 @@ use crate::mot_runner::MotRunner;
 pub fn marker_config_window(
     ui: &UI,
     marker_offset_calibrating: RwSignal<bool>,
-    marker_pattern_memo: Memo<MarkerPattern>,
+    // marker_pattern_memo: Memo<MarkerPattern>,
     mot_runner: Arc<Mutex<MotRunner>>,
 ) -> Window {
     let ui_ctx = ui.async_context();
@@ -77,13 +77,14 @@ pub fn marker_config_window(
         }
     });
     load_defaults_button.on_clicked(&ui, move |_| {
-        marker_settings.load_defaults(marker_pattern_memo.get_untracked());
+        // marker_settings.load_defaults(marker_pattern_memo.get_untracked());
+        marker_settings.load_defaults(MarkerPattern::Rectangle);
     });
     // When the applied marker pattern changes, reload the defaults
-    create_effect(move |_| {
-        marker_settings.load_defaults(marker_pattern_memo.get());
-        apply_button_on_click();
-    });
+    // create_effect(move |_| {
+    //     marker_settings.load_defaults(marker_pattern_memo.get());
+    //     apply_button_on_click();
+    // });
 
     reload_button.on_clicked(&ui, {
         move |_| {

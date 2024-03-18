@@ -82,8 +82,7 @@ impl MarkerPattern {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GeneralConfig {
     pub impact_threshold: u8,
-    pub marker_pattern: MarkerPattern,
-    pub wf_offset_x: i16,
+    pub accel_odr: u16,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -405,20 +404,18 @@ impl WriteRegister {
 impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
-        let [impact_threshold, marker_pattern, wfx0, wfx1, ..] = **bytes else {
+        let [impact_threshold, accel_odr0, accel_odr1, _, ..] = **bytes else {
             return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
-        let wf_offset_x: [u8; 2] = [wfx0, wfx1];
-        let wf_offset_x = i16::from_le_bytes(wf_offset_x);
-        let marker_pattern = MarkerPattern::n(marker_pattern)
-            .ok_or(Error::UnrecognizedMarkerPattern)?;
+        let accel_odr: [u8; 2] = [accel_odr0, accel_odr1];
+        let accel_odr = u16::from_le_bytes(accel_odr);
         *bytes = &bytes[4..];
-        Ok(Self { impact_threshold, marker_pattern, wf_offset_x })
+        Ok(Self { impact_threshold, accel_odr })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let wf_offset_x: [u8; 2] = i16::to_le_bytes(self.wf_offset_x);
-        buf.extend_from_slice(&[self.impact_threshold, self.marker_pattern as u8, wf_offset_x[0], wf_offset_x[1]]);
+        let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], 0]);
     }
 }
 

@@ -19,7 +19,7 @@ pub fn config_window(
     simulator_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
-) -> (Window, ReadSignal<Option<UsbDevice>>, Memo<MarkerPattern>) {
+) -> (Window, ReadSignal<Option<UsbDevice>>, Memo<u16>) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -290,16 +290,14 @@ pub fn config_window(
         }
     });
 
-    let marker_pattern_memo = create_memo(move |_| general_settings.applied_marker_pattern.get());
-    (config_win, device.read_only(), marker_pattern_memo)
+    let accel_odr_memo = create_memo(move |_| general_settings.accel_odr.get() as u16);
+    (config_win, device.read_only(), accel_odr_memo)
 }
 
 #[derive(Clone)]
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
-    marker_pattern: RwSignal<i32>,
-    wf_offset_x: RwSignal<i32>,
-    pub applied_marker_pattern: RwSignal<MarkerPattern>,
+    accel_odr: RwSignal<i32>,
     mot_runner: Arc<Mutex<MotRunner>>,
 }
 
@@ -307,26 +305,18 @@ impl GeneralSettingsForm {
     fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
-        let marker_pattern = create_rw_signal(0);
-        let wf_offset_x = create_rw_signal(0);
-        let applied_marker_pattern = create_rw_signal(MarkerPattern::Diamond);
+        let accel_odr = create_rw_signal(0);
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
-                (Compact, "Marker pattern")   : let marker_pattern_combobox = Combobox(enabled: connected, signal: marker_pattern) {
-                    "Diamond",
-                    "Rectangle"
-                }
-                (Compact, "WF offset X") : let x = Spinbox(enabled: connected, signal: wf_offset_x)
+                (Compact, "Accelerometer ODR") : let x = Spinbox(enabled: connected, signal: accel_odr)
             }
         }
         (
             form,
             Self {
                 impact_threshold,
-                marker_pattern,
-                wf_offset_x,
-                applied_marker_pattern,
+                accel_odr,
                 mot_runner,
             },
         )
@@ -336,9 +326,7 @@ impl GeneralSettingsForm {
         let config = device.read_config().await?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
-        self.marker_pattern.set(config.marker_pattern as i32);
-        self.wf_offset_x.set(config.wf_offset_x as i32);
-        self.applied_marker_pattern.set(config.marker_pattern);
+        self.accel_odr.set(config.accel_odr as i32);
         if first_load {
             self.mot_runner.lock().general_config = config;
         }
@@ -386,25 +374,20 @@ impl GeneralSettingsForm {
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
-            marker_pattern: MarkerPattern::n(self.marker_pattern.get_untracked()).unwrap(),
-            wf_offset_x: self.wf_offset_x.get_untracked() as i16,
+            accel_odr: self.accel_odr.get_untracked() as u16,
         };
         device.write_config(config).await?;
-        self.applied_marker_pattern.set(config.marker_pattern);
         self.mot_runner.lock().general_config = config;
         Ok(())
     }
 
     fn clear(&self) {
-        self.impact_threshold.set(0);
-        self.marker_pattern.set(0);
-        self.wf_offset_x.set(0);
+        self.accel_odr.set(0);
     }
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
-        self.marker_pattern.set(0);
-        self.wf_offset_x.set(-56);
+        self.accel_odr.set(500);
     }
 }
 
