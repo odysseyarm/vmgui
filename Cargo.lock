@@ -1309,6 +1309,7 @@ dependencies = [
  "approx",
  "itertools 0.11.0",
  "nalgebra",
+ "num-iter",
 ]
 
 [[package]]
@@ -3181,6 +3182,7 @@ checksum = "6bc14a21e40eddf29fc187ecceb39f84d7e36a783b231ade7810ade8def455d7"
 dependencies = [
  "cam-geom",
  "nalgebra",
+ "thiserror",
 ]
 
 [[package]]
@@ -4218,6 +4220,7 @@ dependencies = [
  "ats_cv",
  "bevy",
  "bevy_infinite_grid",
+ "cam-geom",
  "crossbeam",
  "csv",
  "directories",
@@ -4225,6 +4228,7 @@ dependencies = [
  "iui",
  "leptos_reactive",
  "nalgebra",
+ "opencv-ros-camera",
  "parking_lot",
  "pin-project",
  "serde",
