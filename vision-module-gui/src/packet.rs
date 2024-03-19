@@ -547,7 +547,7 @@ impl CombinedMarkersReport {
 impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
-        // gyro: x, y, z, 65.5 = 1dps
+        // gyro: x, y, z, 16.4 = 1dps
         let data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
@@ -557,7 +557,7 @@ impl AccelReport {
         });
         let gyro = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f64 / 65.5;
+            let x = x as f64 / 16.4;
             *data = &data[2..];
             x
         });
