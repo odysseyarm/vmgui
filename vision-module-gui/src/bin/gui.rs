@@ -23,12 +23,13 @@ use nalgebra::{Const, Vector2};
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use vision_module_gui::packet::GeneralConfig;
+use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::{config_window, marker_config_window, Frame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
-use vision_module_gui::run_canvas::RunCanvas;
+use vision_module_gui::run_raw_canvas::RunRawCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
 use parking_lot::Mutex;
 
@@ -196,6 +197,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         nf_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
     }));
+    let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
     let testing = RwSignal::new(false);
     let marker_offset_calibrating = RwSignal::new(false);
@@ -243,12 +245,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             Compact: let grid = LayoutGrid(padded: true) {
                 (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
                 (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
-                (2, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button(move || {
+                (2, 0)(1, 1) Vertical (Fill, Fill) : let track_raw_button = Button(move || {
+                    if !tracking_raw.get() { "Start Raw Tracking" } else { "Stop Raw Tracking" }
+                })
+                (3, 0)(1, 1) Vertical (Fill, Fill) : let track_button = Button(move || {
                     if !tracking.get() { "Start Tracking" } else { "Stop Tracking" }
                 })
-                (3, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
-                (4, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
-                (5, 0)(1, 1) Vertical (Fill, Fill) : let bevy_button = Button("Launch Bevy")
+                (4, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
+                (5, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
+                (6, 0)(1, 1) Vertical (Fill, Fill) : let bevy_button = Button("Launch Bevy")
             }
             Compact: let separator = HorizontalSeparator()
             Compact: let spacer = Spacer()
@@ -265,6 +270,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Compact: let separator = HorizontalSeparator()
             }
+            Stretchy: let run_raw_hbox = HorizontalBox() {
+                Stretchy: let run_raw_area = Area(Box::new(RunRawCanvas {
+                    ctx: ui.c(),
+                    runner: mot_runner.c(),
+                }))
+            }
             Stretchy: let run_hbox = HorizontalBox() {
                 Stretchy: let run_area = Area(Box::new(RunCanvas {
                     ctx: ui.c(),
@@ -274,6 +285,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     form_vbox.hide(&ui);
+    run_raw_hbox.hide(&ui);
     run_hbox.hide(&ui);
     main_win.set_child(&ui, vert_box.clone());
 
@@ -346,19 +358,23 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     create_effect({
         let ui = ui.c();
         let test_win = test_win.c();
+        let track_raw_button = track_raw_button.c();
         let track_button = track_button.c();
         let test_button = test_button.c();
         let test_win_on_closing = test_win_on_closing.c();
         move |_| {
             let mut test_win = test_win.c();
+            let mut track_raw_button = track_raw_button.c();
             let mut track_button = track_button.c();
             let mut test_button = test_button.c();
             device_rs.with(|device| {
                 if device.is_none() {
                     test_win_on_closing.c()(&mut test_win);
+                    track_raw_button.disable(&ui);
                     track_button.disable(&ui);
                     test_button.disable(&ui);
                 } else {
+                    track_raw_button.enable(&ui);
                     track_button.enable(&ui);
                     test_button.enable(&ui);
                 }
@@ -370,7 +386,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     create_effect({
         let mot_runner = mot_runner.c();
         move |abort_handle: Option<Option<AbortHandle>>| {
-            if tracking.get() || testing.get() || marker_offset_calibrating.get() {
+            if tracking_raw.get() || tracking.get() || testing.get() || marker_offset_calibrating.get() {
                 if let Some(Some(abort_handle)) = abort_handle {
                     // The mot_runner task is already running
                     Some(abort_handle)
@@ -415,6 +431,19 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 form_vbox.c().hide(&ui);
                 test_win.c().hide(&ui);
+            }
+        }
+    });
+
+    // Show the run_raw_hbox form when tracking
+    create_effect({
+        let ui = ui.c();
+        let run_raw_hbox = run_raw_hbox.c();
+        move |_| {
+            if tracking_raw.get() {
+                run_raw_hbox.c().show(&ui);
+            } else {
+                run_raw_hbox.c().hide(&ui);
             }
         }
     });
@@ -528,6 +557,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    track_raw_button.on_clicked(&ui, move |_| tracking_raw.set(!tracking_raw.get_untracked()));
     track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
     test_button.on_clicked(&ui, move |_| testing.set(true));
 
@@ -535,9 +565,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     ui.ui_timer(5, {
         let ui = ui.c();
+        let run_raw_area = run_raw_area.c();
         let run_area = run_area.c();
         let test_area = test_area.c();
         move || {
+            if tracking_raw.get_untracked() {
+                run_raw_area.queue_redraw_all(&ui);
+            }
             if tracking.get_untracked() {
                 run_area.queue_redraw_all(&ui);
             }

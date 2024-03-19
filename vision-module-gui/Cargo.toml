@@ -32,6 +32,8 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 enumn = "0.1.13"
 bevy_infinite_grid = { git = "https://github.com/XYCaptain/bevy_infinite_grid.git", branch = "main" }
 parking_lot = "0.12.1"
+opencv-ros-camera = { version = "0.14.1" }
+cam-geom = { version = "0.14.1" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["commapi"] }

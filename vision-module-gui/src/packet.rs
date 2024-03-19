@@ -114,8 +114,8 @@ pub struct ObjectReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CombinedMarkersReport {
-    pub nf_positions: [Point2<u16>; 16],
-    pub wf_positions: [Point2<u16>; 16],
+    pub nf_points: [Point2<u16>; 16],
+    pub wf_points: [Point2<u16>; 16],
     pub nf_radii: [u8; 16],
     pub wf_radii: [u8; 16],
 }
@@ -524,12 +524,12 @@ impl CombinedMarkersReport {
         let nf_radii = radii[..16].try_into().unwrap();
         let wf_radii = radii[16..].try_into().unwrap();
 
-        Ok(Self { nf_positions, wf_positions, nf_radii, wf_radii })
+        Ok(Self { nf_points: nf_positions, wf_points: wf_positions, nf_radii, wf_radii })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let before = buf.len();
-        for p in self.nf_positions.iter().chain(&self.wf_positions) {
+        for p in self.nf_points.iter().chain(&self.wf_points) {
             let XY { x, y } = **p;
             let byte0 = x & 0xff;
             let byte1 = ((x >> 8) & 0x0f) | ((y & 0x0f) << 4);

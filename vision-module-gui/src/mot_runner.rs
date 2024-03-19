@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
 use std::time::Duration;
 use ahrs::Ahrs;
@@ -6,7 +7,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Point2, Scalar, Vector2, Vector3, Const, Rotation3, Matrix3, Translation3};
+use nalgebra::{Const, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -243,15 +244,28 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
     while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
-            let CombinedMarkersReport { nf_positions, wf_positions, nf_radii, wf_radii } = combined_markers_report;
+            let CombinedMarkersReport { nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
             let mut runner = runner.lock();
-            debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_positions, wf_positions, nf_radii, wf_radii);
+            debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_points, wf_points, nf_radii, wf_radii);
 
-            let nf_positions = nf_positions.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
-            let nf_positions = nf_positions.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
+            let nf_points = nf_points.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
+            let nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
 
-            let nf_aim_point = if nf_positions.len() > 3 {
-                let mut nf_positions = nf_positions.clone();
+            let wf_points = wf_points.into_iter().zip(wf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
+            let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
+
+            let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
+            let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
+            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
+            let distorted = cam_geom::Pixels::new(points);
+            let undistorted = runner.state.camera_model.undistort(&distorted);
+
+            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
+            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
+            let wf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+
+            let nf_aim_point = if nf_points.len() > 3 {
+                let mut nf_positions = nf_points.clone();
                 sort_points(&mut nf_positions, MarkerPattern::Rectangle);
                 let center_aim = Point2::new(2048.0, 2048.0);
                 let projections = nf_positions.iter().map(|pos| {
@@ -282,6 +296,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             } else {
                 None
             };
+            runner.state.nf_points = nf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
+            runner.state.wf_points = wf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
             runner.state.nf_aim_point = nf_aim_point;
         }
     }

@@ -205,8 +205,8 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
-                    nf_positions,
-                    wf_positions: Default::default(),
+                    nf_points: nf_positions,
+                    wf_points: Default::default(),
                     nf_radii,
                     wf_radii: Default::default(),
                 })
