@@ -387,7 +387,7 @@ impl GeneralSettingsForm {
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
-        self.accel_odr.set(500);
+        self.accel_odr.set(800);
     }
 }
 
