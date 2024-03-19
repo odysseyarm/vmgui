@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{draw_crosshair, draw_diamond, draw_grid, draw_square};
+use crate::custom_shapes::{draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
 use crate::mot_runner::{rescale, sort_points, MotRunner};
 use crate::packet::MarkerPattern;
 
@@ -176,7 +176,7 @@ impl AreaHandler for RunCanvas {
                 let d = draw_tf * (a + vert);
                 let a = draw_tf * a;
 
-                draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
+                draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
 
                 wf_path.new_figure(ctx, a.x, a.y);
                 wf_path.line_to(ctx, b.x, b.y);
