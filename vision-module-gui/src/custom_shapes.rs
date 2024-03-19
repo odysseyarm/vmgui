@@ -10,6 +10,16 @@ pub fn draw_crosshair(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, r: f
     path.line_to(ctx, x, y+r);
 }
 
+pub fn draw_crosshair_rotated(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, r: f64) {
+    let r = r * std::f64::consts::FRAC_1_SQRT_2;
+
+    path.new_figure(ctx, x-r, y-r);
+    path.line_to(ctx, x+r, y+r);
+
+    path.new_figure(ctx, x-r, y+r);
+    path.line_to(ctx, x+r, y-r);
+}
+
 pub fn draw_grid(ctx: &draw::DrawContext, path: &Path, x_subdiv: usize, y_subdiv: usize, transform: SMatrix<f64, 3, 3>) {
     for y in 0..=y_subdiv {
         let p1 = Point2::new(0.0, y as f64 / y_subdiv as f64);
