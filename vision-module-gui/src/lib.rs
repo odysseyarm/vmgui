@@ -54,7 +54,8 @@ pub struct MotState {
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
 
-    pub camera_model: RosOpenCvIntrinsics<f64>,
+    pub camera_model_nf: RosOpenCvIntrinsics<f64>,
+    pub camera_model_wf: RosOpenCvIntrinsics<f64>,
 }
 
 impl Default for MotState {
@@ -70,7 +71,7 @@ impl Default for MotState {
             orientation: Madgwick::new(1./800., 0.1),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
-            camera_model: RosOpenCvIntrinsics::from_params_with_distortion(
+            camera_model_nf: RosOpenCvIntrinsics::from_params_with_distortion(
                 6070.516352962917,     // fx 
                 0.0,
                 6081.704092101642,     // fy 
@@ -82,6 +83,20 @@ impl Default for MotState {
                     0.0050450411569348645, // p1 
                     0.001854950091801636,  // p2 
                     0.048480928208383456,  // k3 
+                )),
+            ),
+            camera_model_wf: RosOpenCvIntrinsics::from_params_with_distortion(
+                1404.8062660899243,    // fx 
+                0.0,
+                1410.4027244280476,    // fy 
+                2005.7344146664623,    // cx 
+                2183.296028581406,     // cy 
+                Distortion::from_opencv_vec(nalgebra::Vector5::new(
+                    0.03580102538774698,   // k1
+                    -0.035135117459232,    // k2
+                    -0.0003794652252171486,// p1
+                    -0.0009616308141127135,// p2
+                    0.004173283533065006,  // k3
                 )),
             ),
             nf_points: Default::default(),
