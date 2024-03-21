@@ -239,6 +239,12 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
+fn ray_plane_intersection(ray_origin: Vector3<f64>, ray_direction: Vector3<f64>, plane_normal: Vector3<f64>, plane_point: Vector3<f64>) -> Vector3<f64> {
+    let d = plane_normal.dot(&plane_point);
+    let t = (d - plane_normal.dot(&ray_origin)) / plane_normal.dot(&ray_direction);
+    ray_origin + t * ray_direction
+}
+
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
@@ -299,10 +305,30 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     );
                     runner.state.rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
                     runner.state.translation_mat = flip_yz * ctf.translation.vector;
-                    let p = runner.state.translation_mat;
-                    info!("p = ({:.4}, {:.4}, {:.4})", p.x, p.y, p.z);
+
+                    let screen_3dpoints = [
+                        Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., 0.5, 0.),
+                        Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
+                    ];
+
+                    let ray_origin = runner.state.translation_mat;
+                    let ray_direction = runner.state.rotation_mat * Vector3::new(0., 0., 1.);
+                    let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
+                    let plane_point = screen_3dpoints[0];
+                    let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
+
+                    let aim_point = Point2::new(
+                        (aim_point.x - screen_3dpoints[0].x) / (screen_3dpoints[2].x - screen_3dpoints[0].x),
+                        (aim_point.y - screen_3dpoints[0].y) / (screen_3dpoints[2].y - screen_3dpoints[0].y),
+                    );
+
+                    let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
+                    Some(aim_point)
+                } else {
+                    None
                 }
-                transform_aim_point_to_identity(center_aim, nf_positions[0], nf_positions[1], nf_positions[2], nf_positions[3])
             } else {
                 None
             };
