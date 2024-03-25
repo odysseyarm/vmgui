@@ -15,13 +15,14 @@ fn main() {
     // pkt.serialize(&mut udp_packet);
     // client.send_to(&udp_packet, ("10.0.0.255", 23456)).unwrap();
 
-    // let mut udp_packet = vec![1, 0, 255];
-    // let pkt = Packet {
-    //     id: 1,
-    //     data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
-    // };
-    // pkt.serialize(&mut udp_packet);
-    // client.send_to(&udp_packet, ("10.0.0.255", 23456)).unwrap();
+    let mut udp_packet = vec![1, 0, 255];
+    let pkt = Packet {
+        id: 1,
+        data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
+    };
+    pkt.serialize(&mut udp_packet);
+    client.send_to(&udp_packet, ("10.0.0.255", 23456)).unwrap();
+    // client.send_to(&udp_packet, ("10.0.0.121", 23456)).unwrap();
 
     let mut data = vec![0; 1472];
     let mut buf = vec![];
@@ -72,33 +73,47 @@ fn main() {
             // println!("{:?}", &data[2..len]);
             // println!("Received {:?} from {addr}", &buf[..buf.len()]);
             let buf_slice = &mut &buf[..];
-            if let Ok(pkt) = Packet::parse(buf_slice) {
-                // buf.drain(0..buf.len() - buf_slice.len());
-                buf.clear();
+            match Packet::parse(buf_slice) {
+                Ok(pkt) => {
+                    // buf.drain(0..buf.len() - buf_slice.len());
+                    buf.clear();
 
-                // if len > 2 + _len {
-                //     println!("Leftover {:?} from {addr}", &data[2 + _len..len]);
-                // }
-                println!("Received {:?} from {addr}", pkt);
-                match pkt.data {
-                    PacketData::AccelReport(_) => {
-                        let elapsed = start_time.elapsed().as_secs_f64();
-                        total_accel_samples += 1;
-                        let accel_hz_avg = 1. / (elapsed / total_accel_samples as f64);
-                        println!("Accel: {:?} Hz", accel_hz_avg);
+                    // if len > 2 + _len {
+                    //     println!("Leftover {:?} from {addr}", &data[2 + _len..len]);
+                    // }
+                    println!("Received {:?} from {addr}", pkt);
+                    match pkt.data {
+                        PacketData::AccelReport(_) => {
+                            let elapsed = start_time.elapsed().as_secs_f64();
+                            total_accel_samples += 1;
+                            let accel_hz_avg = 1. / (elapsed / total_accel_samples as f64);
+                            println!("Accel: {:?} Hz", accel_hz_avg);
+                        }
+                        PacketData::CombinedMarkersReport(_) => {
+                            let elapsed = start_time.elapsed().as_secs_f64();
+                            total_combined_marker_samples += 1;
+                            let combined_marker_hz_avg = 1. / (elapsed / total_combined_marker_samples as f64);
+                            println!("Combined Marker: {:?} Hz", combined_marker_hz_avg);
+                        }
+                        _ => {}
                     }
-                    PacketData::CombinedMarkersReport(_) => {
-                        let elapsed = start_time.elapsed().as_secs_f64();
-                        total_combined_marker_samples += 1;
-                        let combined_marker_hz_avg = 1. / (elapsed / total_combined_marker_samples as f64);
-                        println!("Combined Marker: {:?} Hz", combined_marker_hz_avg);
-                    }
-                    // Malformy
-                    _ => { buf.clear(); }
                 }
-            } else {
-                println!("Received {:?} from {addr}", &buf[..]);
-                // buf.clear();
+                Err(e) => {
+                    match e {
+                        vision_module_gui::packet::Error::UnexpectedEof { packet_type } => {
+                            buf.clear();
+                        }
+                        vision_module_gui::packet::Error::UnrecognizedPacketId => {
+                            buf.clear();
+                        }
+                        vision_module_gui::packet::Error::UnrecognizedPort => {
+                            buf.clear();
+                        }
+                        _ => {
+                            println!("Error: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
