@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
@@ -7,6 +7,11 @@ use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+
+const SLIP_FRAME_END: u8 = 0xc0;
+const SLIP_FRAME_ESC: u8 = 0xdb;
+const SLIP_FRAME_ESC_ESC: u8 = 0xdc;
+const SLIP_FRAME_ESC_END: u8 = 0xdd;
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -150,15 +155,14 @@ impl UsbDevice {
                 }
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
-                    buf.resize(2, 0);
-                    reader.read_exact(&mut buf)?;
-                    let len = u16::from_le_bytes([buf[0], buf[1]]);
-                    if len == 0 {
-                        return Err(std::io::Error::new(ErrorKind::InvalidData, anyhow!("packet length is 0")));
+                    reader.read_until(SLIP_FRAME_END, &mut buf)?;
+                    if buf.contains(&SLIP_FRAME_ESC) {
+                        match decode_slip_frame(&mut buf) {
+                            Err(e) => return Ok(Err(e)),
+                            Ok(_) => (),
+                        };
                     }
-                    trace!("read len={}", len*2);
-                    buf.resize(usize::from(len * 2), 0);
-                    reader.read_exact(&mut buf[2..])?;
+                    trace!("read frame len={}", buf.len());
                     Ok(Packet::parse(&mut &buf[..])
                         .with_context(|| format!("failed to parse packet: {:?}", buf.clone()))
                         .inspect(|p| trace!("read id={} type={:?}", p.id, p.ty())))
@@ -369,6 +373,37 @@ impl UsbDevice {
         }).await?;
         Ok(())
     }
+}
+
+// TODO there's probably a faster SIMD way
+fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
+    let mut j = 0;
+    let mut esc = false;
+    for i in 0..buf.len() {
+        match buf[i] {
+            self::SLIP_FRAME_ESC => {
+                if esc { anyhow::bail!("double esc"); }
+                esc = true;
+            }
+            self::SLIP_FRAME_ESC_END if esc => {
+                buf[j] = SLIP_FRAME_END;
+                j += 1;
+                esc = false;
+            }
+            self::SLIP_FRAME_ESC_ESC if esc => {
+                buf[j] = SLIP_FRAME_ESC;
+                j += 1;
+                esc = false;
+            }
+            x => {
+                if esc { anyhow::bail!("invalid esc"); }
+                buf[j] = x;
+                j += 1;
+            }
+        }
+    }
+    if esc { anyhow::bail!("trailing esc"); }
+    Ok(())
 }
 
 #[pin_project(PinnedDrop)]
