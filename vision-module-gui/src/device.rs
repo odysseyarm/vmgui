@@ -10,8 +10,8 @@ use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, 
 
 const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
-const SLIP_FRAME_ESC_ESC: u8 = 0xdc;
-const SLIP_FRAME_ESC_END: u8 = 0xdd;
+const SLIP_FRAME_ESC_END: u8 = 0xdc;
+const SLIP_FRAME_ESC_ESC: u8 = 0xdd;
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -156,6 +156,7 @@ impl UsbDevice {
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
                     reader.read_until(SLIP_FRAME_END, &mut buf)?;
+                    buf.pop();
                     if buf.contains(&SLIP_FRAME_ESC) {
                         match decode_slip_frame(&mut buf) {
                             Err(e) => return Ok(Err(e)),
@@ -403,6 +404,7 @@ fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
         }
     }
     if esc { anyhow::bail!("trailing esc"); }
+    buf.resize(j, 0);
     Ok(())
 }
 
@@ -495,4 +497,14 @@ impl UsbDevice {
     write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
     write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
     write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_decode_slip() {
+        let mut slip_encoded = vec![0x01, 0xDB, 0xDC, 0xDB, 0xDD];
+        super::decode_slip_frame(&mut slip_encoded).unwrap();
+        assert_eq!([0x01, 0xC0, 0xDB], slip_encoded[..]);
+    }
 }
