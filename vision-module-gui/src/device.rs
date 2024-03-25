@@ -8,7 +8,7 @@ use tracing::{debug, error, info, trace, warn};
 
 use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
 
-const SLIP_FRAME_END: u8 = 0xc0;
+pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
 const SLIP_FRAME_ESC_END: u8 = 0xdc;
 const SLIP_FRAME_ESC_ESC: u8 = 0xdd;
