@@ -377,7 +377,7 @@ impl UsbDevice {
 }
 
 // TODO there's probably a faster SIMD way
-fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
+pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
     let mut j = 0;
     let mut esc = false;
     for i in 0..buf.len() {
