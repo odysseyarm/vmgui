@@ -39,17 +39,23 @@ fn main() {
             }
             // check if &data[2..len] contains end of slip frame
             let data = &data[2..len];
-            if data.contains(&SLIP_FRAME_END) {
-                let end_idx = data.iter().position(|&x| x == SLIP_FRAME_END).unwrap();
-                slip_buf.extend_from_slice(&data[..end_idx]);
-                if let Ok(()) = decode_slip_frame(&mut slip_buf) {
-                    buf.extend_from_slice(&slip_buf);
-                    slip_buf.clear();
-                    slip_buf.extend_from_slice(&data[end_idx+1..]);
+            let mut had = false;
+
+            slip_buf.extend_from_slice(&data);
+            while slip_buf.contains(&SLIP_FRAME_END) {
+                had = true;
+                let end_idx = slip_buf.iter().position(|&x| x == SLIP_FRAME_END).unwrap();
+                let mut slice_vec = &mut slip_buf[..end_idx].to_vec();
+                if let Ok(()) = decode_slip_frame(&mut slice_vec) {
+                    buf.extend_from_slice(&slice_vec);
+                    slip_buf.drain(0..end_idx+1);
                 } else {
-                    // slip_buf.clear();
-                    continue;
+                    slip_buf.drain(0..end_idx+1);
                 }
+            }
+
+            if !had {
+                continue;
             }
             // if (len == 0 || len == 1) {
             //     continue;
