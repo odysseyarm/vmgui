@@ -1,6 +1,6 @@
 use std::net::{UdpSocket, Ipv4Addr};
 use vision_module_gui::packet::{Packet, PacketData, PacketType, Port, Register, StreamChoice, StreamUpdate};
-use vision_module_gui::device::decode_slip_frame;
+use vision_module_gui::device::{decode_slip_frame, SLIP_FRAME_END};
 
 fn main() {
     let client = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 23456)).unwrap();
@@ -37,14 +37,19 @@ fn main() {
                 println!("Received {:?} from {addr}", &buf[..]);
                 continue;
             }
-            // use slip_decoder with slip_buf and data[2..len] to get the actual data to put in buf
-            slip_buf.extend_from_slice(&data[2..len]);
-            if let Ok(()) = decode_slip_frame(&mut slip_buf) {
-                buf.extend_from_slice(&slip_buf);
-                slip_buf.clear();
-            } else {
-                // slip_buf.clear();
-                continue;
+            // check if &data[2..len] contains end of slip frame
+            let data = &data[2..len];
+            if data.contains(&SLIP_FRAME_END) {
+                let end_idx = data.iter().position(|&x| x == SLIP_FRAME_END).unwrap();
+                slip_buf.extend_from_slice(&data[..end_idx]);
+                if let Ok(()) = decode_slip_frame(&mut slip_buf) {
+                    buf.extend_from_slice(&slip_buf);
+                    slip_buf.clear();
+                    slip_buf.extend_from_slice(&data[end_idx+1..]);
+                } else {
+                    // slip_buf.clear();
+                    continue;
+                }
             }
             // if (len == 0 || len == 1) {
             //     continue;
