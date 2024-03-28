@@ -445,7 +445,7 @@ impl PinnedDrop for PacketStream {
 
 macro_rules! read_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub(crate) async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
+        pub async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
             let mut bytes = <$ty>::to_le_bytes(0);
             for (byte, addr) in ::std::iter::zip(&mut bytes, [$($addr),*]) {
                 *byte = self.read_register(port, $bank, addr).await?;
@@ -457,7 +457,7 @@ macro_rules! read_register_spec {
 
 macro_rules! write_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub(crate) async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
+        pub async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
             let bytes = <$ty>::to_le_bytes(value);
             for (byte, addr) in ::std::iter::zip(bytes, [$($addr),*]) {
                 self.write_register(port, $bank, addr, byte).await?;

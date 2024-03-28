@@ -9,7 +9,7 @@ use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
 use crate::mot_runner::{rescale, sort_points, MotRunner};
-use crate::packet::MarkerPattern;
+use ats_usb::packet::MarkerPattern;
 
 pub struct RunCanvas {
     pub ctx: UI,

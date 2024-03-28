@@ -10,7 +10,8 @@ use directories::ProjectDirs;
 use nalgebra::Matrix2x4;
 use tracing::error;
 
-use crate::{packet::MarkerPattern, CloneButShorter};
+use ats_usb::{packet::MarkerPattern};
+use crate::CloneButShorter;
 use anyhow::Result;
 use iui::{
     controls::Form,

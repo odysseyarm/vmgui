@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::{device::UsbDevice, mot_runner::MotRunner, packet::{GeneralConfig, MarkerPattern, Port}, CloneButShorter};
+use ats_usb::{device::UsbDevice, packet::{GeneralConfig, MarkerPattern, Port}};
+use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use iui::{
     controls::Form,

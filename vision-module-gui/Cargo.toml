@@ -24,6 +24,7 @@ serial2 = "0.2.19"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
 toml = "0.8.9"
 ats_cv = { path = "../ats_cv" }
+ats_usb = { path = "../ats_usb" }
 tokio-stream = "0.1.14"
 pin-project = "1.1.4"
 sqpnp = { git = "https://github.com/0e4ef622/sqpnp.git" }
