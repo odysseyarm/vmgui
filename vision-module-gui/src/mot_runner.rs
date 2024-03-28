@@ -34,7 +34,7 @@ pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     if let Some(mut solver) = solver {
         solver.solve();
         debug!("pnp found {} solutions", solver.number_of_solutions());
-        if solver.number_of_solutions() == 1 {
+        if solver.number_of_solutions() >= 1 {
             return Some(solver.solution_ptr(0).unwrap().clone());
         }
     } else {
