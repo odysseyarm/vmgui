@@ -13,9 +13,9 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 use crate::{CloneButShorter, MotState};
-use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
-use crate::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
+use ats_usb::device::UsbDevice;
+use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,

@@ -22,7 +22,7 @@ use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, Si
 use nalgebra::{Const, Vector2};
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
-use vision_module_gui::packet::GeneralConfig;
+use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::{config_window, marker_config_window, Frame};
 use vision_module_gui::{CloneButShorter, MotState};

@@ -4,10 +4,8 @@ use nalgebra::{Matrix3x1, Point2, SMatrix, Matrix3};
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 use serde::Serialize;
-use crate::packet::MotData;
+use ats_usb::packet::MotData;
 
-pub mod packet;
-pub mod device;
 pub mod config_window;
 pub mod marker_config_window;
 pub mod layout_macro;

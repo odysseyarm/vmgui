@@ -1,6 +1,6 @@
 use std::net::{UdpSocket, Ipv4Addr};
-use vision_module_gui::packet::{Packet, PacketData, PacketType, Port, Register, StreamChoice, StreamUpdate};
-use vision_module_gui::device::{decode_slip_frame, SLIP_FRAME_END};
+use ats_usb::packet::{Packet, PacketData, PacketType, Port, Register, StreamChoice, StreamUpdate};
+use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 
 fn main() {
     let client = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 23456)).unwrap();
@@ -100,13 +100,13 @@ fn main() {
                 }
                 Err(e) => {
                     match e {
-                        vision_module_gui::packet::Error::UnexpectedEof { packet_type } => {
+                        ats_usb::packet::Error::UnexpectedEof { packet_type } => {
                             buf.clear();
                         }
-                        vision_module_gui::packet::Error::UnrecognizedPacketId => {
+                        ats_usb::packet::Error::UnrecognizedPacketId => {
                             buf.clear();
                         }
-                        vision_module_gui::packet::Error::UnrecognizedPort => {
+                        ats_usb::packet::Error::UnrecognizedPort => {
                             buf.clear();
                         }
                         _ => {

@@ -324,6 +324,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ats_usb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "enumn",
+ "nalgebra",
+ "pin-project",
+ "serial2",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4218,6 +4232,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "ats_cv",
+ "ats_usb",
  "bevy",
  "bevy_infinite_grid",
  "cam-geom",
