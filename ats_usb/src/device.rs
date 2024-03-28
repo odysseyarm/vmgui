@@ -377,27 +377,24 @@ impl UsbDevice {
 }
 
 pub fn encode_slip_frame(buf: &mut Vec<u8>) {
-    let mut j = 0;
-    for i in 0..buf.len() {
-        if j >= buf.len() {
-            buf.push(0);
-        }
+    let mut i = 0;
+    while i < buf.len() {
         match buf[i] {
             SLIP_FRAME_END => {
-                buf[j] = SLIP_FRAME_ESC;
-                buf[j + 1] = SLIP_FRAME_ESC_END;
-                j += 2;
+                buf[i] = SLIP_FRAME_ESC;
+                buf.insert(i + 1, SLIP_FRAME_ESC_END);
+                i += 1;
             }
             SLIP_FRAME_ESC => {
-                buf[j] = SLIP_FRAME_ESC;
-                buf[j + 1] = SLIP_FRAME_ESC_ESC;
-                j += 2;
+                buf[i] = SLIP_FRAME_ESC;
+                buf.insert(i + 1, SLIP_FRAME_ESC_ESC);
+                i += 1;
             }
             x => {
-                buf[j] = x;
-                j += 1;
+                buf[i] = x;
             }
         }
+        i += 1;
     }
     buf.push(SLIP_FRAME_END);
 }
