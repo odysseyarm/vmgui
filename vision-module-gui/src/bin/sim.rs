@@ -13,7 +13,7 @@ use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
 };
 use tracing::{error, info};
-use ats_usb::{packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
@@ -132,6 +132,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         if let Some(data) = response {
             buf.clear();
             Packet { id: pkt.id, data }.serialize(&mut buf);
+            encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
     }
@@ -175,6 +176,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             }
             buf.clear();
             Packet { id, data: PacketData::ObjectReport(object_report) }.serialize(&mut buf);
+            encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
 
@@ -214,6 +216,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             };
             buf.clear();
             pkt.serialize(&mut buf);
+            encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
     }

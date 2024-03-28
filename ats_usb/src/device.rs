@@ -376,6 +376,32 @@ impl UsbDevice {
     }
 }
 
+pub fn encode_slip_frame(buf: &mut Vec<u8>) {
+    let mut j = 0;
+    for i in 0..buf.len() {
+        if j >= buf.len() {
+            buf.push(0);
+        }
+        match buf[i] {
+            SLIP_FRAME_END => {
+                buf[j] = SLIP_FRAME_ESC;
+                buf[j + 1] = SLIP_FRAME_ESC_END;
+                j += 2;
+            }
+            SLIP_FRAME_ESC => {
+                buf[j] = SLIP_FRAME_ESC;
+                buf[j + 1] = SLIP_FRAME_ESC_ESC;
+                j += 2;
+            }
+            x => {
+                buf[j] = x;
+                j += 1;
+            }
+        }
+    }
+    buf.push(SLIP_FRAME_END);
+}
+
 // TODO there's probably a faster SIMD way
 pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
     let mut j = 0;
