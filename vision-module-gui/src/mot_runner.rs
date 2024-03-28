@@ -145,17 +145,6 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let _center_aim = Point2::new(2048.0, 2048.0);
 
-            // kal man for nf rn
-            if nf_points.len() > 3 {
-                let state = &mut runner.state;
-                for (i, pva2d) in state.nf_pva2ds.iter_mut().enumerate() {
-                    pva2d.step();
-                    pva2d.observe(nf_points[i].coords.as_ref(), &[100.0, 100.0]);
-                    nf_points[i].x = pva2d.position()[0];
-                    nf_points[i].y = pva2d.position()[1];
-                }
-            }
-
             // for (points, aim_point) in [(&mut nf_points, &mut nf_aim_point), (&mut wf_points, &mut wf_aim_point)] {
             //     if points.len() > 3 {
             //         sort_clockwise(&mut points[0..4]);
@@ -268,7 +257,18 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
             let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
-            let nf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+            let mut nf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+
+            // kal man for nf rn
+            if nf_points.len() > 3 {
+                let state = &mut runner.state;
+                for (i, pva2d) in state.nf_pva2ds.iter_mut().enumerate() {
+                    pva2d.step();
+                    pva2d.observe(nf_points[i].coords.as_ref(), &[100.0, 100.0]);
+                    nf_points[i].x = pva2d.position()[0];
+                    nf_points[i].y = pva2d.position()[1];
+                }
+            }
 
             let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
             let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());

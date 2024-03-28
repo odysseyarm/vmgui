@@ -38,10 +38,10 @@ pub struct MotState {
 
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
-    pub nf_pva2ds: [Pva2d<f64>; 4],
 
     nf_points: ArrayVec<Point2<f64>, 16>,
     wf_points: ArrayVec<Point2<f64>, 16>,
+    pub nf_pva2ds: [Pva2d<f64>; 4],
 
     nf_radii: [u8; 4],
     wf_radii: [u8; 4],
