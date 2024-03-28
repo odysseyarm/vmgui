@@ -154,6 +154,12 @@ macro_rules! layout {
 
     // Label
     [ $ui:expr ,
+        let $ctl:ident = Label ( $text:literal )
+    ] => [
+        #[allow(unused_mut)]
+        let mut $ctl = iui::controls::Label::new($ui, $text);
+    ];
+    [ $ui:expr ,
         let $ctl:ident = Label ( $text:expr )
     ] => [
         #[allow(unused_mut)]

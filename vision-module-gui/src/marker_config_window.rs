@@ -10,7 +10,8 @@ use directories::ProjectDirs;
 use nalgebra::Matrix2x4;
 use tracing::error;
 
-use crate::{packet::MarkerPattern, CloneButShorter};
+use ats_usb::{packet::MarkerPattern};
+use crate::CloneButShorter;
 use anyhow::Result;
 use iui::{
     controls::Form,
@@ -19,13 +20,13 @@ use iui::{
 };
 use leptos_reactive::{create_effect, create_rw_signal, Memo, RwSignal, SignalGet, SignalGetUntracked, SignalSet};
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 use crate::mot_runner::MotRunner;
 
 pub fn marker_config_window(
     ui: &UI,
     marker_offset_calibrating: RwSignal<bool>,
-    marker_pattern_memo: Memo<MarkerPattern>,
+    // marker_pattern_memo: Memo<MarkerPattern>,
     mot_runner: Arc<Mutex<MotRunner>>,
 ) -> Window {
     let ui_ctx = ui.async_context();
@@ -63,13 +64,9 @@ pub fn marker_config_window(
     let apply_button_on_click = {
         let mot_runner = mot_runner.c();
         move || {
-            ui_ctx.spawn({
-                let mot_runner = mot_runner.c();
-                async move {
-                    let runner = &mut mot_runner.lock().await;
-                    marker_settings.apply(&mut runner.markers_settings);
-                }
-            });
+            let mot_runner = mot_runner.c();
+            let runner = &mut mot_runner.lock();
+            marker_settings.apply(&mut runner.markers_settings);
         }
     };
     apply_button.on_clicked(&ui, {
@@ -81,13 +78,14 @@ pub fn marker_config_window(
         }
     });
     load_defaults_button.on_clicked(&ui, move |_| {
-        marker_settings.load_defaults(marker_pattern_memo.get_untracked());
+        // marker_settings.load_defaults(marker_pattern_memo.get_untracked());
+        marker_settings.load_defaults(MarkerPattern::Rectangle);
     });
     // When the applied marker pattern changes, reload the defaults
-    create_effect(move |_| {
-        marker_settings.load_defaults(marker_pattern_memo.get());
-        apply_button_on_click();
-    });
+    // create_effect(move |_| {
+    //     marker_settings.load_defaults(marker_pattern_memo.get());
+    //     apply_button_on_click();
+    // });
 
     reload_button.on_clicked(&ui, {
         move |_| {

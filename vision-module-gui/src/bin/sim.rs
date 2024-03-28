@@ -10,10 +10,11 @@ use iui::{
     UI,
 };
 use nalgebra::{
-    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4
+    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
 };
 use tracing::{error, info};
-use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle, packet::{AimPointReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
 // Positive y is up
@@ -35,6 +36,7 @@ fn main() {
     let state = Arc::new(Mutex::new(State::new()));
     vision_module_gui::layout! { &ui,
         let vbox = VerticalBox(padded: false) {
+            Compact : let text = Label("")
             Stretchy : let area = Area(Box::new(MainCanvas { state: state.clone() }))
         }
     }
@@ -43,7 +45,10 @@ fn main() {
     ui.ui_timer(16, {
         let ui = ui.clone();
         let area = area.clone();
+        let state = state.clone();
         move || {
+            let p = *state.lock().unwrap().camera_pos;
+            text.set_text(&ui, &format!("p: ({:.4}, {:.4}, {:.4})", p.x, p.y, p.z));
             area.queue_redraw_all(&ui);
             true
         }
@@ -91,6 +96,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
     loop {
         buf.resize(1024, 0);
         sock.read_exact(&mut buf[..3]).unwrap();
+        assert_eq!(buf[0], 0xff);
         let len = u16::from_le_bytes([buf[1], buf[2]]);
         let len = usize::from(len) * 2;
         sock.read_exact(&mut buf[3..][..len - 2]).unwrap();
@@ -110,15 +116,16 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     state.stream_mot = if s.active { Some(pkt.id) } else { None };
                 }
                 if s.mask & 0b010 != 0 {
-                    state.stream_aim = if s.active { Some(pkt.id) } else { None };
+                    state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
                 }
                 None
             }
             PacketData::FlashSettings => None,
-            PacketData::AimPointReport(_) => unreachable!(),
-            PacketData::ImpactWithAimPointReport(_) => unreachable!(),
+            PacketData::CombinedMarkersReport(_) => unreachable!(),
+            PacketData::AccelReport(_) => unreachable!(),
+            PacketData::ImpactReport => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, marker_pattern: state.marker_pattern, wf_offset_x: 0 })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, accel_odr: 100 })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
@@ -171,25 +178,38 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             sock.write_all(&buf).unwrap();
         }
 
-        if let Some(id) = state.stream_aim {
+        if let Some(id) = state.stream_combined_markers {
             let marker_pattern = state.marker_pattern.marker_positions();
-            let r = transform_aim_point(
-                [2048.0, 2048.0].into(),
-                nf_markers[0].cast(),
-                nf_markers[1].cast(),
-                nf_markers[2].cast(),
-                nf_markers[3].cast(),
-                marker_pattern[0],
-                marker_pattern[1],
-                marker_pattern[2],
-                marker_pattern[3],
-            ).unwrap();
+            // let r = transform_aim_point(
+            //     [2048.0, 2048.0].into(),
+            //     nf_markers[0].cast(),
+            //     nf_markers[1].cast(),
+            //     nf_markers[2].cast(),
+            //     nf_markers[3].cast(),
+            //     marker_pattern[0],
+            //     marker_pattern[1],
+            //     marker_pattern[2],
+            //     marker_pattern[3],
+            // ).unwrap();
+            let mut nf_radii = [0; 16];
+            let nf_positions = std::array::from_fn(|i| {
+                let Some(XY { x, y }) = nf_markers.get(i).map(|x| **x) else {
+                    return Point2::default()
+                };
+                if (0..4096).contains(&x) && (0..4096).contains(&y) {
+                    nf_radii[i] = 1;
+                    Point2::new(x as u16, y as u16)
+                } else {
+                    Point2::default()
+                }
+            });
             let pkt = Packet {
                 id,
-                data: PacketData::AimPointReport(AimPointReport {
-                    x: (r.x * 4095. - 2047.) as i16,
-                    y: (r.y * 4095. - 2047.) as i16,
-                    screen_id: 1, // TODO
+                data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
+                    nf_points: nf_positions,
+                    wf_points: Default::default(),
+                    nf_radii,
+                    wf_radii: Default::default(),
                 })
             };
             buf.clear();
@@ -212,7 +232,7 @@ struct State {
     moving_up: bool,
     moving_down: bool,
     stream_mot: Option<u8>,
-    stream_aim: Option<u8>,
+    stream_combined_markers: Option<u8>,
     marker_pattern: MarkerPattern,
 }
 
@@ -227,16 +247,16 @@ impl State {
             pitch: 0.0,
             markers: vec![
                 tf * Point3::new(0.35, 1.0, 0.0),
-                tf * Point3::new(0.8, 1.0, 0.0),
+                tf * Point3::new(0.65, 1.0, 0.0),
                 tf * Point3::new(0.65, 0.0, 0.0),
                 tf * Point3::new(0.35, 0.0, 0.0),
                 // tf * Point3::new(0.35, -0.2, 0.0),
                 // tf * Point3::new(0.65, -0.2, 0.0),
 
-                tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
-                tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.65, 0.0, 0.0),
+                // tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
             ],
@@ -248,7 +268,7 @@ impl State {
             moving_up: false,
             moving_down: false,
             stream_mot: None,
-            stream_aim: None,
+            stream_combined_markers: None,
             marker_pattern: MarkerPattern::Rectangle,
         }
     }
@@ -442,6 +462,13 @@ impl AreaHandler for MainCanvas {
             b'd' => &mut state.moving_right,
             b'e' | b' ' => &mut state.moving_up,
             b'q' => &mut state.moving_down,
+            b'\x08' => { // backspace
+                // reset the camera
+                state.camera_pos = Point3::new(0., 0., 5.);
+                state.yaw = 0.0;
+                state.pitch = 0.0;
+                return true;
+            }
             _ if key_event.modifier.contains(Modifiers::MODIFIER_SHIFT)
             || key_event.modifier.contains(Modifiers::MODIFIER_CTRL) => &mut state.moving_down,
             _ => return true,

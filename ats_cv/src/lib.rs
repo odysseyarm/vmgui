@@ -1,9 +1,22 @@
 #![no_std]
 
-use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector};
+use nalgebra::{ComplexField, Matrix3, Point2, RealField, SMatrix, SVector, Vector2, Vector3};
 pub mod kalman;
 
 use num::{traits::{float::TotalOrder, Float}, FromPrimitive};
+use sqpnp::types::{SQPSolution, SolverParameters};
+
+pub fn pnp(_3dpoints: &[Vector3<f64>], projections: &[Vector2<f64>]) -> Option<SQPSolution>
+{
+    let solver = sqpnp::PnpSolver::new(_3dpoints, projections, None, SolverParameters::default());
+    if let Some(mut solver) = solver {
+        solver.solve();
+        if solver.number_of_solutions() == 1 {
+            return Some(solver.solution_ptr(0).unwrap().clone());
+        }
+    }
+    None
+}
 
 pub fn transform_aim_point<F: Float + FromPrimitive + 'static>(
     aim_point: Point2<F>,

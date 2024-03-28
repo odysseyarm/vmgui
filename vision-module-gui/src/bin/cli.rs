@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use vision_module_gui::packet::{Packet, PacketData, Port, Register};
+use ats_usb::packet::{Packet, PacketData, Port, Register};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();

@@ -6,5 +6,10 @@ members = [
     "libui-rs/ui-sys",
     "ats_cv",
     "ats_cv_cbindgen",
+    "ats_usb",
     "vision-module-gui",
 ]
+
+# Enable optimizations for dependencies in dev profile
+[profile.dev.package."*"]
+opt-level = 3

@@ -6,7 +6,7 @@ use ats_cv::get_perspective_transform;
 use iui::{controls::{VerticalBox, Window}, UI};
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
 use nalgebra::{Point2, Vector2};
-use tokio::sync::Mutex;
+use parking_lot::Mutex;
 use tracing::debug;
 
 use crate::{mot_runner::MotRunner, CloneButShorter};
@@ -67,7 +67,7 @@ pub fn create(
     collect_button.on_clicked(ui, {
         let ui = ui.c();
         move |_| {
-            let runner = mot_runner.blocking_lock();
+            let runner = mot_runner.lock();
             let Some(reported_aim_point) = runner.state.nf_aim_point else { return };
             let true_aim_point = reported_aim_point + runner.nf_offset;
             drop(runner);
@@ -79,7 +79,7 @@ pub fn create(
                 if let [s1, s2, s3, s4] = s[..] {
                     s.clear();
                     calibrating.set(false);
-                    mot_runner.blocking_lock().nf_offset = Vector2::new(0.0, 0.0);
+                    mot_runner.lock().nf_offset = Vector2::new(0.0, 0.0);
 
                     // do math
                     let transform = match get_perspective_transform(
@@ -100,7 +100,7 @@ pub fn create(
                     };
                     debug!("calculated transformation:{transform}");
                     // TODO don't assume view[0]
-                    let mut runner = mot_runner.blocking_lock();
+                    let mut runner = mot_runner.lock();
                     let view = &mut runner.markers_settings.views[0];
                     let top = view.marker_top.position;
                     let bottom = view.marker_bottom.position;

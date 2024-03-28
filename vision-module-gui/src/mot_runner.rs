@@ -1,23 +1,46 @@
 use std::sync::Arc;
+use opencv_ros_camera::RosOpenCvIntrinsics;
+use parking_lot::Mutex;
 use std::time::Duration;
+use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Matrix2x4, Point2, Scalar, Vector2};
-use tokio::sync::Mutex;
+use nalgebra::{Const, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
+use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::debug;
+use tracing::{debug, info};
 use crate::{CloneButShorter, MotState};
-use crate::device::UsbDevice;
 use crate::marker_config_window::MarkersSettings;
-use crate::packet::{AimPointReport, GeneralConfig, MarkerPattern, MotData};
+use ats_usb::device::UsbDevice;
+use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
 
 pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
                         Point2::new(0.5, 1.), Point2::new(0., 0.5),
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
+}
+
+pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
+    let _3dpoints = [
+        Vector3::new((0.35 - 0.5) * 16./9., -0.5, 0.),
+        Vector3::new((0.65 - 0.5) * 16./9., -0.5, 0.),
+        Vector3::new((0.65 - 0.5) * 16./9., 0.5, 0.),
+        Vector3::new((0.35 - 0.5) * 16./9., 0.5, 0.),
+    ];
+    let solver = sqpnp::PnpSolver::new(&_3dpoints, &projections, None, SolverParameters::default());
+    if let Some(mut solver) = solver {
+        solver.solve();
+        debug!("pnp found {} solutions", solver.number_of_solutions());
+        if solver.number_of_solutions() == 1 {
+            return Some(solver.solution_ptr(0).unwrap().clone());
+        }
+    } else {
+        info!("pnp solver failed");
+    }
+    None
 }
 
 /// Given 4 points in the following shape
@@ -91,23 +114,24 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
         // frame_loop(&halt, runner.clone()),
         // impact_loop(&halt, runner.clone()),
         frame_loop(runner.clone()),
+        combined_markers_loop(runner.clone()),
+        accel_loop(runner.clone()),
         impact_loop(runner.clone()),
-        aim_loop(runner.clone()),
     );
 }
 
 async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
+    let device = runner.lock().device.c().unwrap();
     let mut mot_data_stream = device.stream_mot_data().await.unwrap();
     loop {
-        if runner.lock().await.device.is_none() {
+        if runner.lock().device.is_none() {
             return;
         }
         // if let Ok((nf_data, wf_data)) = device.get_frame().await {
         if let Some(mot_data) = mot_data_stream.next().await {
             let nf_data = mot_data.mot_data_nf;
             let wf_data = mot_data.mot_data_wf;
-            let mut runner = runner.lock().await;
+            let mut runner = runner.lock();
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
@@ -209,124 +233,130 @@ async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             // state.wf_aim_point = wf_aim_point;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
-            state.gravity_angle = mot_data.gravity_angle as f64;
+            // todo state.gravity_angle = mot_data.gravity_angle as f64;
         }
         sleep(Duration::from_millis(5)).await;
     }
 }
 
-async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
-    let mut frame_stream = device.stream_impact().await.unwrap();
-    while runner.lock().await.device.is_some() {
-        if let Some((_x, _y)) = frame_stream.next().await {
-            let runner = runner.lock().await;
-            if runner.record_impact {
-                let mut datapoints = runner.datapoints.lock().await;
+fn ray_plane_intersection(ray_origin: Vector3<f64>, ray_direction: Vector3<f64>, plane_normal: Vector3<f64>, plane_point: Vector3<f64>) -> Vector3<f64> {
+    let d = plane_normal.dot(&plane_point);
+    let t = (d - plane_normal.dot(&ray_origin)) / plane_normal.dot(&ray_direction);
+    ray_origin + t * ray_direction
+}
 
-                let mut frame = crate::Frame {
-                    nf_aim_point_x: None,
-                    nf_aim_point_y: None,
-                };
+async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().device.c().unwrap();
+    let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
+    while runner.lock().device.is_some() {
+        if let Some(combined_markers_report) = combined_markers_stream.next().await {
+            let CombinedMarkersReport { nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
+            let mut runner = runner.lock();
+            debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_points, wf_points, nf_radii, wf_radii);
 
-                let p = Point2::new(_x, _y).cast::<f64>();
+            let nf_points = nf_points.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
+            let nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
 
-                // TODO don't assume view[0]
-                let view = &runner.markers_settings.views[0];
-                let top = view.marker_top.position;
-                let bottom = view.marker_bottom.position;
-                let left = view.marker_left.position;
-                let right = view.marker_right.position;
+            let wf_points = wf_points.into_iter().zip(wf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
+            let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
 
-                let top = Point2::new(top.x, top.y).cast::<f64>();
-                let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
-                let left = Point2::new(left.x, left.y).cast::<f64>();
-                let right = Point2::new(right.x, right.y).cast::<f64>();
+            let x_mat = MatrixXx1::from_column_slice(&nf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
+            let y_mat = MatrixXx1::from_column_slice(&nf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
+            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
+            let distorted = cam_geom::Pixels::new(points);
+            let undistorted = runner.state.camera_model_nf.undistort(&distorted);
 
-                // TODO maybe don't recompute this in a hot loop lol
-                let [bottom_p, left_p, top_p, right_p] = runner.general_config.marker_pattern.marker_positions();
-                let m = Matrix2x4::from_columns(&[
-                    bottom_p.coords,
-                    left_p.coords,
-                    top_p.coords,
-                    right_p.coords,
-                ]);
-                let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
-                let tf = get_perspective_transform(
-                    m.column(0).xy().into(), // bottom
-                    m.column(1).xy().into(), // left
-                    m.column(2).xy().into(), // top
-                    m.column(3).xy().into(), // right
-                    bottom,
-                    left,
-                    top,
-                    right,
-                ).unwrap();
-                let p = tf.transform_point(&p);
+            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
+            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
+            let nf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
 
-                let p = Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.);
+            let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
+            let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
+            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
+            let distorted = cam_geom::Pixels::new(points);
+            let undistorted = runner.state.camera_model_wf.undistort(&distorted);
 
-                frame.nf_aim_point_x = Some(p.x);
-                frame.nf_aim_point_y = Some(p.y);
+            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
+            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
+            let wf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
 
-                datapoints.push(frame);
+            let nf_aim_point = if nf_points.len() > 3 {
+                let mut nf_positions = nf_points.clone();
+                sort_points(&mut nf_positions, MarkerPattern::Rectangle);
+                let center_aim = Point2::new(2048.0, 2048.0);
+                let projections = nf_positions.iter().map(|pos| {
+                    // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+                    let f = 5896.181431117499;
+                    let x = (pos.x - 2047.5) / f;
+                    let y = (pos.y - 2047.5) / f;
+                    Vector2::new(x, y)
+                }).collect::<Vec<Vector2<_>>>();
+                let solution = my_pnp(&projections);
+                if let Some(solution) = solution {
+                    let r_hat = Rotation3::from_matrix_unchecked(solution.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+                    let t = Translation3::from(solution.t);
+                    let tf = t * r_hat;
+                    let ctf = tf.inverse();
 
-                let ui_update = runner.ui_update.c();
+                    let flip_yz = Matrix3::new(
+                        1., 0., 0.,
+                        0., -1., 0.,
+                        0., 0., -1.,
+                    );
+                    runner.state.rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                    runner.state.translation_mat = flip_yz * ctf.translation.vector;
 
-                runner.ui_ctx.queue_main(move || {
-                    leptos_reactive::SignalSet::set(&ui_update, ());
-                });
-            }
+                    let screen_3dpoints = [
+                        Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., 0.5, 0.),
+                        Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
+                    ];
+
+                    let ray_origin = runner.state.translation_mat;
+                    let ray_direction = runner.state.rotation_mat * Vector3::new(0., 0., 1.);
+                    let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
+                    let plane_point = screen_3dpoints[0];
+                    let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
+
+                    let aim_point = Point2::new(
+                        (aim_point.x - screen_3dpoints[0].x) / (screen_3dpoints[2].x - screen_3dpoints[0].x),
+                        (aim_point.y - screen_3dpoints[0].y) / (screen_3dpoints[2].y - screen_3dpoints[0].y),
+                    );
+
+                    let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
+                    Some(aim_point)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            runner.state.nf_points = nf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
+            runner.state.wf_points = wf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
+            runner.state.nf_aim_point = nf_aim_point;
         }
     }
 }
 
-async fn aim_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().await.device.c().unwrap();
-    let mut aim_stream = device.stream_aim().await.unwrap();
-    while runner.lock().await.device.is_some() {
-        if let Some(aim_report) = aim_stream.next().await {
-            let AimPointReport { x, y, screen_id } = aim_report;
-            let mut runner = runner.lock().await;
-            debug!("aim: ({x}, {y}), screen_id: {screen_id}");
-            let p = Point2::new(x, y).cast::<f64>();
+async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().device.c().unwrap();
+    let mut accel_stream = device.stream_accel().await.unwrap();
+    while runner.lock().device.is_some() {
+        if let Some(accel) = accel_stream.next().await {
+            let mut runner = runner.lock();
+            debug!("accel: {:?}", accel);
+            runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+        }
+    }
+}
 
-            // TODO don't assume view[0]
-            let view = &mut runner.markers_settings.views[0];
-            let top = view.marker_top.position;
-            let bottom = view.marker_bottom.position;
-            let left = view.marker_left.position;
-            let right = view.marker_right.position;
-
-            let top = Point2::new(top.x, top.y).cast::<f64>();
-            let bottom = Point2::new(bottom.x, bottom.y).cast::<f64>();
-            let left = Point2::new(left.x, left.y).cast::<f64>();
-            let right = Point2::new(right.x, right.y).cast::<f64>();
-
-            // TODO maybe don't recompute this in a hot loop lol
-            let [bottom_m, left_m, top_m, right_m] = runner.general_config.marker_pattern.marker_positions();
-            let m = Matrix2x4::from_columns(&[
-                bottom_m.coords,
-                left_m.coords,
-                top_m.coords,
-                right_m.coords,
-            ]);
-            let m: Matrix2x4<f64> = m.add_scalar(-0.5) * 4094.0;
-            let tf = get_perspective_transform(
-                m.column(0).xy().into(), // bottom
-                m.column(1).xy().into(), // left
-                m.column(2).xy().into(), // top
-                m.column(3).xy().into(), // right
-                bottom,
-                left,
-                top,
-                right,
-            ).unwrap();
-            let p = tf.transform_point(&p);
-
-            let state = &mut runner.state;
-            state.nf_aim_point = Some(Point2::new(((p.x as f64)/2047.+1.)/2., ((p.y as f64)/2047.+1.)/2.));
-            state.screen_id = aim_report.screen_id;
+async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().device.c().unwrap();
+    let mut frame_stream = device.stream_impact().await.unwrap();
+    while runner.lock().device.is_some() {
+        if let Some(()) = frame_stream.next().await {
+            // todo
         }
     }
 }
