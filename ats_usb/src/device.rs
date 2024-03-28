@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
@@ -6,7 +6,12 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::packet::{AimPointReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+
+pub const SLIP_FRAME_END: u8 = 0xc0;
+const SLIP_FRAME_ESC: u8 = 0xdb;
+const SLIP_FRAME_ESC_END: u8 = 0xdc;
+const SLIP_FRAME_ESC_ESC: u8 = 0xdd;
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -27,7 +32,8 @@ struct State {
     response_channels: Mutex<[ResponseChannel; 255]>,
     mot_data_stream: AtomicBool,
     impact_stream: AtomicBool,
-    aim_stream: AtomicBool,
+    combined_markers_stream: AtomicBool,
+    accel_stream: AtomicBool,
 }
 
 /// A helper struct to deal with cancellation
@@ -109,7 +115,8 @@ impl UsbDevice {
             response_channels: Mutex::new(response_channels),
             mot_data_stream: AtomicBool::new(false),
             impact_stream: AtomicBool::new(false),
-            aim_stream: AtomicBool::new(false),
+            combined_markers_stream: AtomicBool::new(false),
+            accel_stream: AtomicBool::new(false),
         });
         let thread_state = Arc::clone(&state);
 
@@ -127,7 +134,7 @@ impl UsbDevice {
                 buf.push(0xff);
                 pkt.serialize(&mut buf);
 
-                debug!("write id={} len={}", pkt.id, buf.len());
+                debug!("write id={} len={} ty={:?}", pkt.id, buf.len(), pkt.ty());
                 let r = writer.write_all(&buf).and_then(|_| writer.flush());
                 if let Err(e) = r {
                     error!("device thread failed to write: {e}");
@@ -148,12 +155,15 @@ impl UsbDevice {
                 }
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
-                    buf.resize(2, 0);
-                    reader.read_exact(&mut buf)?;
-                    let len = u16::from_le_bytes([buf[0], buf[1]]);
-                    trace!("read len={}", len*2);
-                    buf.resize(usize::from(len * 2), 0);
-                    reader.read_exact(&mut buf[2..])?;
+                    reader.read_until(SLIP_FRAME_END, &mut buf)?;
+                    buf.pop();
+                    if buf.contains(&SLIP_FRAME_ESC) {
+                        match decode_slip_frame(&mut buf) {
+                            Err(e) => return Ok(Err(e)),
+                            Ok(_) => (),
+                        };
+                    }
+                    trace!("read frame len={}", buf.len());
                     Ok(Packet::parse(&mut &buf[..])
                         .with_context(|| format!("failed to parse packet: {:?}", buf.clone()))
                         .inspect(|p| trace!("read id={} type={:?}", p.id, p.ty())))
@@ -318,32 +328,42 @@ impl UsbDevice {
             return Err(anyhow!("cannot have more than one mot data stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b001, active: true }) }).await?;
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0001, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
             x.object_report().unwrap()
         }))
     }
 
-    pub async fn stream_impact(&self) -> Result<impl Stream<Item = (i16, i16)> + Send + Sync> {
+    pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
+        if self.thread_state.combined_markers_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one aim stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0010, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
+            x.combined_markers_report().unwrap()
+        }))
+    }
+
+    pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
+        if self.thread_state.accel_stream.swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one accel stream"));
+        }
+        let (slot, receiver) = self.get_stream_slot(2);
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
+            x.accel_report().unwrap()
+        }))
+    }
+
+    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
         if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one impact stream"));
         }
         let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b100, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
-            let obj = x.impact_with_aim_point_report().unwrap();
-            (obj.x, obj.y)
-        }))
-    }
-
-    pub async fn stream_aim(&self) -> Result<impl Stream<Item = AimPointReport> + Send + Sync> {
-        if self.thread_state.aim_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one aim stream"));
-        }
-        let (slot, receiver) = self.get_stream_slot(2);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b010, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
-            x.aim_point_report().unwrap()
+        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1000, active: true }) }).await?;
+        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 3 }.map(|_| {
+            ()
         }))
     }
 
@@ -354,6 +374,38 @@ impl UsbDevice {
         }).await?;
         Ok(())
     }
+}
+
+// TODO there's probably a faster SIMD way
+pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
+    let mut j = 0;
+    let mut esc = false;
+    for i in 0..buf.len() {
+        match buf[i] {
+            self::SLIP_FRAME_ESC => {
+                if esc { anyhow::bail!("double esc"); }
+                esc = true;
+            }
+            self::SLIP_FRAME_ESC_END if esc => {
+                buf[j] = SLIP_FRAME_END;
+                j += 1;
+                esc = false;
+            }
+            self::SLIP_FRAME_ESC_ESC if esc => {
+                buf[j] = SLIP_FRAME_ESC;
+                j += 1;
+                esc = false;
+            }
+            x => {
+                if esc { anyhow::bail!("invalid esc"); }
+                buf[j] = x;
+                j += 1;
+            }
+        }
+    }
+    if esc { anyhow::bail!("trailing esc"); }
+    buf.resize(j, 0);
+    Ok(())
 }
 
 #[pin_project(PinnedDrop)]
@@ -382,16 +434,18 @@ impl PinnedDrop for PacketStream {
         if self.stream_type == 0 {
             self.slot.thread_state.mot_data_stream.store(false, Ordering::Relaxed);
         } else if self.stream_type == 1 {
-            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
+            self.slot.thread_state.combined_markers_stream.store(false, Ordering::Relaxed);
         } else if self.stream_type == 2 {
-            self.slot.thread_state.aim_stream.store(false, Ordering::Relaxed);
+            self.slot.thread_state.accel_stream.store(false, Ordering::Relaxed);
+        } else if self.stream_type == 3 {
+            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
         }
     }
 }
 
 macro_rules! read_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub(crate) async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
+        pub async fn $name(&self, port: Port) -> ::anyhow::Result<$ty> {
             let mut bytes = <$ty>::to_le_bytes(0);
             for (byte, addr) in ::std::iter::zip(&mut bytes, [$($addr),*]) {
                 *byte = self.read_register(port, $bank, addr).await?;
@@ -403,7 +457,7 @@ macro_rules! read_register_spec {
 
 macro_rules! write_register_spec {
     ($name:ident : $ty:ty = $bank:literal; [$($addr:literal),*]) => {
-        pub(crate) async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
+        pub async fn $name(&self, port: Port, value: $ty) -> ::anyhow::Result<()> {
             let bytes = <$ty>::to_le_bytes(value);
             for (byte, addr) in ::std::iter::zip(bytes, [$($addr),*]) {
                 self.write_register(port, $bank, addr, byte).await?;
@@ -443,4 +497,14 @@ impl UsbDevice {
     write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
     write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
     write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_decode_slip() {
+        let mut slip_encoded = vec![0x01, 0xDB, 0xDC, 0xDB, 0xDD];
+        super::decode_slip_frame(&mut slip_encoded).unwrap();
+        assert_eq!([0x01, 0xC0, 0xDB], slip_encoded[..]);
+    }
 }
