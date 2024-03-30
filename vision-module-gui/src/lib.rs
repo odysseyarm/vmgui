@@ -42,6 +42,7 @@ pub struct MotState {
     nf_points: ArrayVec<Point2<f64>, 16>,
     wf_points: ArrayVec<Point2<f64>, 16>,
     pub nf_pva2ds: [Pva2d<f64>; 4],
+    pub wf_pva2ds: [Pva2d<f64>; 4],
 
     nf_radii: [u8; 4],
     wf_radii: [u8; 4],
@@ -65,6 +66,7 @@ impl Default for MotState {
             nf_data: None,
             wf_data: None,
             nf_pva2ds: Default::default(),
+            wf_pva2ds: Default::default(),
             screen_id: 0,
             orientation: Madgwick::new(1./800., 0.1),
             rotation_mat: Default::default(),

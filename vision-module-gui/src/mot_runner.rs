@@ -259,7 +259,16 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
             let mut nf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
 
-            // kal man for nf rn
+            let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
+            let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
+            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
+            let distorted = cam_geom::Pixels::new(points);
+            let undistorted = runner.state.camera_model_wf.undistort(&distorted);
+
+            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
+            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
+            let mut wf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+
             if nf_points.len() > 3 {
                 let state = &mut runner.state;
                 for (i, pva2d) in state.nf_pva2ds.iter_mut().enumerate() {
@@ -270,15 +279,15 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
-            let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
-            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
-            let distorted = cam_geom::Pixels::new(points);
-            let undistorted = runner.state.camera_model_wf.undistort(&distorted);
-
-            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
-            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
-            let wf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+            if wf_points.len() > 3 {
+                let state = &mut runner.state;
+                for (i, pva2d) in state.wf_pva2ds.iter_mut().enumerate() {
+                    pva2d.step();
+                    pva2d.observe(wf_points[i].coords.as_ref(), &[100.0, 100.0]);
+                    wf_points[i].x = pva2d.position()[0];
+                    wf_points[i].y = pva2d.position()[1];
+                }
+            }
 
             let nf_aim_point = if nf_points.len() > 3 {
                 let mut nf_positions = nf_points.clone();
@@ -332,9 +341,67 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             } else {
                 None
             };
+            let wf_aim_point = if wf_points.len() > 3 {
+                let mut wf_positions = wf_points.clone();
+                sort_points(&mut wf_positions, MarkerPattern::Rectangle);
+                let center_aim = Point2::new(2048.0, 2048.0);
+                let projections = wf_positions.iter().map(|pos| {
+                    // 1/math.tan(111.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+                    let f = 1399.329592256857;
+                    let x = (pos.x - 2047.5) / f;
+                    let y = (pos.y - 2047.5) / f;
+                    Vector2::new(x, y)
+                }).collect::<Vec<Vector2<_>>>();
+                let solution = my_pnp(&projections);
+                if let Some(solution) = solution {
+                    let r_hat = Rotation3::from_matrix_unchecked(solution.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+                    let t = Translation3::from(solution.t);
+                    let tf = t * r_hat;
+                    let ctf = tf.inverse();
+
+                    let flip_yz = Matrix3::new(
+                        1., 0., 0.,
+                        0., -1., 0.,
+                        0., 0., -1.,
+                    );
+                    let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                    let translation_mat = flip_yz * ctf.translation.vector;
+
+                    let screen_3dpoints = [
+                        Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., -0.5, 0.),
+                        Vector3::new((1.0 - 0.5) * 16./9., 0.5, 0.),
+                        Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
+                    ];
+
+                    let ray_origin = translation_mat;
+                    let ray_direction = rotation_mat * Vector3::new(0., 0., 1.);
+                    let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
+                    let plane_point = screen_3dpoints[0];
+                    let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
+
+                    let aim_point = Point2::new(
+                        (aim_point.x - screen_3dpoints[0].x) / (screen_3dpoints[2].x - screen_3dpoints[0].x),
+                        (aim_point.y - screen_3dpoints[0].y) / (screen_3dpoints[2].y - screen_3dpoints[0].y),
+                    );
+
+                    if nf_aim_point == None {
+                        runner.state.translation_mat = translation_mat;
+                        runner.state.rotation_mat = rotation_mat;
+                    }
+
+                    let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
+                    Some(aim_point)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             runner.state.nf_points = nf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
             runner.state.wf_points = wf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
             runner.state.nf_aim_point = nf_aim_point;
+            runner.state.wf_aim_point = wf_aim_point;
         }
     }
 }
