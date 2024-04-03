@@ -34,7 +34,7 @@ fn main() {
     loop {
         let resp = client.recv_from(&mut data);
         if let Ok((len, addr)) = resp {
-            if data[1] != 0 {
+            if data[1] != 0 || data[0] == 255 {
                 println!("Received {:?} from {addr}", &buf[..]);
                 continue;
             }
@@ -72,45 +72,52 @@ fn main() {
             println!("{}", buf.len());
             // println!("{:?}", &data[2..len]);
             // println!("Received {:?} from {addr}", &buf[..buf.len()]);
-            let buf_slice = &mut &buf[..];
-            match Packet::parse(buf_slice) {
-                Ok(pkt) => {
-                    // buf.drain(0..buf.len() - buf_slice.len());
-                    buf.clear();
 
-                    // if len > 2 + _len {
-                    //     println!("Leftover {:?} from {addr}", &data[2 + _len..len]);
-                    // }
-                    println!("Received {:?} from {addr}", pkt);
-                    match pkt.data {
-                        PacketData::AccelReport(_) => {
-                            let elapsed = start_time.elapsed().as_secs_f64();
-                            total_accel_samples += 1;
-                            let accel_hz_avg = 1. / (elapsed / total_accel_samples as f64);
-                            println!("Accel: {:?} Hz", accel_hz_avg);
+            let mut done = false;
+
+            while !done && buf.len() > 0 {
+                let buf_slice = &mut &buf[..];
+                match Packet::parse(buf_slice) {
+                    Ok(pkt) => {
+                        buf.drain(0..buf.len() - buf_slice.len());
+                        // if len > 2 + _len {
+                        //     println!("Leftover {:?} from {addr}", &data[2 + _len..len]);
+                        // }
+                        println!("Received {:?} from {addr}", pkt);
+                        match pkt.data {
+                            PacketData::AccelReport(_) => {
+                                let elapsed = start_time.elapsed().as_secs_f64();
+                                total_accel_samples += 1;
+                                let accel_hz_avg = 1. / (elapsed / total_accel_samples as f64);
+                                println!("Accel: {:?} Hz", accel_hz_avg);
+                            }
+                            PacketData::CombinedMarkersReport(_) => {
+                                let elapsed = start_time.elapsed().as_secs_f64();
+                                total_combined_marker_samples += 1;
+                                let combined_marker_hz_avg = 1. / (elapsed / total_combined_marker_samples as f64);
+                                println!("Combined Marker: {:?} Hz", combined_marker_hz_avg);
+                            }
+                            _ => {}
                         }
-                        PacketData::CombinedMarkersReport(_) => {
-                            let elapsed = start_time.elapsed().as_secs_f64();
-                            total_combined_marker_samples += 1;
-                            let combined_marker_hz_avg = 1. / (elapsed / total_combined_marker_samples as f64);
-                            println!("Combined Marker: {:?} Hz", combined_marker_hz_avg);
-                        }
-                        _ => {}
                     }
-                }
-                Err(e) => {
-                    match e {
-                        ats_usb::packet::Error::UnexpectedEof { packet_type } => {
-                            buf.clear();
-                        }
-                        ats_usb::packet::Error::UnrecognizedPacketId => {
-                            buf.clear();
-                        }
-                        ats_usb::packet::Error::UnrecognizedPort => {
-                            buf.clear();
-                        }
-                        _ => {
-                            println!("Error: {:?}", e);
+                    Err(e) => {
+                        match e {
+                            ats_usb::packet::Error::UnexpectedEof { packet_type } => {
+                                buf.clear();
+                                done = true;
+                            }
+                            ats_usb::packet::Error::UnrecognizedPacketId => {
+                                buf.clear();
+                                done = true;
+                            }
+                            ats_usb::packet::Error::UnrecognizedPort => {
+                                buf.clear();
+                                done = true;
+                            }
+                            _ => {
+                                println!("Error: {:?}", e);
+                                done = true;
+                            }
                         }
                     }
                 }
