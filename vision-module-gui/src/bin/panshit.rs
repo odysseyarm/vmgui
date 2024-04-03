@@ -30,9 +30,10 @@ fn main() {
     let start_time = std::time::Instant::now();
     let mut total_combined_marker_samples = 0;
 
-    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64) {
+    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: std::net::SocketAddr) {
         match Packet::parse(&mut data.as_slice()) {
             Ok(pkt) => {
+                println!("Received {:?} from {addr}", pkt);
                 match pkt.data {
                     PacketData::AccelReport(_) => {
                         let elapsed = start_time.elapsed().as_secs_f64();
@@ -78,8 +79,7 @@ fn main() {
                 let end_idx = slip_buf.iter().position(|&x| x == SLIP_FRAME_END).unwrap();
                 let mut slice_vec = &mut slip_buf[..end_idx].to_vec();
                 if let Ok(()) = decode_slip_frame(slice_vec) {
-                    println!("Received {:?} from {addr}", pkt);
-                    process_one(start_time, &mut slice_vec, &mut total_accel_samples, &mut total_combined_marker_samples);
+                    process_one(start_time, &mut slice_vec, &mut total_accel_samples, &mut total_combined_marker_samples, addr);
                     slip_buf.drain(0..end_idx+1);
                 } else {
                     slip_buf.drain(0..end_idx+1);
