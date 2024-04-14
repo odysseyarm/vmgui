@@ -5,23 +5,23 @@ use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 fn main() {
     let client = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 23456)).unwrap();
     client.set_broadcast(true).unwrap();
-    client.send_to(&[255, 1], ("10.0.0.255", 23456)).unwrap();
-
-    // let mut udp_packet = vec![1, 0, 255];
-    // let pkt = Packet {
-    //     id: 0,
-    //     data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
-    // };
-    // pkt.serialize(&mut udp_packet);
-    // client.send_to(&udp_packet, ("10.0.0.255", 23456)).unwrap();
+    client.send_to(&[255, 1], ("192.168.1.255", 23456)).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
-        id: 1,
-        data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
+        id: 0,
+        data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x03 }),
     };
     pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, ("10.0.0.255", 23456)).unwrap();
+    client.send_to(&udp_packet, ("192.168.1.255", 23456)).unwrap();
+
+    // let mut udp_packet = vec![1, 0, 255];
+    // let pkt = Packet {
+    //     id: 1,
+    //     data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
+    // };
+    // pkt.serialize(&mut udp_packet);
+    // client.send_to(&udp_packet, ("192.168.1.255", 23456)).unwrap();
     // client.send_to(&udp_packet, ("10.0.0.121", 23456)).unwrap();
 
     let mut data = vec![0; 1472];
@@ -33,7 +33,7 @@ fn main() {
     fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: std::net::SocketAddr) {
         match Packet::parse(&mut data.as_slice()) {
             Ok(pkt) => {
-                println!("Received {:?} from {addr}", pkt);
+                println!("{:?}", pkt);
                 match pkt.data {
                     PacketData::AccelReport(_) => {
                         let elapsed = start_time.elapsed().as_secs_f64();
@@ -52,9 +52,9 @@ fn main() {
             }
             Err(e) => {
                 match e {
-                    ats_usb::packet::Error::UnexpectedEof { .. } => {}
-                    ats_usb::packet::Error::UnrecognizedPacketId => {}
-                    ats_usb::packet::Error::UnrecognizedPort => {}
+                    // ats_usb::packet::Error::UnexpectedEof { .. } => {}
+                    // ats_usb::packet::Error::UnrecognizedPacketId => {}
+                    // ats_usb::packet::Error::UnrecognizedPort => {}
                     _ => {
                         println!("Error: {:?}", e);
                     }
@@ -66,8 +66,12 @@ fn main() {
     loop {
         let resp = client.recv_from(&mut data);
         if let Ok((len, addr)) = resp {
+            println!("Received {:?} from {addr}", &data[..len]);
             if data[1] != 0 || data[0] == 255 {
-                println!("Received {:?} from {addr}", &data);
+                continue;
+            }
+            // hack to ignore our own messages
+            if data[2] == 255 {
                 continue;
             }
 
