@@ -1,5 +1,0 @@
-pragma_once = true
-
-[parse]
-parse_deps = true
-exclude = ["nalgebra", "panic-semihosting", "ahrs"]
