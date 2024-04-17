@@ -23,7 +23,7 @@ serialport = { version = "4.2.2", features = ["usbportinfo-interface"] }
 serial2 = "0.2.19"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
 toml = "0.8.9"
-ats_cv = { path = "../ats_cv" }
+ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git" }
 ats_usb = { path = "../ats_usb" }
 tokio-stream = "0.1.14"
 pin-project = "1.1.4"

@@ -304,6 +304,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "ats_cv"
 version = "0.1.0"
+source = "git+https://github.com/odysseyarm/ats_cv.git#b2c6fd92190209fe6bb498bf4e9506466ea85b89"
 dependencies = [
  "nalgebra",
  "num",
