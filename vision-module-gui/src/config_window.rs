@@ -18,6 +18,7 @@ use parking_lot::Mutex;
 pub fn config_window(
     ui: &UI,
     simulator_addr: Option<String>,
+    udp_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
 ) -> (Window, ReadSignal<Option<UsbDevice>>, Memo<u16>) {
@@ -64,6 +65,7 @@ pub fn config_window(
         let ui = ui.c();
         let config_win = config_win.c();
         let sim_addr = simulator_addr.c();
+        let udp_addr = udp_addr.c();
         let general_settings = general_settings.c();
         move |i| {
             device.set(None);
@@ -73,18 +75,19 @@ pub fn config_window(
             let Ok(i) = usize::try_from(i) else { return };
             let path = device_list.with_untracked(|d| Some(d.get(i)?.port_name.clone()));
             let sim_addr = sim_addr.c();
+            let udp_addr = udp_addr.c();
             let general_settings = general_settings.c();
             let task = async move {
                 let usb_device = if let Some(path) = path {
                     UsbDevice::connect_serial(path).await?
+                } else if let Some(sim_addr) = sim_addr.as_ref() {
+                    UsbDevice::connect_tcp(sim_addr)?
                 } else {
-                    UsbDevice::connect_tcp(sim_addr.as_ref().unwrap())?
+                    UsbDevice::connect_hub("0.0.0.0:23456", udp_addr.as_ref().unwrap()).await?
                 };
-                tokio::try_join!(
-                    general_settings.load_from_device(&usb_device, true),
-                    wf_settings.load_from_device(&usb_device),
-                    nf_settings.load_from_device(&usb_device),
-                )?;
+                general_settings.load_from_device(&usb_device, true).await?;
+                wf_settings.load_from_device(&usb_device).await?;
+                nf_settings.load_from_device(&usb_device).await?;
                 device.set(Some(usb_device.c()));
                 Result::<()>::Ok(())
             };
@@ -106,6 +109,7 @@ pub fn config_window(
         let device_combobox = device_combobox.c();
         let ui = ui.c();
         let simulator_addr = simulator_addr.c();
+        let udp_addr = udp_addr.c();
         move |_| {
             let mut device_combobox = device_combobox.c();
             device_combobox.clear(&ui);
@@ -117,6 +121,9 @@ pub fn config_window(
             if let Some(sim_addr) = &simulator_addr {
                 device_combobox.append(&ui, &format!("Simulator @ {sim_addr}"));
             }
+            if let Some(udp_addr) = &udp_addr {
+                device_combobox.append(&ui, &format!("M4Hub @ {udp_addr}"));
+            }
             device_combobox.enable(&ui);
         }
     });
@@ -124,6 +131,7 @@ pub fn config_window(
         let config_win = config_win.c();
         let ui = ui.c();
         let simulator_addr = simulator_addr.c();
+        let udp_addr = udp_addr.c();
         move || {
             let ports = serialport::available_ports();
             let ports: Vec<_> = match ports {
@@ -150,6 +158,9 @@ pub fn config_window(
             }).collect();
             device_list.set(ports.c());
             if simulator_addr.is_some() {
+                device_combobox.set_selected(&ui, ports.len() as i32);
+                device_combobox_on_selected(ports.len() as i32);
+            } else if udp_addr.is_some() {
                 device_combobox.set_selected(&ui, ports.len() as i32);
                 device_combobox_on_selected(ports.len() as i32);
             } else if ports.len() > 0 {
@@ -281,11 +292,9 @@ pub fn config_window(
             if let Some(device) = device.get_untracked() {
                 let general_settings = general_settings.c();
                 ui_ctx.spawn(async move {
-                    let _ = tokio::join!(
-                        general_settings.load_from_device(&device, false),
-                        nf_settings.load_from_device(&device),
-                        wf_settings.load_from_device(&device),
-                    );
+                    _ = general_settings.load_from_device(&device, false).await;
+                    _ = nf_settings.load_from_device(&device).await;
+                    _ = wf_settings.load_from_device(&device).await;
                 });
             }
         }

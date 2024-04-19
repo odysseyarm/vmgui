@@ -413,7 +413,7 @@ async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
             debug!("accel: {:?}", accel);
-            runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+            let _ = runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
         }
     }
 }
