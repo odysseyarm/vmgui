@@ -1,55 +1,36 @@
-use std::time::Duration;
+use std::process::ExitCode;
 
-use ats_usb::packet::{Packet, PacketData, Port, Register};
+use ats_usb::{device::UsbDevice, packet::Port};
 
-fn main() {
+fn print_help() {
+    eprintln!("Usage: ./cli [options] <address>");
+    eprintln!();
+    eprintln!("Options:");
+    eprintln!("    -s  Connect over serial");
+    eprintln!("    -t  Connect over tcp");
+    eprintln!("    -u  Connect over udp");
+}
+
+#[tokio::main]
+async fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
-    let mut serial_port = serialport::new(&args[1], 115200).timeout(Duration::from_secs(3)).open().unwrap();
-
-    let registers = [
-        (0x00, 0x02), // product ID
-        (0x00, 0x03), //
-        (0x00, 0x0f), // DSP noise threshold
-        (0x00, 0x0b), // DSP max area threshold
-        (0x00, 0x0c), //
-        (0x00, 0x10), // DSP orientation ratio
-        (0x00, 0x11), // DSP orientation factor
-        (0x00, 0x19), // DSP maximum object number
-        (0x01, 0x05), // sensor gain 1
-        (0x01, 0x06), // sensor gain 2
-        (0x01, 0x0e), // sensor exposure length
-        (0x01, 0x0f), //
-        (0x0c, 0x60), // interpolated resolution x
-        (0x0c, 0x61), //
-        (0x0c, 0x62), // interpolated resolution y
-        (0x0c, 0x63), //
-        (0x0c, 0x07), // frame period
-        (0x0c, 0x08), //
-        (0x0c, 0x09), //
-    ];
-
-    let mut buf = Vec::new();
-    for (bank, address) in registers {
-        println!("Reading bank {bank:x}, addr {address:x}");
-        let pkt = Packet {
-            id: 0,
-            data: PacketData::ReadRegister(Register {
-                port: Port::Nf,
-                bank,
-                address,
-            }),
-        };
-        buf.clear();
-        buf.push(0xff);
-        pkt.serialize(&mut buf);
-        // println!("Write {buf:?}");
-        serial_port.write_all(&buf).unwrap();
-        serial_port.flush().unwrap();
-        buf.clear();
-        buf.resize(10, 0);
-        let bytes_read = serial_port.read(&mut buf).unwrap();
-        let resp = Packet::parse(&mut &buf[..bytes_read]);
-        // println!("Read {bytes_read} bytes: {:x?}", &buf[..bytes_read]);
-        println!("{resp:x?}");
+    if args.len() < 3 {
+        print_help();
+        return ExitCode::FAILURE;
     }
+    let device = match &*args[1] {
+        "-s" => UsbDevice::connect_serial(&args[2]).await.unwrap(),
+        "-t" => UsbDevice::connect_tcp(&args[2]).unwrap(),
+        "-u" => UsbDevice::connect_hub("0.0.0.0:23456", &args[2]).unwrap(),
+        _ => {
+            print_help();
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let nf_pid = device.product_id(Port::Nf).await.unwrap();
+    let wf_pid = device.product_id(Port::Wf).await.unwrap();
+    eprintln!("Nearfield Product ID: 0x{nf_pid:x}");
+    eprintln!("Widefield Product ID: 0x{wf_pid:x}");
+    ExitCode::SUCCESS
 }

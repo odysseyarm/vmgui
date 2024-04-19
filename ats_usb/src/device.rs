@@ -2,11 +2,11 @@ use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::Tc
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
-use tokio::sync::{mpsc, oneshot};
+use tokio::{net::{ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister};
+use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -105,6 +105,21 @@ impl UsbDevice {
         Ok(Self::new(conn, conn2))
     }
 
+    pub async fn connect_hub(local_addr: impl ToSocketAddrs, device_addr: &str) -> Result<Self> {
+        info!("Connecting to {device_addr}...");
+        let sock = UdpSocket::bind(local_addr).await?;
+        sock.connect(device_addr).await?;
+        sock.send(&[255, 1]).await?;
+        sock.recv(&mut []).await?;
+        let sock = sock.into_std()?;
+        sock.set_nonblocking(false)?;
+        sock.set_read_timeout(Some(Duration::from_millis(3000)))?;
+        let sock2 = sock.try_clone().context("Failed to clone udp socket")?;
+        let read = UdpStream::with_capacity(sock, 1472, 0, 2, &[]);
+        let write = UdpStream::with_capacity(sock2, 0, 1472, 2, &[1, 0]);
+        Ok(Self::new(read, write))
+    }
+
     pub fn new<R, W>(reader: R, writer: W) -> Self
     where
         R: Read + Send + 'static,
@@ -190,7 +205,7 @@ impl UsbDevice {
                 let reply = match reply {
                     // Parse error
                     Err(e) => {
-                        error!("{}", e);
+                        error!("{:?}", e);
                         continue;
                     }
                     Ok(r) => r,

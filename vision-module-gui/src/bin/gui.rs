@@ -182,7 +182,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui = UI::init().expect("Couldn't initialize UI library");
     let ui_ctx = ui.async_context();
 
-    let simulator_addr = std::env::args().nth(1);
+    let mut simulator_addr = None;
+    let mut udp_addr = None;
+    match &std::env::args().collect::<Vec<_>>()[1..] {
+        [flag, addr] if flag == "-u" => udp_addr = Some(addr.clone()),
+        [addr] => simulator_addr = Some(addr.clone()),
+        [] => (),
+        _ => panic!("Unrecognized arguments"),
+    }
     let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
@@ -207,6 +214,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut config_win, device_rs, accel_odr_memo) = config_window::config_window(
         &ui,
         simulator_addr,
+        udp_addr,
         mot_runner.c(),
         tokio_handle,
     );
