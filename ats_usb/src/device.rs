@@ -110,7 +110,15 @@ impl UsbDevice {
         let sock = UdpSocket::bind(local_addr).await?;
         sock.connect(device_addr).await?;
         sock.send(&[255, 1]).await?;
-        sock.recv(&mut []).await?;
+        match sock.recv(&mut []).await {
+            Ok(_) => {}
+            Err(e) => {
+                if e.raw_os_error() != Some(10040) {
+                    error!("Failed to receive response from device: {e}");
+                    return Err(e.into());
+                }
+            }
+        }
         let sock = sock.into_std()?;
         sock.set_nonblocking(false)?;
         sock.set_read_timeout(Some(Duration::from_millis(3000)))?;
