@@ -30,10 +30,7 @@ pub struct UsbDevice {
 struct State {
     // id 255 is reserved for requests that don't care for a response
     response_channels: Mutex<[ResponseChannel; 255]>,
-    mot_data_stream: AtomicBool,
-    impact_stream: AtomicBool,
-    combined_markers_stream: AtomicBool,
-    accel_stream: AtomicBool,
+    streams_active: StreamsActive,
 }
 
 /// A helper struct to deal with cancellation
@@ -50,6 +47,40 @@ impl Drop for ResponseSlot {
         if !self.finished {
             self.thread_state.response_channels.lock().unwrap()[usize::from(self.id)] = ResponseChannel::None;
         }
+    }
+}
+
+num_variants! {
+    // The order here is important because the discriminant is used to calculate the mask.
+    #[derive(Copy, Clone, Debug)]
+    pub enum StreamType {
+        MotData,
+        CombinedMarkers,
+        Accel,
+        Impact,
+    }
+}
+
+impl StreamType {
+    fn mask(self) -> u8 {
+        1 << (self as u8)
+    }
+}
+
+#[derive(Default, Debug)]
+struct StreamsActive([AtomicBool; StreamType::num_variants()]);
+
+impl std::ops::Index<StreamType> for StreamsActive {
+    type Output = AtomicBool;
+
+    fn index(&self, index: StreamType) -> &Self::Output {
+        &self.0[index as usize]
+    }
+}
+
+impl std::ops::IndexMut<StreamType> for StreamsActive {
+    fn index_mut(&mut self, index: StreamType) -> &mut Self::Output {
+        &mut self.0[index as usize]
     }
 }
 
@@ -70,8 +101,6 @@ impl UsbDevice {
         })?;
 
         read_port.set_read_timeout(Duration::from_millis(10))?;
-        // why is this here
-        // read_port.set_write_timeout(Duration::from_millis(0))?;
 
         let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
@@ -136,10 +165,7 @@ impl UsbDevice {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
-            mot_data_stream: AtomicBool::new(false),
-            impact_stream: AtomicBool::new(false),
-            combined_markers_stream: AtomicBool::new(false),
-            accel_stream: AtomicBool::new(false),
+            streams_active: StreamsActive::default(),
         });
         let thread_state = Arc::clone(&state);
 
@@ -346,48 +372,39 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
-    pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
-        if self.thread_state.mot_data_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one mot data stream"));
+    pub async fn stream(&self, stream_type: StreamType) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
+        if self.thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
+            return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
         }
         let (slot, receiver) = self.get_stream_slot(6);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0001, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
-            x.object_report().unwrap()
-        }))
+        self.to_thread.send(Packet {
+            id: slot.id,
+            data: PacketData::StreamUpdate(StreamUpdate {
+                mask: stream_type.mask(),
+                active: true
+            })
+        }).await?;
+        Ok(PacketStream {
+            slot,
+            receiver: ReceiverStream::new(receiver),
+            stream_type,
+        })
+    }
+
+    pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
+        Ok(self.stream(StreamType::MotData).await?.map(|x| x.object_report().unwrap()))
     }
 
     pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
-        if self.thread_state.combined_markers_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one aim stream"));
-        }
-        let (slot, receiver) = self.get_stream_slot(6);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0010, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
-            x.combined_markers_report().unwrap()
-        }))
+        Ok(self.stream(StreamType::CombinedMarkers).await?.map(|x| x.combined_markers_report().unwrap()))
     }
 
     pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
-        if self.thread_state.accel_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one accel stream"));
-        }
-        let (slot, receiver) = self.get_stream_slot(6);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
-            x.accel_report().unwrap()
-        }))
+        Ok(self.stream(StreamType::Accel).await?.map(|x| x.accel_report().unwrap()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
-        if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one impact stream"));
-        }
-        let (slot, receiver) = self.get_stream_slot(6);
-        self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1000, active: true }) }).await?;
-        Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 3 }.map(|_| {
-            ()
-        }))
+        Ok(self.stream(StreamType::Impact).await?.map(|_| ()))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
@@ -456,7 +473,7 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
 
 #[pin_project(PinnedDrop)]
 pub struct PacketStream {
-    stream_type: u8,
+    stream_type: StreamType,
     slot: ResponseSlot,
     #[pin]
     receiver: ReceiverStream<PacketData>,
@@ -477,15 +494,7 @@ impl Stream for PacketStream {
 #[pinned_drop]
 impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
-        if self.stream_type == 0 {
-            self.slot.thread_state.mot_data_stream.store(false, Ordering::Relaxed);
-        } else if self.stream_type == 1 {
-            self.slot.thread_state.combined_markers_stream.store(false, Ordering::Relaxed);
-        } else if self.stream_type == 2 {
-            self.slot.thread_state.accel_stream.store(false, Ordering::Relaxed);
-        } else if self.stream_type == 3 {
-            self.slot.thread_state.impact_stream.store(false, Ordering::Relaxed);
-        }
+        self.slot.thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
     }
 }
 

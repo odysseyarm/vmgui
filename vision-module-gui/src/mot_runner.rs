@@ -108,11 +108,7 @@ pub struct MotRunner {
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
-    // doesn't work too lazy to figure out why
-    // let halt = Cell::new(false);
     tokio::join!(
-        // frame_loop(&halt, runner.clone()),
-        // impact_loop(&halt, runner.clone()),
         frame_loop(runner.clone()),
         combined_markers_loop(runner.clone()),
         accel_loop(runner.clone()),
