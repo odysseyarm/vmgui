@@ -387,6 +387,7 @@ impl UsbDevice {
         Ok(PacketStream {
             slot,
             receiver: ReceiverStream::new(receiver),
+            to_thread: self.to_thread.clone(),
             stream_type,
         })
     }
@@ -475,6 +476,7 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
 pub struct PacketStream {
     stream_type: StreamType,
     slot: ResponseSlot,
+    to_thread: mpsc::Sender<Packet>,
     #[pin]
     receiver: ReceiverStream<PacketData>,
 }
@@ -495,6 +497,10 @@ impl Stream for PacketStream {
 impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
         self.slot.thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
+        self.to_thread.try_send(Packet {
+            id: 255,
+            data: PacketData::StreamUpdate(StreamUpdate { mask: self.stream_type.mask(), active: false }),
+        }).inspect_err(|e| warn!("Failed to stop stream: {e}"));
     }
 }
 
