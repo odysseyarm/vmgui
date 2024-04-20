@@ -350,7 +350,7 @@ impl UsbDevice {
         if self.thread_state.mot_data_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one mot data stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(2);
+        let (slot, receiver) = self.get_stream_slot(6);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0001, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 0 }.map(|x| {
             x.object_report().unwrap()
@@ -361,7 +361,7 @@ impl UsbDevice {
         if self.thread_state.combined_markers_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one aim stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(2);
+        let (slot, receiver) = self.get_stream_slot(6);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0010, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 1 }.map(|x| {
             x.combined_markers_report().unwrap()
@@ -372,7 +372,7 @@ impl UsbDevice {
         if self.thread_state.accel_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one accel stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(2);
+        let (slot, receiver) = self.get_stream_slot(6);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 2 }.map(|x| {
             x.accel_report().unwrap()
@@ -383,7 +383,7 @@ impl UsbDevice {
         if self.thread_state.impact_stream.swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one impact stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(2);
+        let (slot, receiver) = self.get_stream_slot(6);
         self.to_thread.send(Packet { id: slot.id, data: PacketData::StreamUpdate(StreamUpdate { mask: 0b1000, active: true }) }).await?;
         Ok(PacketStream { slot, receiver: ReceiverStream::new(receiver), stream_type: 3 }.map(|_| {
             ()
