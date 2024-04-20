@@ -19,7 +19,7 @@ pub enum PacketData {
     ObjectReport(ObjectReport),
     CombinedMarkersReport(CombinedMarkersReport),
     AccelReport(AccelReport),
-    ImpactReport,
+    ImpactReport(ImpactReport),
     StreamUpdate(StreamUpdate),
     FlashSettings,
 }
@@ -114,6 +114,7 @@ pub struct ObjectReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CombinedMarkersReport {
+    pub timestamp: u32,
     pub nf_points: [Point2<u16>; 16],
     pub wf_points: [Point2<u16>; 16],
     pub nf_radii: [u8; 16],
@@ -122,8 +123,14 @@ pub struct CombinedMarkersReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
+    pub timestamp: u32,
     pub accel: [f64; 3],
     pub gyro: [f64; 3],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ImpactReport {
+    pub timestamp: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -234,7 +241,7 @@ impl Packet {
             PacketData::ObjectReport(_) => PacketType::ObjectReport,
             PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
             PacketData::AccelReport(_) => PacketType::AccelReport,
-            PacketData::ImpactReport => PacketType::ImpactReport,
+            PacketData::ImpactReport(_) => PacketType::ImpactReport,
             PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
             PacketData::FlashSettings => PacketType::FlashSettings,
         }
@@ -264,7 +271,7 @@ impl Packet {
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
             PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
-            PacketType::ImpactReport => PacketData::ImpactReport,
+            PacketType::ImpactReport => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
             PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
             p => unimplemented!("{:?}", p),
@@ -291,7 +298,7 @@ impl Packet {
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
             PacketData::AccelReport(_) => 16,
-            PacketData::ImpactReport => 0,
+            PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
             PacketData::FlashSettings => 0,
         };
@@ -310,7 +317,7 @@ impl Packet {
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => unimplemented!(),
-            PacketData::ImpactReport => (),
+            PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::FlashSettings => (),
         }
@@ -492,12 +499,16 @@ impl ObjectReport {
 impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        if bytes.len() < 112 {
+        if bytes.len() < 116 {
             return Err(E::UnexpectedEof { packet_type: Some(PacketType::CombinedMarkersReport) });
         }
 
-        let data = &mut &bytes[..112];
-        *bytes = &bytes[112..];
+        let data = &mut &bytes[..116];
+        *bytes = &bytes[116..];
+
+        let timestamp = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        *data = &data[4..];
+
         let mut positions = [Point2::new(0, 0); 16*2];
         for i in 0..positions.len() {
             // x, y is 12 bits each
@@ -524,11 +535,14 @@ impl CombinedMarkersReport {
         let nf_radii = radii[..16].try_into().unwrap();
         let wf_radii = radii[16..].try_into().unwrap();
 
-        Ok(Self { nf_points: nf_positions, wf_points: wf_positions, nf_radii, wf_radii })
+        Ok(Self { timestamp, nf_points: nf_positions, wf_points: wf_positions, nf_radii, wf_radii })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let before = buf.len();
+
+        buf.extend_from_slice(&self.timestamp.to_le_bytes());
+
         for p in self.nf_points.iter().chain(&self.wf_points) {
             let XY { x, y } = **p;
             let byte0 = x & 0xff;
@@ -548,7 +562,9 @@ impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
         // gyro: x, y, z, 16.4 = 1dps
-        let data = &mut &bytes[..12];
+        let data = &mut &bytes[..16];
+        let timestamp = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        *data = &data[4..];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
             let x = x as f64 / 16384.0;
@@ -561,8 +577,16 @@ impl AccelReport {
             *data = &data[2..];
             x
         });
-        *bytes = &bytes[12..];
-        Ok(Self { accel, gyro })
+        *bytes = &bytes[16..];
+        Ok(Self { timestamp, accel, gyro })
+    }
+}
+
+impl ImpactReport {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let timestamp = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        *bytes = &bytes[4..];
+        Ok(Self { timestamp })
     }
 }
 
