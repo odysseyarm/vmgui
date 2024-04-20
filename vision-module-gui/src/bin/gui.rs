@@ -423,7 +423,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let view = mot_runner.c();
         move |_| {
             let view = view.c();
-            view.lock().state.orientation = ahrs::Madgwick::new(1. / accel_odr_memo.get() as f64, 0.1);
+            let madgwick = &mut view.lock().state.orientation;
+            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_odr_memo.get() as f64, 0.1, madgwick.quat);
         }
     });
 
