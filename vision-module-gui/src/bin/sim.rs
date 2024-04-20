@@ -123,7 +123,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::FlashSettings => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
-            PacketData::ImpactReport => unreachable!(),
+            PacketData::ImpactReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
             PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, accel_odr: 100 })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
@@ -208,6 +208,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
+                    timestamp: 0,
                     nf_points: nf_positions,
                     wf_points: Default::default(),
                     nf_radii,
