@@ -333,7 +333,8 @@ impl GeneralSettingsForm {
     }
 
     async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
-        let config = device.read_config().await?;
+        let timeout = Duration::from_millis(100);
+        let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.accel_odr.set(config.accel_odr as i32);
@@ -508,20 +509,21 @@ impl SensorSettingsForm {
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let pid = device.product_id(self.port).await?;
-        let res_x = device.resolution_x(self.port).await?;
-        let res_y = device.resolution_y(self.port).await?;
-        let expo = device.exposure_time(self.port).await?;
-        let frame_period = device.frame_period(self.port).await?;
-        let brightness_threshold = device.brightness_threshold(self.port).await?;
-        let noise_threshold = device.noise_threshold(self.port).await?;
-        let area_threshold_min = device.area_threshold_min(self.port).await?;
+        let timeout = Duration::from_millis(100);
+        let pid = retry(|| device.product_id(self.port), timeout, 3).await.unwrap()?;
+        let res_x = retry(|| device.resolution_x(self.port), timeout, 3).await.unwrap()?;
+        let res_y = retry(|| device.resolution_y(self.port), timeout, 3).await.unwrap()?;
+        let expo = retry(|| device.exposure_time(self.port), timeout, 3).await.unwrap()?;
+        let frame_period = retry(|| device.frame_period(self.port), timeout, 3).await.unwrap()?;
+        let brightness_threshold = retry(|| device.brightness_threshold(self.port), timeout, 3).await.unwrap()?;
+        let noise_threshold = retry(|| device.noise_threshold(self.port), timeout, 3).await.unwrap()?;
+        let area_threshold_min = retry(|| device.area_threshold_min(self.port), timeout, 3).await.unwrap()?;
         let area_threshold_max = device.area_threshold_max(self.port).await?;
-        let max_object_cnt = device.max_object_cnt(self.port).await?;
-        let operation_mode = device.operation_mode(self.port).await?;
-        let frame_subtraction = device.frame_subtraction(self.port).await?;
-        let gain_1 = device.gain_1(self.port).await?;
-        let gain_2 = device.gain_2(self.port).await?;
+        let max_object_cnt = retry(|| device.max_object_cnt(self.port), timeout, 3).await.unwrap()?;
+        let operation_mode = retry(|| device.operation_mode(self.port), timeout, 3).await.unwrap()?;
+        let frame_subtraction = retry(|| device.frame_subtraction(self.port), timeout, 3).await.unwrap()?;
+        let gain_1 = retry(|| device.gain_1(self.port), timeout, 3).await.unwrap()?;
+        let gain_2 = retry(|| device.gain_2(self.port), timeout, 3).await.unwrap()?;
 
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
@@ -741,3 +743,18 @@ pub static GAIN_TABLE: [(&str, Gain); 16*3 + 1] = {
 //         value = (1 + i/16) * k
 //         print(f'    ("{value:.4f}", Gain::new(0x{i:02x}, 0x{j:02x})),')
 // ];
+
+/// Retry an asynchronous operation up to `limit` times.
+async fn retry<F, G>(mut op: F, timeout: Duration, limit: usize) -> Option<G::Output>
+where
+    F: FnMut() -> G,
+    G: std::future::Future,
+{
+    for _ in 0..limit {
+        match tokio::time::timeout(timeout, op()).await {
+            Ok(r) => return Some(r),
+            Err(_) => (),
+        }
+    }
+    None
+}
