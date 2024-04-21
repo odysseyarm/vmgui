@@ -109,14 +109,13 @@ pub struct MotRunner {
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     tokio::join!(
-        frame_loop(runner.clone()),
         combined_markers_loop(runner.clone()),
         accel_loop(runner.clone()),
         impact_loop(runner.clone()),
     );
 }
 
-async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
+pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut mot_data_stream = device.stream_mot_data().await.unwrap();
     loop {

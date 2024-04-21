@@ -410,6 +410,26 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    // Start/stop the raw frame loop task as needed
+    create_effect({
+        let mot_runner = mot_runner.c();
+        move |abort_handle: Option<Option<AbortHandle>>| {
+            if tracking_raw.get() {
+                if let Some(Some(abort_handle)) = abort_handle {
+                    // The mot_runner task is already running
+                    Some(abort_handle)
+                } else {
+                    Some(tokio::spawn(vision_module_gui::mot_runner::frame_loop(mot_runner.c())).abort_handle())
+                }
+            } else {
+                if let Some(Some(abort_handle)) = abort_handle {
+                    abort_handle.abort();
+                }
+                None
+            }
+        }
+    });
+
     // Keep the mot_runner device in sync with the selected device from the config window
     create_effect({
         let view = mot_runner.c();
