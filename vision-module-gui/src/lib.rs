@@ -55,10 +55,72 @@ pub struct MotState {
 
     pub camera_model_nf: RosOpenCvIntrinsics<f64>,
     pub camera_model_wf: RosOpenCvIntrinsics<f64>,
+    pub camera_model_stereo: RosOpenCvIntrinsics<f64>,
 }
 
 impl Default for MotState {
     fn default() -> Self {
+        let nf_default_yaml = b"
+            %YAML:1.0
+            ---
+            camera_matrix: !!opencv-matrix
+            rows: 3
+            cols: 3
+            dt: d
+            data: [ 151.36955641854573, 0., 46.374189382434295, 0.,
+                151.67240449552887, 45.515931664067992, 0., 0., 1. ]
+            dist_coeffs: !!opencv-matrix
+            rows: 1
+            cols: 5
+            dt: d
+            data: [ 0.18209478476909499, -5.6187772186705915,
+                -0.0046771981466741282, -0.0091880927925765497,
+                34.923550986754449 ]
+            rms_error: 0.13243574013156023
+            num_captures: 25
+        ";
+
+        let wf_default_yaml = b"
+            %YAML:1.0
+            ---
+            camera_matrix: !!opencv-matrix
+            rows: 3
+            cols: 3
+            dt: d
+            data: [ 34.128736955254823, 0., 47.862507458039438, 0.,
+                34.150205588747298, 49.921544503385206, 0., 0., 1. ]
+            dist_coeffs: !!opencv-matrix
+            rows: 1
+            cols: 5
+            dt: d
+            data: [ 0.020886129364872441, -0.021671002882625662,
+                0.0047637101829026418, -0.0040207558255908873,
+                0.0021400959520238745 ]
+            rms_error: 0.22294102186428852
+            num_captures: 38
+        ";
+
+        let stereo_default_yaml = b"
+            %YAML:1.0
+            ---
+            r: !!opencv-matrix
+            rows: 3
+            cols: 3
+            dt: d
+            data: [ 0.99997813502228272, -0.0045152181240831236,
+                -0.0048313851687950505, 0.0043339510700983117,
+                0.99930981448611589, -0.036893245179121563, 0.0049946316660285572,
+                0.036871499522215447, 0.99930753333371003 ]
+            t: !!opencv-matrix
+            rows: 3
+            cols: 1
+            dt: d
+            data: [ 0.027827639169328636, -0.61376953427966641,
+                0.68626318075117543 ]
+            rms_error: 0.18646313875884704
+            num_captures: 47
+        ";
+
         Self {
             fv_aim_point: None,
             nf_aim_point: None,
@@ -71,34 +133,9 @@ impl Default for MotState {
             orientation: Madgwick::new(1./800., 0.1),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
-            camera_model_nf: RosOpenCvIntrinsics::from_params_with_distortion(
-                6070.516352962917,     // fx 
-                0.0,
-                6081.704092101642,     // fy 
-                2012.5340172306787,    // cx 
-                2053.6576652187186,    // cy 
-                Distortion::from_opencv_vec(nalgebra::Vector5::new(
-                    -0.08717430574570494,  // k1 
-                    0.5130932472490415,    // k2 
-                    0.0050450411569348645, // p1 
-                    0.001854950091801636,  // p2 
-                    0.048480928208383456,  // k3 
-                )),
-            ),
-            camera_model_wf: RosOpenCvIntrinsics::from_params_with_distortion(
-                1404.8062660899243,    // fx 
-                0.0,
-                1410.4027244280476,    // fy 
-                2005.7344146664623,    // cx 
-                2183.296028581406,     // cy 
-                Distortion::from_opencv_vec(nalgebra::Vector5::new(
-                    0.03580102538774698,   // k1
-                    -0.035135117459232,    // k2
-                    -0.0003794652252171486,// p1
-                    -0.0009616308141127135,// p2
-                    0.004173283533065006,  // k3
-                )),
-            ),
+            camera_model_nf: ats_cv::get_intrinsics_from_opencv_yaml(&nf_default_yaml[..]).unwrap(),
+            camera_model_wf: ats_cv::get_intrinsics_from_opencv_yaml(&wf_default_yaml[..]).unwrap(),
+            camera_model_stereo: ats_cv::get_intrinsics_from_opencv_yaml(&stereo_default_yaml[..]).unwrap(),
             nf_points: Default::default(),
             wf_points: Default::default(),
             nf_radii: Default::default(),
