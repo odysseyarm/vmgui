@@ -1,6 +1,6 @@
 use ahrs::Madgwick;
 use arrayvec::ArrayVec;
-use nalgebra::{Matrix3x1, Point2, SMatrix, Matrix3};
+use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2, SMatrix};
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 use serde::Serialize;
@@ -55,7 +55,7 @@ pub struct MotState {
 
     pub camera_model_nf: RosOpenCvIntrinsics<f64>,
     pub camera_model_wf: RosOpenCvIntrinsics<f64>,
-    pub camera_model_stereo: RosOpenCvIntrinsics<f64>,
+    pub stereo_iso: Isometry3<f64>,
 }
 
 impl Default for MotState {
@@ -127,9 +127,9 @@ impl Default for MotState {
             orientation: Madgwick::new(1./800., 0.1),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
-            camera_model_nf: ats_cv::get_intrinsics_from_opencv_yaml(&nf_default_yaml[..]).unwrap(),
-            camera_model_wf: ats_cv::get_intrinsics_from_opencv_yaml(&wf_default_yaml[..]).unwrap(),
-            camera_model_stereo: ats_cv::get_intrinsics_from_opencv_yaml(&stereo_default_yaml[..]).unwrap(),
+            camera_model_nf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&nf_default_yaml[..]).unwrap(),
+            camera_model_wf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&wf_default_yaml[..]).unwrap(),
+            stereo_iso: ats_cv::get_isometry_from_opencv_stereo_calibration_yaml(&stereo_default_yaml[..]).unwrap(),
             nf_points: Default::default(),
             wf_points: Default::default(),
             nf_radii: Default::default(),
