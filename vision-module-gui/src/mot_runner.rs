@@ -217,7 +217,6 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             // state.wf_aim_point = wf_aim_point;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
-            // todo state.gravity_angle = mot_data.gravity_angle as f64;
         }
         sleep(Duration::from_millis(5)).await;
     }
@@ -286,10 +285,27 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
+            let gravity: Vector3<f64> = runner.state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();
+            let gravity_angle = -gravity.x.atan2(gravity.z);
+
+            let rotated_wf = ats_cv::mot_rotate(&wf_points, -gravity_angle);
+            match ats_cv::calculate_screen_id(&rotated_wf) {
+                Some(id) => {
+                    runner.state.screen_id = id;
+                },
+                None => {},
+            }
+            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points, &wf_points, gravity_angle, runner.state.screen_id);
+            if let Some(rotation) = rotation {
+                runner.state.rotation_mat = rotation;
+            }
+            if let Some(translation) = translation {
+                runner.state.translation_mat = translation;
+            }
+
             let nf_aim_point = if nf_points.len() > 3 {
                 let mut nf_positions = nf_points.clone();
                 sort_points(&mut nf_positions, MarkerPattern::Rectangle);
-                let center_aim = Point2::new(2048.0, 2048.0);
                 let projections = nf_positions.iter().map(|pos| {
                     // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
                     let f = 5896.181431117499;
@@ -338,6 +354,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             } else {
                 None
             };
+
             let wf_aim_point = if wf_points.len() > 3 {
                 let mut wf_positions = wf_points.clone();
                 sort_points(&mut wf_positions, MarkerPattern::Rectangle);
@@ -399,6 +416,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.wf_points = wf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
             runner.state.nf_aim_point = nf_aim_point;
             runner.state.wf_aim_point = wf_aim_point;
+            runner.state.fv_aim_point = fv_aim_point;
         }
     }
 }
