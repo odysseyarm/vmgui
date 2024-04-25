@@ -245,9 +245,15 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let wf_points = wf_points.into_iter().zip(wf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
             let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
 
-            let mut nf_points = ats_cv::undistort_points(&runner.state.camera_model_nf, &nf_points);
+            // todo this is awful
+            let nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x / 4095. * 98., pos.y / 4095. * 98.)).collect::<Vec<_>>();
+            let nf_points = ats_cv::undistort_points(&runner.state.camera_model_nf, &nf_points);
+            let mut nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x / 98. * 4095., pos.y / 98. * 4095.)).collect::<Vec<_>>();
 
-            let mut wf_points = ats_cv::undistort_points(&runner.state.camera_model_wf, &wf_points);
+            // todo this is awful
+            let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x / 4095. * 98., pos.y / 4095. * 98.)).collect::<Vec<_>>();
+            let wf_points = ats_cv::undistort_points(&runner.state.camera_model_wf, &wf_points);
+            let mut wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x / 98. * 4095., pos.y / 98. * 4095.)).collect::<Vec<_>>();
 
             if nf_points.len() > 3 {
                 let state = &mut runner.state;
