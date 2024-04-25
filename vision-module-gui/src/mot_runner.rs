@@ -245,25 +245,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let wf_points = wf_points.into_iter().zip(wf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
             let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
 
-            let x_mat = MatrixXx1::from_column_slice(&nf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
-            let y_mat = MatrixXx1::from_column_slice(&nf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
-            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
-            let distorted = cam_geom::Pixels::new(points);
-            let undistorted = runner.state.camera_model_nf.undistort(&distorted);
+            let mut nf_points = ats_cv::undistort_points(&runner.state.camera_model_nf, &nf_points);
 
-            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
-            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
-            let mut nf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
-
-            let x_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.x as f64).collect::<Vec<_>>());
-            let y_mat = MatrixXx1::from_column_slice(&wf_points.iter().map(|p| p.y as f64).collect::<Vec<_>>());
-            let points = MatrixXx2::from_columns(&[x_mat, y_mat]);
-            let distorted = cam_geom::Pixels::new(points);
-            let undistorted = runner.state.camera_model_wf.undistort(&distorted);
-
-            let x_vec = undistorted.data.as_slice()[..undistorted.data.len() / 2].to_vec();
-            let y_vec = undistorted.data.as_slice()[undistorted.data.len() / 2..].to_vec();
-            let mut wf_points = x_vec.into_iter().zip(y_vec).map(|(x, y)| Point2::new(x, y)).collect::<Vec<_>>();
+            let mut wf_points = ats_cv::undistort_points(&runner.state.camera_model_wf, &wf_points);
 
             if nf_points.len() > 3 {
                 let state = &mut runner.state;
