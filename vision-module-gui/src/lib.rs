@@ -61,8 +61,6 @@ pub struct MotState {
 impl Default for MotState {
     fn default() -> Self {
         let nf_default_yaml = b"
-            %YAML:1.0
-            ---
             camera_matrix: !!opencv-matrix
             rows: 3
             cols: 3
@@ -81,8 +79,6 @@ impl Default for MotState {
         ";
 
         let wf_default_yaml = b"
-            %YAML:1.0
-            ---
             camera_matrix: !!opencv-matrix
             rows: 3
             cols: 3
@@ -101,8 +97,6 @@ impl Default for MotState {
         ";
 
         let stereo_default_yaml = b"
-            %YAML:1.0
-            ---
             r: !!opencv-matrix
             rows: 3
             cols: 3
