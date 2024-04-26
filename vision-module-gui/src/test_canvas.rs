@@ -82,23 +82,23 @@ impl AreaHandler for TestCanvas {
         }
         nf_grid_path.end(ctx);
 
-        // let stroke = StrokeParams {
-        //     cap: 0, // Bevel
-        //     join: 0, // Flat
-        //     thickness: 10.,
-        //     miter_limit: 0.,
-        //     dashes: vec![],
-        //     dash_phase: 0.,
-        // };
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 10.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
 
-        // let brush = Brush::Solid(SolidBrush {
-        //     r: 0.,
-        //     g: 1.,
-        //     b: 0.,
-        //     a: 1.,
-        // });
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.,
+            g: 1.,
+            b: 0.,
+            a: 1.,
+        });
 
-        // ctx.stroke(&fv_ch_path, &brush, &stroke);
+        ctx.stroke(&fv_ch_path, &brush, &stroke);
 
         let stroke = StrokeParams {
             cap: 0, // Bevel
