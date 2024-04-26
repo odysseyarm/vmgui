@@ -8,7 +8,7 @@ use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Const, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
+use nalgebra::{Const, Isometry3, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -269,11 +269,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aim_point = Some(fv_aim_point);
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle) {
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle, None) {
                 runner.state.nf_aim_point = Some(x);
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle) {
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle, Some(&runner.state.stereo_iso)) {
                 runner.state.wf_aim_point = Some(x);
             }
 
@@ -283,7 +283,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64) -> Option<Point2<f64>> {
+fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, iso: Option<&Isometry3<f64>>) -> Option<Point2<f64>> {
     if points.len() > 3 {
         let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
         sort_points(&mut rotated_points, MarkerPattern::Rectangle);
@@ -319,12 +319,21 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64) ->
                 0.0, 0.0, -1.0,
             );
 
-            let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
-            let translation_mat = flip_yz * ctf.translation.vector;
+            if let Some(iso) = iso {
+                let rotation_mat = flip_yz * (iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz;
+                let translation_mat = flip_yz * ctf.translation.vector;
 
-            let screen_3dpoints = ats_cv::calculate_screen_3dpoints(1., 16./9.);
+                let screen_3dpoints = ats_cv::calculate_screen_3dpoints(1., 16./9.);
 
-            return ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(&rotation_mat, &translation_mat, &screen_3dpoints);
+                return ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(&rotation_mat, &translation_mat, &screen_3dpoints);
+            } else {
+                let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                let translation_mat = flip_yz * ctf.translation.vector;
+
+                let screen_3dpoints = ats_cv::calculate_screen_3dpoints(1., 16./9.);
+
+                return ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(&rotation_mat, &translation_mat, &screen_3dpoints);
+            }
         }
     }
     None
