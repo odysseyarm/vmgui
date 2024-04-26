@@ -34,16 +34,15 @@ impl AreaHandler for TestCanvas {
             a: 1.,
         }));
 
-        // todo foveated is not ready
-        // let fv_ch_path = Path::new(ctx, FillMode::Winding);
+        let fv_ch_path = Path::new(ctx, FillMode::Winding);
         let nf_ch_path = Path::new(ctx, FillMode::Winding);
         let wf_ch_path = Path::new(ctx, FillMode::Winding);
         let runner = self.runner.lock();
         let state = &runner.state;
-        // if let Some(aim_point) = state.fv_aim_point {
-        //     draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
-        // }
-        // fv_ch_path.end(ctx);
+        if let Some(aim_point) = state.fv_aim_point {
+            draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
+        }
+        fv_ch_path.end(ctx);
         ctx.draw_text(
             20.0,
             20.0,
