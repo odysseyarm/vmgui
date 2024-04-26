@@ -285,7 +285,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 },
                 None => {},
             }
-            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points, &wf_points, gravity_angle, runner.state.screen_id);
+            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points, &wf_points, gravity_angle, runner.state.screen_id, runner.state.stereo_iso);
             if let Some(rotation) = rotation {
                 runner.state.rotation_mat = rotation;
             }
