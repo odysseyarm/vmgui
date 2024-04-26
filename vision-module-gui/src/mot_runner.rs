@@ -381,7 +381,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     let rotation_mat = flip_yz * (runner.state.stereo_iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz;
 
                     // iso translation requires knowing the markers physical distance apart in world space
-                    // let translation_mat = flip_yz * (ctf.translation + runner.state.stereo_iso.translation * square_size_in_world_space).vector;
+                    // let translation_mat = flip_yz * (ctf.translation.vector + runner.state.stereo_iso.translation.vector*square_size_in_world_space);
                     let translation_mat = flip_yz * ctf.translation.vector;
 
                     let screen_3dpoints = [
