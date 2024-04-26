@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use opencv_ros_camera::RosOpenCvIntrinsics;
+use ats_cv::kalman::Pva2d;
+use opencv_ros_camera::{NamedIntrinsicParameters, RosOpenCvIntrinsics};
 use parking_lot::Mutex;
 use std::time::Duration;
 use ahrs::Ahrs;
@@ -222,210 +223,128 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn ray_plane_intersection(ray_origin: Vector3<f64>, ray_direction: Vector3<f64>, plane_normal: Vector3<f64>, plane_point: Vector3<f64>) -> Vector3<f64> {
-    let d = plane_normal.dot(&plane_point);
-    let t = (d - plane_normal.dot(&ray_origin)) / plane_normal.dot(&ray_direction);
-    ray_origin + t * ray_direction
-}
-
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
+
     while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
             let CombinedMarkersReport { timestamp, nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
             debug!("timestamp: {}", timestamp);
 
             let mut runner = runner.lock();
-            debug!("nf_positions: {:?}, wf_positions: {:?}, nf_radii: {:?}, wf_radii: {:?}", nf_points, wf_points, nf_radii, wf_radii);
+            let filtered_nf_points = filter_and_convert_points(&nf_points, &nf_radii);
+            let filtered_wf_points = filter_and_convert_points(&wf_points, &wf_radii);
 
-            let nf_points = nf_points.into_iter().zip(nf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
-            let nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
+            let mut nf_points_transformed = transform_points(&filtered_nf_points, &runner.state.camera_model_nf);
+            let mut wf_points_transformed = transform_points(&filtered_wf_points, &runner.state.camera_model_wf);
 
-            let wf_points = wf_points.into_iter().zip(wf_radii.into_iter()).filter_map(|(pos, r)| if r > 0 { Some(pos) } else { None }).collect::<Vec<_>>();
-            let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x as f64, pos.y as f64)).collect::<Vec<_>>();
-
-            // todo this is awful
-            let nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x / 4095. * 98., pos.y / 4095. * 98.)).collect::<Vec<_>>();
-            let nf_points = ats_cv::undistort_points(&runner.state.camera_model_nf, &nf_points);
-            let mut nf_points = nf_points.into_iter().map(|pos| Point2::new(pos.x / 98. * 4095., pos.y / 98. * 4095.)).collect::<Vec<_>>();
-
-            // todo this is awful
-            let wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x / 4095. * 98., pos.y / 4095. * 98.)).collect::<Vec<_>>();
-            let wf_points = ats_cv::undistort_points(&runner.state.camera_model_wf, &wf_points);
-            let mut wf_points = wf_points.into_iter().map(|pos| Point2::new(pos.x / 98. * 4095., pos.y / 98. * 4095.)).collect::<Vec<_>>();
-
-            if nf_points.len() > 3 {
-                let state = &mut runner.state;
-                for (i, pva2d) in state.nf_pva2ds.iter_mut().enumerate() {
+            fn update_positions(pva2ds: &mut [Pva2d<f64>], points: &mut [Point2<f64>]) {
+                for (i, pva2d) in pva2ds.iter_mut().enumerate() {
                     pva2d.step();
-                    pva2d.observe(nf_points[i].coords.as_ref(), &[100.0, 100.0]);
-                    nf_points[i].x = pva2d.position()[0];
-                    nf_points[i].y = pva2d.position()[1];
+                    pva2d.observe(points[i].coords.as_ref(), &[100.0, 100.0]);
+                    points[i].x = pva2d.position()[0];
+                    points[i].y = pva2d.position()[1];
                 }
             }
 
-            if wf_points.len() > 3 {
-                let state = &mut runner.state;
-                for (i, pva2d) in state.wf_pva2ds.iter_mut().enumerate() {
-                    pva2d.step();
-                    pva2d.observe(wf_points[i].coords.as_ref(), &[100.0, 100.0]);
-                    wf_points[i].x = pva2d.position()[0];
-                    wf_points[i].y = pva2d.position()[1];
-                }
+            if nf_points_transformed.len() > 3 {
+                update_positions(&mut runner.state.nf_pva2ds, &mut nf_points_transformed);
             }
 
-            let gravity: Vector3<f64> = runner.state.orientation.quat.inverse_transform_vector(&Vector3::z()).into();
-            let gravity_angle = -gravity.x.atan2(gravity.z);
-
-            let rotated_wf = ats_cv::mot_rotate(&wf_points, -gravity_angle);
-            match ats_cv::calculate_screen_id(&rotated_wf) {
-                Some(id) => {
-                    runner.state.screen_id = id;
-                },
-                None => {},
+            if wf_points_transformed.len() > 3 {
+                update_positions(&mut runner.state.wf_pva2ds, &mut wf_points_transformed);
             }
-            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points, &wf_points, gravity_angle, runner.state.screen_id, runner.state.stereo_iso);
+
+            let gravity_angle = calculate_gravity_angle(&runner.state.orientation);
+
+            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points_transformed, &wf_points_transformed, gravity_angle, runner.state.screen_id, runner.state.stereo_iso);
             if let Some(rotation) = rotation {
                 runner.state.rotation_mat = rotation;
             }
             if let Some(translation) = translation {
                 runner.state.translation_mat = translation;
             }
+            if let Some(fv_aim_point) = fv_aim_point {
+                runner.state.fv_aim_point = Some(fv_aim_point);
+            }
 
-            let nf_aim_point = if nf_points.len() > 3 {
-                let mut nf_positions = nf_points.clone();
-                let mut nf_rotated = ats_cv::mot_rotate(&nf_positions, -gravity_angle);
-                sort_points(&mut nf_rotated, MarkerPattern::Rectangle);
-                // todo rotating back is bad, select with slice instead
-                nf_positions = ats_cv::mot_rotate(&nf_rotated, gravity_angle);
-                let projections = nf_positions.iter().map(|pos| {
-                    // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
-                    let f = 5896.181431117499;
-                    let x = (pos.x - 2047.5) / f;
-                    let y = (pos.y - 2047.5) / f;
-                    Vector2::new(x, y)
-                }).collect::<Vec<Vector2<_>>>();
-                let solution = my_pnp(&projections);
-                if let Some(solution) = solution {
-                    let r_hat = Rotation3::from_matrix_unchecked(solution.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
-                    let t = Translation3::from(solution.t);
-                    let tf = t * r_hat;
-                    let ctf = tf.inverse();
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle) {
+                runner.state.nf_aim_point = Some(x);
+            }
 
-                    let flip_yz = Matrix3::new(
-                        1., 0., 0.,
-                        0., -1., 0.,
-                        0., 0., -1.,
-                    );
-                    let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
-                    let translation_mat = flip_yz * ctf.translation.vector;
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle) {
+                runner.state.wf_aim_point = Some(x);
+            }
 
-                    let screen_3dpoints = [
-                        Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
-                        Vector3::new((1.0 - 0.5) * 16./9., -0.5, 0.),
-                        Vector3::new((1.0 - 0.5) * 16./9., 0.5, 0.),
-                        Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
-                    ];
-
-                    let ray_origin = translation_mat;
-                    let ray_direction = rotation_mat * Vector3::new(0., 0., 1.);
-                    let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
-                    let plane_point = screen_3dpoints[0];
-                    let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
-
-                    let u = screen_3dpoints[1] - screen_3dpoints[0];
-                    let v = screen_3dpoints[3] - screen_3dpoints[0];
-                    let d = aim_point - screen_3dpoints[0];
-
-                    let s = d.dot(&u) / u.dot(&u);
-                    let t = d.dot(&v) / v.dot(&v);
-
-                    let aim_point = Point2::new(s, t);
-
-                    let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
-
-                    Some(aim_point)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            let wf_aim_point = if wf_points.len() > 3 {
-                let mut wf_positions = wf_points.clone();
-                let mut wf_rotated = ats_cv::mot_rotate(&wf_positions, -gravity_angle);
-                sort_points(&mut wf_rotated, MarkerPattern::Rectangle);
-                // todo rotating back is bad, select with slice instead
-                wf_positions = ats_cv::mot_rotate(&wf_rotated, gravity_angle);
-                let projections = wf_positions.iter().map(|pos| {
-                    // 1/math.tan(111.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
-                    let f = 1399.329592256857;
-                    let x = (pos.x - 2047.5) / f;
-                    let y = (pos.y - 2047.5) / f;
-                    Vector2::new(x, y)
-                }).collect::<Vec<Vector2<_>>>();
-                let solution = my_pnp(&projections);
-                if let Some(solution) = solution {
-                    let r_hat = Rotation3::from_matrix_unchecked(solution.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
-                    let t = Translation3::from(solution.t);
-                    let tf = t * r_hat;
-                    let ctf = tf.inverse();
-
-                    let flip_yz = Matrix3::new(
-                        1., 0., 0.,
-                        0., -1., 0.,
-                        0., 0., -1.,
-                    );
-                    let rotation_mat = flip_yz * (runner.state.stereo_iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz;
-
-                    // iso translation requires knowing the markers physical distance apart in world space
-                    // let translation_mat = flip_yz * (ctf.translation.vector + runner.state.stereo_iso.translation.vector*square_size_in_world_space);
-                    let translation_mat = flip_yz * ctf.translation.vector;
-
-                    let screen_3dpoints = [
-                        Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
-                        Vector3::new((1.0 - 0.5) * 16./9., -0.5, 0.),
-                        Vector3::new((1.0 - 0.5) * 16./9., 0.5, 0.),
-                        Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
-                    ];
-
-                    let ray_origin = translation_mat;
-                    let ray_direction = rotation_mat * Vector3::new(0., 0., 1.);
-                    let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
-                    let plane_point = screen_3dpoints[0];
-                    let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
-
-                    let u = screen_3dpoints[1] - screen_3dpoints[0];
-                    let v = screen_3dpoints[3] - screen_3dpoints[0];
-                    let d = aim_point - screen_3dpoints[0];
-
-                    let s = d.dot(&u) / u.dot(&u);
-                    let t = d.dot(&v) / v.dot(&v);
-
-                    let aim_point = Point2::new(s, t);
-
-                    if nf_aim_point == None {
-                        runner.state.translation_mat = translation_mat;
-                        runner.state.rotation_mat = rotation_mat;
-                    }
-
-                    let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
-                    Some(aim_point)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            runner.state.nf_points = nf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
-            runner.state.wf_points = wf_points.into_iter().collect::<ArrayVec<Point2<f64>, 16>>();
-            runner.state.nf_aim_point = nf_aim_point;
-            runner.state.wf_aim_point = wf_aim_point;
-            runner.state.fv_aim_point = fv_aim_point;
+            runner.state.nf_points = nf_points_transformed.into_iter().collect();
+            runner.state.wf_points = wf_points_transformed.into_iter().collect();
         }
     }
+}
+
+fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64) -> Option<Point2<f64>> {
+    if points.len() > 3 {
+        let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
+        sort_points(&mut rotated_points, MarkerPattern::Rectangle);
+        // todo rotating back is bad, select with slice instead
+        let points = ats_cv::mot_rotate(&rotated_points, gravity_angle);
+
+        let projections = ats_cv::calculate_projections(
+            &points,
+            // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+            5896.181431117499,
+            Vector2::new(4095., 4095.),
+        );
+        let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
+            projections.as_slice(),
+            &[
+                Point2::new(0.35, 0.),
+                Point2::new(0.65, 0.),
+                Point2::new(0.65, 1.),
+                Point2::new(0.35, 1.),
+            ],
+            16./9.,
+            1.,
+        );
+        if let Some(sol) = solution {
+            let r_hat = Rotation3::from_matrix_unchecked(sol.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+            let t = Translation3::from(sol.t);
+            let tf = t * r_hat;
+            let ctf = tf.inverse();
+
+            let flip_yz = Matrix3::new(
+                1.0, 0.0, 0.0,
+                0.0, -1.0, 0.0,
+                0.0, 0.0, -1.0,
+            );
+
+            let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+            let translation_mat = flip_yz * ctf.translation.vector;
+
+            let screen_3dpoints = ats_cv::calculate_screen_3dpoints(1., 16./9.);
+
+            return ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(&rotation_mat, &translation_mat, &screen_3dpoints);
+        }
+    }
+    None
+}
+
+fn filter_and_convert_points(points: &[Point2<u16>], radii: &[u8]) -> Vec<Point2<f64>> {
+    points.iter().zip(radii.iter())
+          .filter_map(|(pos, &r)| if r > 0 { Some(Point2::new(pos.x as f64, pos.y as f64)) } else { None })
+          .collect()
+}
+
+fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f64>) -> Vec<Point2<f64>> {
+    let scaled_points = points.iter().map(|p| Point2::new(p.x / 4095. * 98., p.y / 4095. * 98.)).collect::<Vec<_>>();
+    let undistorted_points = ats_cv::undistort_points(camera_intrinsics, &scaled_points);
+    undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
+}
+
+fn calculate_gravity_angle(orientation: &ahrs::Madgwick<f64>) -> f64 {
+    let gravity: Vector3<f64> = orientation.quat.inverse_transform_vector(&Vector3::z()).into();
+    -gravity.x.atan2(gravity.z)
 }
 
 async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
