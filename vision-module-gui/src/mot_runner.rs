@@ -295,7 +295,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let nf_aim_point = if nf_points.len() > 3 {
                 let mut nf_positions = nf_points.clone();
-                sort_points(&mut nf_positions, MarkerPattern::Rectangle);
+                let mut nf_rotated = ats_cv::mot_rotate(&nf_positions, -gravity_angle);
+                sort_points(&mut nf_rotated, MarkerPattern::Rectangle);
+                // todo rotating back is bad, select with slice instead
+                nf_positions = ats_cv::mot_rotate(&nf_rotated, gravity_angle);
                 let projections = nf_positions.iter().map(|pos| {
                     // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
                     let f = 5896.181431117499;
@@ -331,12 +334,17 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     let plane_point = screen_3dpoints[0];
                     let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
 
-                    let aim_point = Point2::new(
-                        (aim_point.x - screen_3dpoints[0].x) / (screen_3dpoints[2].x - screen_3dpoints[0].x),
-                        (aim_point.y - screen_3dpoints[0].y) / (screen_3dpoints[2].y - screen_3dpoints[0].y),
-                    );
+                    let u = screen_3dpoints[1] - screen_3dpoints[0];
+                    let v = screen_3dpoints[3] - screen_3dpoints[0];
+                    let d = aim_point - screen_3dpoints[0];
+
+                    let s = d.dot(&u) / u.dot(&u);
+                    let t = d.dot(&v) / v.dot(&v);
+
+                    let aim_point = Point2::new(s, t);
 
                     let aim_point = Point2::new(aim_point.x, 1. - aim_point.y);
+
                     Some(aim_point)
                 } else {
                     None
@@ -347,8 +355,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let wf_aim_point = if wf_points.len() > 3 {
                 let mut wf_positions = wf_points.clone();
-                sort_points(&mut wf_positions, MarkerPattern::Rectangle);
-                let center_aim = Point2::new(2048.0, 2048.0);
+                let mut wf_rotated = ats_cv::mot_rotate(&wf_positions, -gravity_angle);
+                sort_points(&mut wf_rotated, MarkerPattern::Rectangle);
+                // todo rotating back is bad, select with slice instead
+                wf_positions = ats_cv::mot_rotate(&wf_rotated, gravity_angle);
                 let projections = wf_positions.iter().map(|pos| {
                     // 1/math.tan(111.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
                     let f = 1399.329592256857;
@@ -368,7 +378,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                         0., -1., 0.,
                         0., 0., -1.,
                     );
-                    let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                    let rotation_mat = flip_yz * (runner.state.stereo_iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz;
+
+                    // iso translation requires knowing the markers physical distance apart in world space
+                    // let translation_mat = flip_yz * (ctf.translation + runner.state.stereo_iso.translation * square_size_in_world_space).vector;
                     let translation_mat = flip_yz * ctf.translation.vector;
 
                     let screen_3dpoints = [
@@ -384,10 +397,14 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     let plane_point = screen_3dpoints[0];
                     let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
 
-                    let aim_point = Point2::new(
-                        (aim_point.x - screen_3dpoints[0].x) / (screen_3dpoints[2].x - screen_3dpoints[0].x),
-                        (aim_point.y - screen_3dpoints[0].y) / (screen_3dpoints[2].y - screen_3dpoints[0].y),
-                    );
+                    let u = screen_3dpoints[1] - screen_3dpoints[0];
+                    let v = screen_3dpoints[3] - screen_3dpoints[0];
+                    let d = aim_point - screen_3dpoints[0];
+
+                    let s = d.dot(&u) / u.dot(&u);
+                    let t = d.dot(&v) / v.dot(&v);
+
+                    let aim_point = Point2::new(s, t);
 
                     if nf_aim_point == None {
                         runner.state.translation_mat = translation_mat;
