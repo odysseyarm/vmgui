@@ -318,8 +318,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                         0., -1., 0.,
                         0., 0., -1.,
                     );
-                    runner.state.rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
-                    runner.state.translation_mat = flip_yz * ctf.translation.vector;
+                    let rotation_mat = flip_yz * ctf.rotation.matrix() * flip_yz;
+                    let translation_mat = flip_yz * ctf.translation.vector;
 
                     let screen_3dpoints = [
                         Vector3::new((0.0 - 0.5) * 16./9., -0.5, 0.),
@@ -328,8 +328,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                         Vector3::new((0.0 - 0.5) * 16./9., 0.5, 0.),
                     ];
 
-                    let ray_origin = runner.state.translation_mat;
-                    let ray_direction = runner.state.rotation_mat * Vector3::new(0., 0., 1.);
+                    let ray_origin = translation_mat;
+                    let ray_direction = rotation_mat * Vector3::new(0., 0., 1.);
                     let plane_normal = (screen_3dpoints[1] - screen_3dpoints[0]).cross(&(screen_3dpoints[2] - screen_3dpoints[0]));
                     let plane_point = screen_3dpoints[0];
                     let aim_point = ray_plane_intersection(ray_origin, ray_direction, plane_normal, plane_point);
