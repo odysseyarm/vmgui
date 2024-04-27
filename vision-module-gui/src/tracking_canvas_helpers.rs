@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
+use crate::custom_shapes::{self, draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
 use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, sort_points, MotRunner};
 use crate::MotState;
@@ -162,26 +162,9 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, d
             let down = mot_data.boundary_down as f64 / 98.;
             let right = mot_data.boundary_right as f64 / 98.;
             let up = mot_data.boundary_up as f64 / 98.;
-            let corner = Point2::new(left - 0.5, up - 0.5);
-            let w = right - left;
-            let h = down - up;
-            let a = gravity_rot * corner;
-            let horiz = gravity_rot * Vector2::x() * w;
-            let vert = gravity_rot * Vector2::y() * h;
-            let b = draw_tf * (a + horiz);
-            let c = draw_tf * (a + horiz + vert);
-            let d = draw_tf * (a + vert);
-            let a = draw_tf * a;
-
-            draw_crosshair(&ctx, &ch_path, p.x, p.y, 50.);
-
-            nf_path.new_figure(ctx, a.x, a.y);
-            nf_path.line_to(ctx, b.x, b.y);
-            nf_path.line_to(ctx, c.x, c.y);
-            nf_path.line_to(ctx, d.x, d.y);
-            nf_path.close_figure(ctx);
-
-            ctx.draw_text(p.x+20.0, p.y+20.0, format!("({}, {}) id={i}", mot_data.cx, mot_data.cy).as_str());
+            
+            custom_shapes::draw_rectangle(ctx, &nf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
+            custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", mot_data.cx, mot_data.cy, i));
         }
         ctx.draw_text(
             20.0,
@@ -240,24 +223,10 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, d
             let down = mot_data.boundary_down as f64 / 98.;
             let right = mot_data.boundary_right as f64 / 98.;
             let up = mot_data.boundary_up as f64 / 98.;
-            let corner = Point2::new(left - 0.5, up - 0.5);
-            let width = right - left;
-            let height = down - up;
-            let a = gravity_rot * corner;
-            let horiz = gravity_rot * Vector2::x() * width;
-            let vert = gravity_rot * Vector2::y() * height;
-            let b = draw_tf * (a + horiz);
-            let c = draw_tf * (a + horiz + vert);
-            let d = draw_tf * (a + vert);
-            let a = draw_tf * a;
+
+            custom_shapes::draw_rectangle(ctx, &wf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
 
             draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
-
-            wf_path.new_figure(ctx, a.x, a.y);
-            wf_path.line_to(ctx, b.x, b.y);
-            wf_path.line_to(ctx, c.x, c.y);
-            wf_path.line_to(ctx, d.x, d.y);
-            wf_path.close_figure(ctx);
         }
     }
     wf_path.end(ctx);

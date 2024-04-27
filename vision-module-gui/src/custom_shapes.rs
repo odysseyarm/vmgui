@@ -1,6 +1,6 @@
 use iui::draw;
 use iui::draw::Path;
-use nalgebra::{Point2, SMatrix, Transform2};
+use nalgebra::{Point2, Rotation2, SMatrix, Transform2, Vector2};
 
 pub fn draw_crosshair(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, r: f64) {
     path.new_figure(ctx, x-r, y);
@@ -58,5 +58,33 @@ pub fn draw_square(ctx: &draw::DrawContext, path: &Path, transform: Transform2<f
     path.line_to(ctx, p2.x, p2.y);
     path.line_to(ctx, p3.x, p3.y);
     path.line_to(ctx, p4.x, p4.y);
+    path.close_figure(ctx);
+}
+
+/// Draws a crosshair and associated text at a given position.
+pub fn draw_marker(ctx: &draw::DrawContext, path: &Path, position: Point2<f64>, label: &str) {
+    draw_crosshair(&ctx, path, position.x, position.y, 50.0);
+    ctx.draw_text(position.x + 20.0, position.y + 20.0, label);
+}
+
+/// Handles drawing a rectangle defined by boundaries and transforms.
+pub fn draw_rectangle(ctx: &draw::DrawContext, path: &Path, bounds: &[f64; 4], gravity_rot: &Rotation2<f64>, draw_tf: &Transform2<f64>) {
+    let corner = Point2::new(bounds[0] - 0.5, bounds[3] - 0.5);
+    let width = bounds[2] - bounds[0];
+    let height = bounds[1] - bounds[3];
+    let a = gravity_rot * corner;
+    let horiz = gravity_rot * Vector2::x() * width;
+    let vert = gravity_rot * Vector2::y() * height;
+    let points = [
+        draw_tf * a,
+        draw_tf * (a + horiz),
+        draw_tf * (a + horiz + vert),
+        draw_tf * (a + vert)
+    ];
+
+    path.new_figure(ctx, points[0].x, points[0].y);
+    for point in &points[1..] {
+        path.line_to(ctx, point.x, point.y);
+    }
     path.close_figure(ctx);
 }
