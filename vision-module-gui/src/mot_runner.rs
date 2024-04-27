@@ -259,6 +259,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let gravity_angle = calculate_gravity_angle(&runner.state.orientation);
 
+            // println!("gravity_angle: {}\nstereo_iso: {:?}\nwf_points_transformed: {:?}\nnf_points_transformed: {:?}",
+            //        gravity_angle, runner.state.stereo_iso, wf_points_transformed, nf_points_transformed);
+
             let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
                 &nf_points_transformed,
                 &wf_points_transformed,
