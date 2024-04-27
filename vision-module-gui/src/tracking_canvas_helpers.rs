@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{self, draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
+use crate::custom_shapes::{self, draw_crosshair, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square};
 use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, sort_points, MotRunner};
 use crate::MotState;
@@ -69,11 +69,18 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
         Translation2::new(awidth/2.0, aheight/2.0).to_homogeneous()
         * Scale2::new(draw_size, draw_size).to_homogeneous()
     );
+
+    ctx.draw_text(
+        20.0,
+        20.0,
+        &format!("screen_id = {}", state.screen_id),
+    );
+
     let gravity_rot = Rotation2::new(-gravity_angle);
     if raw {
-        draw_raw(ctx, state, draw_params, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
+        draw_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
     } else {
-        draw_not_raw(ctx, state, draw_params, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
+        draw_not_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
     }
 
     ch_path.end(ctx);
@@ -144,7 +151,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     ctx.stroke(&center_point_path, &brush, &stroke2);
 }
 
-fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
+fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
     if let Some(nf_data) = state.nf_data.as_ref() {
         let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
         for (i, mot_data) in nf_data.iter().enumerate() {
@@ -166,11 +173,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, d
             custom_shapes::draw_rectangle(ctx, &nf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
             custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", mot_data.cx, mot_data.cy, i));
         }
-        ctx.draw_text(
-            20.0,
-            20.0,
-            &format!("screen_id = {}", state.screen_id),
-        );
+
         if nf_points.len() >= 4 {
             let mut chosen = ats_cv::choose_rectangle_markers(&mut nf_points, state.screen_id, 300.);
             let points = match chosen.as_mut() {
@@ -198,23 +201,14 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, d
     }
     nf_path.end(ctx);
     nf_grid_path.end(ctx);
+
     if let Some(wf_data) = state.wf_data.as_ref() {
         for mot_data in wf_data {
             if mot_data.area == 0 {
                 break;
             }
 
-            let not_magic_x = state.camera_model_nf.p.m11 / state.camera_model_wf.p.m11;
-            let not_magic_y = state.camera_model_nf.p.m22 / state.camera_model_wf.p.m22;
-            let cx = state.camera_model_wf.p.m13;
-            let cy = state.camera_model_wf.p.m23;
-            let p = Point2::new(mot_data.cx as f64, mot_data.cy as f64);
-            // scale p by not_magic
-            let mut p = p - (Point2::new(cx, cy)*(4095./98.));
-            p.x *= not_magic_x;
-            p.y *= not_magic_y;
-            // todo don't use hardcoded 4095x4095 res assumption
-            let p = Point2::new(p.x + 2047.5, p.y + 2047.5) / 4095.
+            let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
                 - Vector2::new(0.5, 0.5);
             let p = gravity_rot * p;
             let p = draw_tf * p;
@@ -232,7 +226,30 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, d
     wf_path.end(ctx);
 }
 
-fn draw_not_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParams, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
+fn draw_not_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
+    for (i, point) in state.nf_points.iter().enumerate() {
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = point / 4095.
+            - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+
+        custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
+    }
+    nf_path.end(ctx);
+
+    let wf_to_nf_points = ats_cv::wf_to_nf_points(&state.wf_points, &state.camera_model_nf, &state.camera_model_wf, state.stereo_iso);
+    for p in wf_to_nf_points {
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = Point2::new(p.x + 2047.5, p.y + 2047.5) / 4095.
+            - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+
+        draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
+    }
+    wf_path.end(ctx);
+
     if state.nf_points.len() >= 4 {
         let mut points = state.nf_points.clone();
         let mut chosen = ats_cv::choose_rectangle_markers(&mut points, state.screen_id, 300.);
@@ -258,25 +275,5 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, draw_params: &AreaDrawParam
             draw_grid(ctx, &nf_grid_path, 10, 10, draw_tf.to_homogeneous() * Scale2::new(1./4095., 1./4095.).to_homogeneous() * transform);
         }
     }
-    nf_path.end(ctx);
     nf_grid_path.end(ctx);
-    for point in &state.wf_points {
-        let not_magic_x = state.camera_model_nf.p.m11 / state.camera_model_wf.p.m11;
-        let not_magic_y = state.camera_model_nf.p.m22 / state.camera_model_wf.p.m22;
-        let cx = state.camera_model_wf.p.m13;
-        let cy = state.camera_model_wf.p.m23;
-        let p = Point2::new(point.x, point.y);
-        // scale p by not_magic
-        let mut p = p - (Point2::new(cx, cy)*(4095./98.));
-        p.x *= not_magic_x;
-        p.y *= not_magic_y;
-        // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x + 2047.5, p.y + 2047.5) / 4095.
-            - Vector2::new(0.5, 0.5);
-        let p = gravity_rot * p;
-        let p = draw_tf * p;
-
-        draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
-    }
-    wf_path.end(ctx);
 }
