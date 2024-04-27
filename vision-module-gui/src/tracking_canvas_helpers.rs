@@ -239,9 +239,9 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, g
     nf_path.end(ctx);
 
     let wf_to_nf_points = ats_cv::wf_to_nf_points(&state.wf_points, &state.camera_model_nf, &state.camera_model_wf, state.stereo_iso);
-    for p in wf_to_nf_points {
+    for point in wf_to_nf_points {
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x + 2047.5, p.y + 2047.5) / 4095.
+        let p = point / 4095.
             - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
