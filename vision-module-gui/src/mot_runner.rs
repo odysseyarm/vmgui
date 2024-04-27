@@ -233,32 +233,41 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             debug!("timestamp: {}", timestamp);
 
             let mut runner = runner.lock();
-            let filtered_nf_points = filter_and_convert_points(&nf_points, &nf_radii);
-            let filtered_wf_points = filter_and_convert_points(&wf_points, &wf_radii);
+            let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_radii);
+            let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_radii);
 
-            let mut nf_points_transformed = transform_points(&filtered_nf_points, &runner.state.camera_model_nf);
-            let mut wf_points_transformed = transform_points(&filtered_wf_points, &runner.state.camera_model_wf);
+            let filtered_nf_points_slice = filtered_nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
+            let filtered_wf_points_slice = filtered_wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
 
-            fn update_positions(pva2ds: &mut [Pva2d<f64>], points: &mut [Point2<f64>]) {
-                for (i, pva2d) in pva2ds.iter_mut().enumerate() {
-                    pva2d.step();
-                    pva2d.observe(points[i].coords.as_ref(), &[100.0, 100.0]);
-                    points[i].x = pva2d.position()[0];
-                    points[i].y = pva2d.position()[1];
+            let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.state.camera_model_nf);
+            let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.state.camera_model_wf);
+
+            let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
+            let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
+
+            fn update_positions(pva2ds: &mut [Pva2d<f64>], points: Vec<(usize, &mut Point2<f64>)>) {
+                for (i, point) in points {
+                    pva2ds[i].step();
+                    pva2ds[i].observe(point.coords.as_ref(), &[100.0, 100.0]);
+                    point.x = pva2ds[i].position()[0];
+                    point.y = pva2ds[i].position()[1];
                 }
             }
 
-            if nf_points_transformed.len() > 3 {
-                update_positions(&mut runner.state.nf_pva2ds, &mut nf_points_transformed);
-            }
-
-            if wf_points_transformed.len() > 3 {
-                update_positions(&mut runner.state.wf_pva2ds, &mut wf_points_transformed);
-            }
+            update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
+            update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
             let gravity_angle = calculate_gravity_angle(&runner.state.orientation);
 
-            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(&nf_points_transformed, &wf_points_transformed, gravity_angle, runner.state.screen_id, runner.state.stereo_iso);
+            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
+                &nf_points_transformed,
+                &wf_points_transformed,
+                gravity_angle,
+                runner.state.screen_id,
+                &runner.state.camera_model_nf,
+                &runner.state.camera_model_wf,
+                runner.state.stereo_iso
+            );
             if let Some(rotation) = rotation {
                 runner.state.rotation_mat = rotation;
             }
@@ -269,11 +278,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aim_point = Some(fv_aim_point);
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle, None) {
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle, None, &runner.state.camera_model_nf) {
                 runner.state.nf_aim_point = Some(x);
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle, Some(&runner.state.stereo_iso)) {
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
                 runner.state.wf_aim_point = Some(x);
             }
 
@@ -283,7 +292,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, iso: Option<&Isometry3<f64>>) -> Option<Point2<f64>> {
+fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, iso: Option<&Isometry3<f64>>, intrinsics: &RosOpenCvIntrinsics<f64>) -> Option<Point2<f64>> {
+    let fx = intrinsics.p.m11 * (4095./98.);
+    let fy = intrinsics.p.m22 * (4095./98.);
+
     if points.len() > 3 {
         let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
         sort_points(&mut rotated_points, MarkerPattern::Rectangle);
@@ -293,7 +305,7 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, is
         let projections = ats_cv::calculate_projections(
             &points,
             // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
-            5896.181431117499,
+            Vector2::new(fx, fy),
             Vector2::new(4095., 4095.),
         );
         let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
@@ -339,10 +351,11 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, is
     None
 }
 
-fn filter_and_convert_points(points: &[Point2<u16>], radii: &[u8]) -> Vec<Point2<f64>> {
+fn filter_and_create_point_id_tuples(points: &[Point2<u16>], radii: &[u8]) -> Vec<(usize, Point2<f64>)> {
     points.iter().zip(radii.iter())
-          .filter_map(|(pos, &r)| if r > 0 { Some(Point2::new(pos.x as f64, pos.y as f64)) } else { None })
-          .collect()
+        .enumerate()
+        .filter_map(|(id, (pos, &r))| if r > 0 { Some((id, Point2::new(pos.x as f64, pos.y as f64))) } else { None })
+        .collect()
 }
 
 fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f64>) -> Vec<Point2<f64>> {

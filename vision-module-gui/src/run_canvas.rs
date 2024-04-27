@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
-use ats_cv::choose_rectangle_nearfield_markers;
+use ats_cv::choose_rectangle_markers;
 use nalgebra::{Point2, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
 use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams, AreaHandler};
@@ -94,7 +94,7 @@ impl AreaHandler for RunCanvas {
         );
         if state.nf_points.len() >= 4 {
             let mut points = state.nf_points.clone();
-            let mut chosen = choose_rectangle_nearfield_markers(&mut points, state.screen_id);
+            let mut chosen = choose_rectangle_markers(&mut points, state.screen_id, 300.);
             let points = match chosen.as_mut() {
                 // Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
                 _ => &mut points[..4],
