@@ -6,7 +6,7 @@ use tokio::{net::{ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -404,8 +404,8 @@ impl UsbDevice {
         Ok(self.stream(StreamType::Accel).await?.map(|x| x.accel_report().unwrap()))
     }
 
-    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ()> + Send + Sync> {
-        Ok(self.stream(StreamType::Impact).await?.map(|_| ()))
+    pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
+        Ok(self.stream(StreamType::Impact).await?.map(|x| x.impact_report().unwrap()))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
