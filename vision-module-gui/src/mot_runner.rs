@@ -306,7 +306,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut impact_stream = device.stream_impact().await.unwrap();
     while runner.lock().device.is_some() {
-        if let Some(()) = impact_stream.next().await {
+        if let Some(_impact) = impact_stream.next().await {
             let runner = runner.lock();
             if runner.record_impact {
                 let mut frame = Frame {

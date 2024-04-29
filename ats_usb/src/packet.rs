@@ -359,6 +359,13 @@ impl PacketData {
             _ => None,
         }
     }
+
+    pub fn impact_report(self) -> Option<ImpactReport> {
+        match self {
+            PacketData::ImpactReport(x) => Some(x),
+            _ => None,
+        }
+    }
 }
 
 impl Register {
