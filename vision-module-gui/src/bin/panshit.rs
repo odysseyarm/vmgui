@@ -5,7 +5,7 @@ use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 fn main() {
     let client = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 23456)).unwrap();
     client.set_broadcast(true).unwrap();
-    client.send_to(&[255, 1], ("10.0.0.99", 23456)).unwrap();
+    client.send_to(&[255, 1], ("255.255.255.255", 23456)).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
@@ -13,7 +13,7 @@ fn main() {
         data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
     };
     pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, ("10.0.0.99", 23456)).unwrap();
+    client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
@@ -21,8 +21,8 @@ fn main() {
         data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
     };
     pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, ("10.0.0.99", 23456)).unwrap();
-    // client.send_to(&udp_packet, ("10.0.0.121", 23456)).unwrap();
+    // client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
+    // client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
 
     let mut data = vec![0; 1472];
     let mut slip_buf = vec![];
@@ -67,7 +67,7 @@ fn main() {
         let resp = client.recv_from(&mut data);
         if let Ok((len, addr)) = resp {
             let data = &data[..len];
-            // println!("Received {:?} from {addr}", &data);
+            println!("Received {:?} from {addr}", &data);
             if data[1] != 0 || data[0] == 255 {
                 continue;
             }

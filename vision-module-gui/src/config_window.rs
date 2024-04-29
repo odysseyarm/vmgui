@@ -333,7 +333,7 @@ impl GeneralSettingsForm {
     }
 
     async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
-        let timeout = Duration::from_millis(100);
+        let timeout = Duration::from_millis(500);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
@@ -509,7 +509,7 @@ impl SensorSettingsForm {
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let timeout = Duration::from_millis(100);
+        let timeout = Duration::from_millis(500);
         let pid = retry(|| device.product_id(self.port), timeout, 3).await.unwrap()?;
         let res_x = retry(|| device.resolution_x(self.port), timeout, 3).await.unwrap()?;
         let res_y = retry(|| device.resolution_y(self.port), timeout, 3).await.unwrap()?;

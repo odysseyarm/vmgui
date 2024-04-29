@@ -246,16 +246,28 @@ impl State {
             * Translation3::new(-0.5, -0.5, 0.0).to_homogeneous();
         let tf = Transform3::from_matrix_unchecked(tf);
         Self {
-            camera_pos: Point3::new(0., 0., 5.),
+            camera_pos: DEFAULT_CAMERA_POS,
             yaw: 0.0,
             pitch: 0.0,
             markers: vec![
-                tf * Point3::new(0.35, 1.0, 0.0),
-                tf * Point3::new(0.65, 1.0, 0.0),
-                tf * Point3::new(0.65, 0.0, 0.0),
-                tf * Point3::new(0.35, 0.0, 0.0),
-                // tf * Point3::new(0.35, -0.2, 0.0),
-                // tf * Point3::new(0.65, -0.2, 0.0),
+                tf * Point3::new(0.0, 0.5, 0.0),
+                tf * Point3::new(0.35, 0.2, 0.0),
+                tf * Point3::new(0.65, 0.2, 0.0),
+                tf * Point3::new(0.35, 0.9, 0.0),
+                tf * Point3::new(0.65, 0.9, 0.0),
+                tf * Point3::new(1.0, 0.5, 0.0),
+
+                // tf * Point3::new(0.2, 0.9, 0.0),
+                // tf * Point3::new(0.5, 0.9, 0.0),
+                // tf * Point3::new(0.8, 0.9, 0.0),
+                // tf * Point3::new(0.2, 0.1, 0.0),
+                // tf * Point3::new(0.5, 0.1, 0.0),
+                // tf * Point3::new(0.8, 0.1, 0.0),
+
+                // tf * Point3::new(0.35, 1.0, 0.0),
+                // tf * Point3::new(0.65, 1.0, 0.0),
+                // tf * Point3::new(0.65, 0.0, 0.0),
+                // tf * Point3::new(0.35, 0.0, 0.0),
 
                 // tf * Point3::new(GRID_WIDTH + 0.35, 1.0, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.65, 1.0, 0.0),
@@ -355,8 +367,11 @@ struct MainCanvas {
     state: Arc<Mutex<State>>,
 }
 
-const GRID_WIDTH: f64 = 16.0 / 9.0;
-const GRID_HEIGHT: f64 = 1.0;
+// const GRID_WIDTH: f64 = 16.0 / 9.0;
+// const GRID_HEIGHT: f64 = 1.0;
+const GRID_WIDTH: f64 = 140.0 / 12.0;
+const GRID_HEIGHT: f64 = 80.0 / 12.0;
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 13.0);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
@@ -468,7 +483,7 @@ impl AreaHandler for MainCanvas {
             b'q' => &mut state.moving_down,
             b'\x08' => { // backspace
                 // reset the camera
-                state.camera_pos = Point3::new(0., 0., 5.);
+                state.camera_pos = DEFAULT_CAMERA_POS;
                 state.yaw = 0.0;
                 state.pitch = 0.0;
                 return true;
