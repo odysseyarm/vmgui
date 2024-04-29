@@ -7,13 +7,13 @@ use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
-use leptos_reactive::RwSignal;
+use leptos_reactive::{RwSignal, SignalSet, SignalUpdate};
 use nalgebra::{Const, Isometry3, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, MotState};
+use crate::{CloneButShorter, Frame, MotState};
 use crate::marker_config_window::MarkersSettings;
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
@@ -131,15 +131,6 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
             let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
-
-            let mut nf_points = ArrayVec::<Point2<f64>,16>::from_iter(nf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
-            let _wf_points = ArrayVec::<Point2<f64>,16>::from_iter(wf_data.as_ref().into_iter().map(|x| Point2::new(x.cx as f64, x.cy as f64)));
-
-            let _fv_aim_point = None::<Point2<f64>>;
-            let _nf_aim_point = None::<Point2<f64>>;
-            let _wf_aim_point = None::<Point2<f64>>;
-
-            let _center_aim = Point2::new(2048.0, 2048.0);
 
             let state = &mut runner.state;
             state.nf_data = Some(nf_data);
@@ -310,12 +301,32 @@ async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
+// todo use an aimpoint history to choose the aimpoint closest to the timestamp
 async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
-    let mut frame_stream = device.stream_impact().await.unwrap();
+    let mut impact_stream = device.stream_impact().await.unwrap();
     while runner.lock().device.is_some() {
-        if let Some(()) = frame_stream.next().await {
-            // todo
+        if let Some(()) = impact_stream.next().await {
+            let runner = runner.lock();
+            if runner.record_impact {
+                let mut frame = Frame {
+                    nf_aim_point_x: None,
+                    nf_aim_point_y: None,
+                };
+                if let Some(nf_aim_point) = runner.state.nf_aim_point {
+                    let nf_aim_point = nf_aim_point + runner.nf_offset;
+                    frame.nf_aim_point_x = Some(nf_aim_point.x);
+                    frame.nf_aim_point_y = Some(nf_aim_point.y);
+                }
+
+                runner.datapoints.lock().push(frame);
+
+                let ui_update = runner.ui_update.c();
+
+                runner.ui_ctx.queue_main(move || {
+                    leptos_reactive::SignalSet::set(&ui_update, ());
+                });
+            }
         }
     }
 }
