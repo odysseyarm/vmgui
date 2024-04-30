@@ -195,19 +195,23 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.translation_mat = translation;
             }
             if let Some(fv_aim_point) = fv_aim_point {
-                runner.state.fv_aim_point = Some(fv_aim_point);
+                runner.state.fv_aim_point = fv_aim_point;
             }
 
             if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle, None, &runner.state.camera_model_nf) {
-                runner.state.nf_aim_point = Some(x);
+                runner.state.nf_aim_point = x;
             }
 
             if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
-                runner.state.wf_aim_point = Some(x);
+                runner.state.wf_aim_point = x;
             }
 
             runner.state.nf_points = nf_points_transformed.into_iter().collect();
             runner.state.wf_points = wf_points_transformed.into_iter().collect();
+
+            let index = runner.state.nf_aim_point_history_index;
+            runner.state.nf_aim_point_history[index] = runner.state.nf_aim_point;
+            runner.state.nf_aim_point_history_index = (index + 1) % runner.state.nf_aim_point_history.len();
         }
     }
 }
@@ -313,10 +317,16 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                     nf_aim_point_x: None,
                     nf_aim_point_y: None,
                 };
-                if let Some(nf_aim_point) = runner.state.nf_aim_point {
+
+                {
+                    let nf_aim_point = runner.state.nf_aim_point_history[runner.state.nf_aim_point_history_index];
                     let nf_aim_point = nf_aim_point + runner.nf_offset;
                     frame.nf_aim_point_x = Some(nf_aim_point.x);
                     frame.nf_aim_point_y = Some(nf_aim_point.y);
+                }
+
+                if runner.datapoints.is_locked() {
+                    continue;
                 }
 
                 runner.datapoints.lock().push(frame);

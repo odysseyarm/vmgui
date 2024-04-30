@@ -1,8 +1,8 @@
 use ahrs::Madgwick;
 use arrayvec::ArrayVec;
-use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2, SMatrix};
+use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2};
 use ats_cv::kalman::Pva2d;
-use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
+use opencv_ros_camera::RosOpenCvIntrinsics;
 use serde::Serialize;
 use ats_usb::packet::MotData;
 
@@ -33,9 +33,9 @@ pub struct Frame {
 
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
-    pub fv_aim_point: Option<Point2<f64>>,
-    pub nf_aim_point: Option<Point2<f64>>,
-    pub wf_aim_point: Option<Point2<f64>>,
+    pub fv_aim_point: Point2<f64>,
+    pub nf_aim_point: Point2<f64>,
+    pub wf_aim_point: Point2<f64>,
 
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
@@ -57,6 +57,9 @@ pub struct MotState {
     pub camera_model_nf: RosOpenCvIntrinsics<f64>,
     pub camera_model_wf: RosOpenCvIntrinsics<f64>,
     pub stereo_iso: Isometry3<f64>,
+
+    pub nf_aim_point_history: [Point2<f64>; 40],
+    pub nf_aim_point_history_index: usize,
 }
 
 impl Default for MotState {
@@ -117,9 +120,9 @@ impl Default for MotState {
         ";
 
         Self {
-            fv_aim_point: None,
-            nf_aim_point: None,
-            wf_aim_point: None,
+            fv_aim_point: Point2::new(0.0, 0.0),
+            nf_aim_point: Point2::new(0.0, 0.0),
+            wf_aim_point: Point2::new(0.0, 0.0),
             nf_data: None,
             wf_data: None,
             nf_pva2ds: Default::default(),
@@ -135,6 +138,8 @@ impl Default for MotState {
             wf_points: Default::default(),
             nf_radii: Default::default(),
             wf_radii: Default::default(),
+            nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
+            nf_aim_point_history_index: 0,
         }
     }
 }

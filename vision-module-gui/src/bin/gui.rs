@@ -252,7 +252,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let vert_box = VerticalBox(padded: true) {
             Compact: let grid = LayoutGrid(padded: true) {
                 (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
-                (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
+                // (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
                 (2, 0)(1, 1) Vertical (Fill, Fill) : let track_raw_button = Button(move || {
                     if !tracking_raw.get() { "Start Raw Tracking" } else { "Stop Raw Tracking" }
                 })
@@ -508,7 +508,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let runner = state.lock();
             let state = &runner.state;
 
-            if let Some(nf_aim_point) = state.nf_aim_point {
+            {
+                let nf_aim_point = state.nf_aim_point;
                 let nf_aim_point = nf_aim_point + runner.nf_offset;
                 frame.nf_aim_point_x = Some(nf_aim_point.x);
                 frame.nf_aim_point_y = Some(nf_aim_point.y);
@@ -579,12 +580,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    marker_config_button.on_clicked(&ui, {
-        let ui = ui.c();
-        move |_| {
-            marker_config_win.show(&ui);
-        }
-    });
+    // marker_config_button.on_clicked(&ui, {
+    //     let ui = ui.c();
+    //     move |_| {
+    //         marker_config_win.show(&ui);
+    //     }
+    // });
 
     track_raw_button.on_clicked(&ui, move |_| tracking_raw.set(!tracking_raw.get_untracked()));
     track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
