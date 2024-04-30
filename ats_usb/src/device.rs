@@ -376,7 +376,7 @@ impl UsbDevice {
         if self.thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(6);
+        let (slot, receiver) = self.get_stream_slot(25);
         self.to_thread.send(Packet {
             id: slot.id,
             data: PacketData::StreamUpdate(StreamUpdate {
@@ -393,19 +393,19 @@ impl UsbDevice {
     }
 
     pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
-        Ok(self.stream(StreamType::MotData).await?.map(|x| x.object_report().unwrap()))
+        Ok(self.stream(StreamType::MotData).await?.filter_map(|x| x.object_report()))
     }
 
     pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
-        Ok(self.stream(StreamType::CombinedMarkers).await?.map(|x| x.combined_markers_report().unwrap()))
+        Ok(self.stream(StreamType::CombinedMarkers).await?.filter_map(|x| x.combined_markers_report()))
     }
 
     pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Accel).await?.map(|x| x.accel_report().unwrap()))
+        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.accel_report()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Impact).await?.map(|x| x.impact_report().unwrap()))
+        Ok(self.stream(StreamType::Impact).await?.filter_map(|x| x.impact_report()))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
