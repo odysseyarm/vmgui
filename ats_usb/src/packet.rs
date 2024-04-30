@@ -123,7 +123,6 @@ pub struct CombinedMarkersReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
-    pub timestamp: u32,
     pub accel: [f64; 3],
     pub gyro: [f64; 3],
 }
@@ -297,7 +296,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
-            PacketData::AccelReport(_) => 16,
+            PacketData::AccelReport(_) => 12,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
             PacketData::FlashSettings => 0,
@@ -569,9 +568,7 @@ impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
         // gyro: x, y, z, 16.4 = 1dps
-        let data = &mut &bytes[..16];
-        let timestamp = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        *data = &data[4..];
+        let data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
             let x = x as f64 / 16384.0;
@@ -584,8 +581,8 @@ impl AccelReport {
             *data = &data[2..];
             x
         });
-        *bytes = &bytes[16..];
-        Ok(Self { timestamp, accel, gyro })
+        *bytes = &bytes[12..];
+        Ok(Self { accel, gyro })
     }
 }
 
