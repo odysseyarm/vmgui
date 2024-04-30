@@ -39,7 +39,8 @@ impl AreaHandler for TestCanvas {
         let wf_ch_path = Path::new(ctx, FillMode::Winding);
         let runner = self.runner.lock();
         let state = &runner.state;
-        if let Some(aim_point) = state.fv_aim_point {
+        {
+            let aim_point = state.fv_aim_point;
             draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
         }
         fv_ch_path.end(ctx);
@@ -53,13 +54,15 @@ impl AreaHandler for TestCanvas {
             60.0,
             &format!("screen_id = {}", runner.state.screen_id),
         );
-        if let Some(aim_point) = state.nf_aim_point {
+        {
+            let aim_point = state.nf_aim_point;
             let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aim_point + runner.nf_offset);
             draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
             ctx.draw_text(p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
         }
         nf_ch_path.end(ctx);
-        if let Some(aim_point) = state.wf_aim_point {
+        {
+            let aim_point = state.wf_aim_point;
             draw_crosshair(&ctx, &wf_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 15.);
         }
         wf_ch_path.end(ctx);
@@ -179,7 +182,7 @@ impl AreaHandler for TestCanvas {
             let Some(w) = self.last_draw_width else { return };
             let Some(h) = self.last_draw_height else { return };
             let mut state = self.runner.lock();
-            let Some(aim_point) = state.state.nf_aim_point else { return };
+            let aim_point = state.state.nf_aim_point;
             state.nf_offset.x = mouse_event.x / w - aim_point.x;
             state.nf_offset.y = mouse_event.y / h - aim_point.y;
         }

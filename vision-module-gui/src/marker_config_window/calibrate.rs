@@ -68,7 +68,7 @@ pub fn create(
         let ui = ui.c();
         move |_| {
             let runner = mot_runner.lock();
-            let Some(reported_aim_point) = runner.state.nf_aim_point else { return };
+            let reported_aim_point = runner.state.nf_aim_point;
             let true_aim_point = reported_aim_point + runner.nf_offset;
             drop(runner);
             samples.update(|s| {

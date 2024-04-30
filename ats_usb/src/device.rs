@@ -376,7 +376,7 @@ impl UsbDevice {
         if self.thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
             return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
         }
-        let (slot, receiver) = self.get_stream_slot(25);
+        let (slot, receiver) = self.get_stream_slot(100);
         self.to_thread.send(Packet {
             id: slot.id,
             data: PacketData::StreamUpdate(StreamUpdate {
