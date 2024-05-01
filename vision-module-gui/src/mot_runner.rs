@@ -174,7 +174,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
-            let gravity_angle = calculate_gravity_angle(&runner.state.orientation);
+            let gravity_angle = runner.state.gravity_angle;
 
             // println!("gravity_angle: {}\nstereo_iso: {:?}\nwf_points_transformed: {:?}\nnf_points_transformed: {:?}",
             //        gravity_angle, runner.state.stereo_iso, wf_points_transformed, nf_points_transformed);
@@ -182,7 +182,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
                 &nf_points_transformed,
                 &wf_points_transformed,
-                gravity_angle,
+                gravity_angle.into(),
                 runner.state.screen_id,
                 &runner.state.camera_model_nf,
                 &runner.state.camera_model_wf,
@@ -198,11 +198,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aim_point = fv_aim_point;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle, None, &runner.state.camera_model_nf) {
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle.into(), None, &runner.state.camera_model_nf) {
                 runner.state.nf_aim_point = x;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle as f64, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
                 runner.state.wf_aim_point = x;
             }
 
@@ -286,11 +286,6 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
     let scaled_points = points.iter().map(|p| Point2::new(p.x / 4095. * 98., p.y / 4095. * 98.)).collect::<Vec<_>>();
     let undistorted_points = ats_cv::undistort_points(camera_intrinsics, &scaled_points);
     undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
-}
-
-fn calculate_gravity_angle(orientation: &ahrs::Madgwick<f64>) -> f64 {
-    let gravity: Vector3<f64> = orientation.quat.inverse_transform_vector(&Vector3::z()).into();
-    -gravity.x.atan2(gravity.z)
 }
 
 async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {

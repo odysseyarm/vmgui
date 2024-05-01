@@ -125,6 +125,7 @@ pub struct CombinedMarkersReport {
 pub struct AccelReport {
     pub accel: [f64; 3],
     pub gyro: [f64; 3],
+    pub gravity_angle: f32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -136,13 +137,6 @@ pub struct ImpactReport {
 pub struct StreamUpdate {
     pub mask: u8,
     pub active: bool,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct AimPointReport {
-    pub x: i16,
-    pub y: i16,
-    pub screen_id: u8,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -296,7 +290,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
-            PacketData::AccelReport(_) => 12,
+            PacketData::AccelReport(_) => 14,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
             PacketData::FlashSettings => 0,
@@ -568,7 +562,7 @@ impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
         // gyro: x, y, z, 16.4 = 1dps
-        let data = &mut &bytes[..12];
+        let data = &mut &bytes[..14];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
             let x = x as f64 / 16384.0;
@@ -581,8 +575,9 @@ impl AccelReport {
             *data = &data[2..];
             x
         });
-        *bytes = &bytes[12..];
-        Ok(Self { accel, gyro })
+        let gravity_angle = u16::from_le_bytes([data[0], data[1]]) as f32 * std::f32::consts::PI / 180.0;
+        *bytes = &bytes[14..];
+        Ok(Self { accel, gyro, gravity_angle })
     }
 }
 
