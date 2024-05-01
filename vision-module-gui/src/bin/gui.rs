@@ -3,23 +3,20 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use bevy::app::{App, Startup, Update};
-use bevy::ecs::query::With;
-use bevy::ecs::schedule::IntoSystemConfigs;
 use bevy::ecs::system::{Commands, Query};
 use bevy::window::{WindowPlugin, WindowCloseRequested};
 use bevy::winit::WinitPlugin;
 use bevy::DefaultPlugins;
 use bevy::{
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
-    window::{CursorGrabMode, PresentMode, WindowLevel, WindowTheme},
+    window::{PresentMode, WindowTheme},
 };
 use bevy_infinite_grid::{
     GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
 };
 use iui::prelude::*;
 use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
-use nalgebra::{Const, Vector2};
+use nalgebra::Vector2;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
@@ -44,12 +41,6 @@ use parking_lot::Mutex;
 // * Holding mutexes and setting signals
 //     * Drop the mutex, or use ui_ctx.queue_main()
 
-#[derive(bevy::ecs::component::Component)]
-struct Name(String);
-
-#[derive(bevy::ecs::component::Component)]
-struct Person;
-
 #[derive(Resource)]
 struct MotRunnerResource(Arc<Mutex<MotRunner>>);
 
@@ -70,7 +61,7 @@ fn read_stream(receiver: Res<StreamReceiver>, mut events: EventWriter<StreamEven
 }
 
 fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut window: Query<&mut bevy::window::Window>) {
-    for (per_frame, event) in reader.read().enumerate() {
+    for (_, event) in reader.read().enumerate() {
         match event.0 {
             Event::OpenWindow => {
                 if window.iter().len() == 0 {

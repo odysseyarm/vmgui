@@ -50,6 +50,7 @@ pub struct MotState {
 
     pub screen_id: u8,
     pub orientation: Madgwick<f64>,
+    pub gravity_angle: f32,
 
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
@@ -129,6 +130,7 @@ impl Default for MotState {
             wf_pva2ds: Default::default(),
             screen_id: 0,
             orientation: Madgwick::new(1./800., 0.1),
+            gravity_angle: 0.,
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
             camera_model_nf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&nf_default_yaml[..]).unwrap(),

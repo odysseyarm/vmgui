@@ -1,6 +1,5 @@
 use std::{f64::consts::{FRAC_1_SQRT_2, PI}, io::{Read, Write}, net::{TcpListener, TcpStream}, ops::{Bound, RangeBounds}, sync::{Arc, Mutex}, time::Duration};
 
-use ats_cv::transform_aim_point;
 use iui::{
     controls::{
         Area, AreaDrawParams, AreaHandler, AreaKeyEvent, AreaMouseEvent, Modifiers, Window,
@@ -13,7 +12,7 @@ use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
 };
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{AimPointReport, CombinedMarkersReport, GeneralConfig, MarkerPattern, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
@@ -181,7 +180,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         }
 
         if let Some(id) = state.stream_combined_markers {
-            let marker_pattern = state.marker_pattern.marker_positions();
+            // let marker_pattern = state.marker_pattern.marker_positions();
             // let r = transform_aim_point(
             //     [2048.0, 2048.0].into(),
             //     nf_markers[0].cast(),
@@ -237,7 +236,7 @@ struct State {
     moving_down: bool,
     stream_mot: Option<u8>,
     stream_combined_markers: Option<u8>,
-    marker_pattern: MarkerPattern,
+    // marker_pattern: MarkerPattern,
 }
 
 impl State {
@@ -285,7 +284,7 @@ impl State {
             moving_down: false,
             stream_mot: None,
             stream_combined_markers: None,
-            marker_pattern: MarkerPattern::Rectangle,
+            // marker_pattern: MarkerPattern::Rectangle,
         }
     }
 
