@@ -137,6 +137,7 @@ impl UsbDevice {
     pub async fn connect_hub(local_addr: impl ToSocketAddrs, device_addr: &str) -> Result<Self> {
         info!("Connecting to {device_addr}...");
         let sock = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        sock.set_nonblocking(true)?;
         sock.set_reuse_address(true)?;
         let addr = match lookup_host(local_addr).await?.next() {
             Some(addr) => addr,
