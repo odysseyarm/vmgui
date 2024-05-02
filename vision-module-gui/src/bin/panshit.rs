@@ -1,15 +1,18 @@
-use std::net::{Ipv4Addr, SocketAddr};
-use ats_usb::packet::{Packet, PacketData, StreamUpdate};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use ats_usb::packet::{Packet, PacketData, Port, Register, StreamUpdate};
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
+// use multicast_socket::MulticastSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::UdpSocket;
 
 fn main() {
     let multicast = Ipv4Addr::new(224, 0, 2, 52);
-    let multicast_port = 23456;
-    let multicast_addr = SocketAddr::new(multicast.into(), multicast_port);
-    let multicast_addr = SockAddr::from(multicast_addr);
-    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), multicast_port));
+    let multicast_addr_std = SocketAddrV4::new(multicast.into(), 23456);
+    let multicast_addr = SockAddr::from(multicast_addr_std);
+    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 23456));
+
+    // todo MulticastSocket has to be turned into Ext for std, socket2, and tokio
+    // let client = MulticastSocket::all_interfaces(multicast_addr_std).unwrap();
 
     let client = Socket::new(
         Domain::IPV4,
@@ -18,21 +21,23 @@ fn main() {
     ).expect("ipv4 dgram socket");
 
     client.join_multicast_v4(&multicast, &Ipv4Addr::UNSPECIFIED).unwrap();
+
     client.set_multicast_ttl_v4(5).unwrap();
 
     client.set_reuse_address(true).unwrap();
 
     client.bind(&local_addr).unwrap();
 
+    // client.broadcast(&[255, 1]);
     client.send_to(&[255, 1], &multicast_addr).unwrap();
 
-    // let mut udp_packet = vec![1, 0, 255];
-    // let pkt = Packet {
-    //     id: 0,
-    //     data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
-    // };
-    // pkt.serialize(&mut udp_packet);
-    // client.send_to(&udp_packet, ("224.0.2.52", 0)).unwrap();
+    let mut udp_packet = vec![1, 0, 255];
+    let pkt = Packet {
+        id: 0,
+        data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
+    };
+    pkt.serialize(&mut udp_packet);
+    client.send_to(&udp_packet, &multicast_addr).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
@@ -50,7 +55,7 @@ fn main() {
     let start_time = std::time::Instant::now();
     let mut total_combined_marker_samples = 0;
 
-    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: std::net::SocketAddr) {
+    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: SocketAddr) {
         match Packet::parse(&mut data.as_slice()) {
             Ok(pkt) => {
                 println!("Received {:?} from {addr}", pkt);
@@ -86,8 +91,12 @@ fn main() {
     loop {
         let resp = client.recv_from(&mut data);
         if let Ok((len, addr)) = resp {
+        // if let Ok(msg) = client.receive() {
+            // data = msg.data;
             let data = &data[..len];
             println!("Received {:?} from {addr}", &data);
+            // let addr = msg.origin_address;
+            // println!("Received {:?} from {addr}", &data);
             if data[1] != 0 || data[0] == 255 {
                 continue;
             }
