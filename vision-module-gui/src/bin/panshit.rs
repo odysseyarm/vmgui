@@ -1,19 +1,38 @@
-use std::net::{UdpSocket, Ipv4Addr};
-use ats_usb::packet::{Packet, PacketData, PacketType, Port, Register, StreamChoice, StreamUpdate};
+use std::net::{Ipv4Addr, SocketAddr};
+use ats_usb::packet::{Packet, PacketData, StreamUpdate};
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use std::net::UdpSocket;
 
 fn main() {
-    let client = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 23456)).unwrap();
-    client.set_broadcast(true).unwrap();
-    client.send_to(&[255, 1], ("255.255.255.255", 23456)).unwrap();
+    let multicast = Ipv4Addr::new(224, 0, 2, 52);
+    let multicast_port = 23456;
+    let multicast_addr = SocketAddr::new(multicast.into(), multicast_port);
+    let multicast_addr = SockAddr::from(multicast_addr);
+    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), multicast_port));
 
-    let mut udp_packet = vec![1, 0, 255];
-    let pkt = Packet {
-        id: 0,
-        data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
-    };
-    pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
+    let client = Socket::new(
+        Domain::IPV4,
+        Type::DGRAM,
+        Some(Protocol::UDP),
+    ).expect("ipv4 dgram socket");
+
+    client.join_multicast_v4(&multicast, &Ipv4Addr::UNSPECIFIED).unwrap();
+    client.set_multicast_ttl_v4(5).unwrap();
+
+    client.set_reuse_address(true).unwrap();
+
+    client.bind(&local_addr).unwrap();
+
+    client.send_to(&[255, 1], &multicast_addr).unwrap();
+
+    // let mut udp_packet = vec![1, 0, 255];
+    // let pkt = Packet {
+    //     id: 0,
+    //     data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
+    // };
+    // pkt.serialize(&mut udp_packet);
+    // client.send_to(&udp_packet, ("224.0.2.52", 0)).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
@@ -21,8 +40,9 @@ fn main() {
         data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
     };
     pkt.serialize(&mut udp_packet);
-    // client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
-    // client.send_to(&udp_packet, ("255.255.255.255", 23456)).unwrap();
+    client.send_to(&udp_packet, &multicast_addr).unwrap();
+
+    let client: UdpSocket = client.into();
 
     let mut data = vec![0; 1472];
     let mut slip_buf = vec![];

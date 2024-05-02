@@ -83,7 +83,7 @@ pub fn config_window(
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
                     UsbDevice::connect_tcp(sim_addr)?
                 } else {
-                    UsbDevice::connect_hub("0.0.0.0:0", udp_addr.as_ref().unwrap()).await?
+                    UsbDevice::connect_hub("0.0.0.0:23456", udp_addr.as_ref().unwrap()).await?
                 };
                 general_settings.load_from_device(&usb_device, true).await?;
                 wf_settings.load_from_device(&usb_device).await?;
