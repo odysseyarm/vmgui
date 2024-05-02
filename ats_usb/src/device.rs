@@ -1,8 +1,8 @@
-use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::TcpStream, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, os::windows::io::AsSocket, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
-use tokio::{net::{ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}};
+use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
@@ -136,7 +136,17 @@ impl UsbDevice {
 
     pub async fn connect_hub(local_addr: impl ToSocketAddrs, device_addr: &str) -> Result<Self> {
         info!("Connecting to {device_addr}...");
-        let sock = UdpSocket::bind(local_addr).await?;
+        let sock = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        sock.set_reuse_address(true)?;
+        let addr = match lookup_host(local_addr).await?.next() {
+            Some(addr) => addr,
+            None => anyhow::bail!("Failed to resolve local address"),
+        };
+        sock.bind(&socket2::SockAddr::from(addr))?;
+        let sock = UdpSocket::from_std(sock.into())?;
+        let multicast = Ipv4Addr::new(224, 0, 2, 52);
+        sock.join_multicast_v4(multicast, Ipv4Addr::UNSPECIFIED).unwrap();
+        sock.set_multicast_ttl_v4(5).unwrap();
         sock.connect(device_addr).await?;
         sock.send(&[255, 1]).await?;
         match sock.recv(&mut []).await {
