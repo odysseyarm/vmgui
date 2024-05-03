@@ -430,15 +430,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    create_effect({
-        let view = mot_runner.c();
-        move |_| {
-            let view = view.c();
-            let madgwick = &mut view.lock().state.orientation;
-            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_odr_memo.get() as f64, 0.1, madgwick.quat);
-        }
-    });
-
     // Show the test window and form when running test or when calibrating marker offsets
     create_effect({
         let ui = ui.c();

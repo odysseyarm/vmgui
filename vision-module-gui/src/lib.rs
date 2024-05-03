@@ -1,6 +1,6 @@
 use ahrs::Madgwick;
 use arrayvec::ArrayVec;
-use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2};
+use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2, Rotation3};
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use serde::Serialize;
@@ -49,8 +49,7 @@ pub struct MotState {
     wf_radii: [u8; 4],
 
     pub screen_id: u8,
-    pub orientation: Madgwick<f64>,
-    pub gravity_angle: f32,
+    pub orientation: Rotation3<f64>,
 
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
@@ -129,8 +128,7 @@ impl Default for MotState {
             nf_pva2ds: Default::default(),
             wf_pva2ds: Default::default(),
             screen_id: 0,
-            orientation: Madgwick::new(1./800., 0.1),
-            gravity_angle: 0.,
+            orientation: Rotation3::identity(),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
             camera_model_nf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&nf_default_yaml[..]).unwrap(),

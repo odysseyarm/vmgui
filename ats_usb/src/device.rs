@@ -6,7 +6,7 @@ use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}}
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{EulerAnglesReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -411,8 +411,8 @@ impl UsbDevice {
         Ok(self.stream(StreamType::CombinedMarkers).await?.filter_map(|x| x.combined_markers_report()))
     }
 
-    pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.accel_report()))
+    pub async fn stream_euler_angles(&self) -> Result<impl Stream<Item = EulerAnglesReport> + Send + Sync> {
+        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.euler_angles_report()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
@@ -508,7 +508,7 @@ impl Stream for PacketStream {
 impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
         self.slot.thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
-        self.to_thread.try_send(Packet {
+        let _ = self.to_thread.try_send(Packet {
             id: 255,
             data: PacketData::StreamUpdate(StreamUpdate { mask: self.stream_type.mask(), active: false }),
         }).inspect_err(|e| warn!("Failed to stop stream: {e}"));

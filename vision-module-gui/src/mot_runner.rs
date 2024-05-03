@@ -111,7 +111,7 @@ pub struct MotRunner {
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     tokio::join!(
         combined_markers_loop(runner.clone()),
-        accel_loop(runner.clone()),
+        euler_loop(runner.clone()),
         impact_loop(runner.clone()),
     );
 }
@@ -174,15 +174,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
-            let gravity_angle = runner.state.gravity_angle;
-
-            // println!("gravity_angle: {}\nstereo_iso: {:?}\nwf_points_transformed: {:?}\nnf_points_transformed: {:?}",
-            //        gravity_angle, runner.state.stereo_iso, wf_points_transformed, nf_points_transformed);
-
             let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
                 &nf_points_transformed,
                 &wf_points_transformed,
-                gravity_angle.into(),
+                runner.state.orientation,
                 runner.state.screen_id,
                 &runner.state.camera_model_nf,
                 &runner.state.camera_model_wf,
@@ -198,11 +193,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aim_point = fv_aim_point;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, gravity_angle.into(), None, &runner.state.camera_model_nf) {
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.state.camera_model_nf) {
                 runner.state.nf_aim_point = x;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, gravity_angle as f64, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, runner.state.orientation, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
                 runner.state.wf_aim_point = x;
             }
 
@@ -216,9 +211,12 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aim_point(points: &[Point2<f64>], gravity_angle: f64, iso: Option<&Isometry3<f64>>, intrinsics: &RosOpenCvIntrinsics<f64>) -> Option<Point2<f64>> {
+fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f64>>, intrinsics: &RosOpenCvIntrinsics<f64>) -> Option<Point2<f64>> {
     let fx = intrinsics.p.m11 * (4095./98.);
     let fy = intrinsics.p.m22 * (4095./98.);
+
+    let gravity_vec = orientation.inverse_transform_vector(&Vector3::z());
+	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.;
 
     if points.len() > 3 {
         let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
@@ -288,15 +286,13 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
     undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
 }
 
-async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
+async fn euler_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
-    let mut accel_stream = device.stream_accel().await.unwrap();
+    let mut euler_stream = device.stream_euler_angles().await.unwrap();
     while runner.lock().device.is_some() {
-        if let Some(accel) = accel_stream.next().await {
+        if let Some(accel) = euler_stream.next().await {
             let mut runner = runner.lock();
-            debug!("accel: {:?}", accel);
-            runner.state.gravity_angle = accel.gravity_angle;
-            let _ = runner.state.orientation.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+            runner.state.orientation = accel.rotation;
         }
     }
 }

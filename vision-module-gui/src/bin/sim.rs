@@ -121,7 +121,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             }
             PacketData::FlashSettings => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
-            PacketData::AccelReport(_) => unreachable!(),
+            PacketData::EulerAnglesReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
             PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, accel_odr: 100 })),
