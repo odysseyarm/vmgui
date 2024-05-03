@@ -31,21 +31,21 @@ fn main() {
     // client.broadcast(&[255, 1]);
     client.send_to(&[255, 1], &multicast_addr).unwrap();
 
-    let mut udp_packet = vec![1, 0, 255];
-    let pkt = Packet {
-        id: 0,
-        data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
-    };
-    pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, &multicast_addr).unwrap();
+    // let mut udp_packet = vec![1, 0, 255];
+    // let pkt = Packet {
+    //     id: 0,
+    //     data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
+    // };
+    // pkt.serialize(&mut udp_packet);
+    // client.send_to(&udp_packet, &multicast_addr).unwrap();
 
-    let mut udp_packet = vec![1, 0, 255];
-    let pkt = Packet {
-        id: 1,
-        data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
-    };
-    pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, &multicast_addr).unwrap();
+    // let mut udp_packet = vec![1, 0, 255];
+    // let pkt = Packet {
+    //     id: 1,
+    //     data: PacketData::StreamUpdate(StreamUpdate { mask: 0b0100 | 0b0010, active: true })
+    // };
+    // pkt.serialize(&mut udp_packet);
+    // client.send_to(&udp_packet, &multicast_addr).unwrap();
 
     let client: UdpSocket = client.into();
 
@@ -60,7 +60,7 @@ fn main() {
             Ok(pkt) => {
                 println!("Received {:?} from {addr}", pkt);
                 match pkt.data {
-                    PacketData::AccelReport(_) => {
+                    PacketData::EulerAnglesReport(_) => {
                         let elapsed = start_time.elapsed().as_secs_f64();
                         *total_accel_samples += 1;
                         let accel_hz_avg = 1. / (elapsed / *total_accel_samples as f64);

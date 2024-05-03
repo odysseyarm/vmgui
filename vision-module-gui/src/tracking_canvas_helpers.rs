@@ -37,7 +37,8 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     let runner = runner.lock();
     let state = &runner.state;
 
-    let gravity_angle = state.gravity_angle as f64;
+    let gravity_vec = state.orientation.inverse_transform_vector(&Vector3::z());
+	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + PI/2.;
 
     // Border around the square drawing area
     {

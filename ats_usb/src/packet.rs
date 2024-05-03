@@ -1,6 +1,6 @@
 use std::{fmt::Display, error::Error as StdError};
 
-use nalgebra::{Point2, coordinates::XY};
+use nalgebra::{coordinates::XY, Point2, Rotation3};
 
 #[derive(Clone, Debug)]
 pub struct Packet {
@@ -18,15 +18,16 @@ pub enum PacketData {
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
     CombinedMarkersReport(CombinedMarkersReport),
-    AccelReport(AccelReport),
+    EulerAnglesReport(EulerAnglesReport),
     ImpactReport(ImpactReport),
     StreamUpdate(StreamUpdate),
     FlashSettings,
 }
+
 pub enum StreamChoice {
     Object,
     CombinedMarkers,
-    Accel,
+    EulerAngles,
     Impact,
 }
 
@@ -122,10 +123,8 @@ pub struct CombinedMarkersReport {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct AccelReport {
-    pub accel: [f64; 3],
-    pub gyro: [f64; 3],
-    pub gravity_angle: f32,
+pub struct EulerAnglesReport {
+    pub rotation: Rotation3<f64>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -191,7 +190,7 @@ pub enum PacketType {
     ObjectReportRequest,
     ObjectReport,
     CombinedMarkersReport,
-    AccelReport,
+    EulerAnglesReport,
     ImpactReport,
     StreamUpdate,
     FlashSettings,
@@ -211,7 +210,7 @@ impl TryFrom<u8> for PacketType {
             6 => Ok(Self::ObjectReportRequest),
             7 => Ok(Self::ObjectReport),
             8 => Ok(Self::CombinedMarkersReport),
-            9 => Ok(Self::AccelReport),
+            9 => Ok(Self::EulerAnglesReport),
             10 => Ok(Self::ImpactReport),
             11 => Ok(Self::StreamUpdate),
             12 => Ok(Self::FlashSettings),
@@ -233,7 +232,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
             PacketData::ObjectReport(_) => PacketType::ObjectReport,
             PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
-            PacketData::AccelReport(_) => PacketType::AccelReport,
+            PacketData::EulerAnglesReport(_) => PacketType::EulerAnglesReport,
             PacketData::ImpactReport(_) => PacketType::ImpactReport,
             PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
             PacketData::FlashSettings => PacketType::FlashSettings,
@@ -263,7 +262,7 @@ impl Packet {
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
-            PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
+            PacketType::EulerAnglesReport => PacketData::EulerAnglesReport(EulerAnglesReport::parse(bytes)?),
             PacketType::ImpactReport => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
             PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
             PacketType::FlashSettings => PacketData::FlashSettings,
@@ -290,7 +289,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
-            PacketData::AccelReport(_) => 14,
+            PacketData::EulerAnglesReport(_) => 12,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
             PacketData::FlashSettings => 0,
@@ -309,7 +308,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
-            PacketData::AccelReport(x) => unimplemented!(),
+            PacketData::EulerAnglesReport(x) => unimplemented!(),
             PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::FlashSettings => (),
@@ -346,9 +345,9 @@ impl PacketData {
         }
     }
 
-    pub fn accel_report(self) -> Option<AccelReport> {
+    pub fn euler_angles_report(self) -> Option<EulerAnglesReport> {
         match self {
-            PacketData::AccelReport(x) => Some(x),
+            PacketData::EulerAnglesReport(x) => Some(x),
             _ => None,
         }
     }
@@ -558,26 +557,15 @@ impl CombinedMarkersReport {
     }
 }
 
-impl AccelReport {
+impl EulerAnglesReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        // accel: x, y, z, 16384 = 1g
-        // gyro: x, y, z, 16.4 = 1dps
-        let data = &mut &bytes[..14];
-        let accel = [(); 3].map(|_| {
-            let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f64 / 16384.0;
-            *data = &data[2..];
-            x
-        });
-        let gyro = [(); 3].map(|_| {
-            let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f64 / 16.4;
-            *data = &data[2..];
-            x
-        });
-        let gravity_angle = u16::from_le_bytes([data[0], data[1]]) as f32 * std::f32::consts::PI / 180.0;
-        *bytes = &bytes[14..];
-        Ok(Self { accel, gyro, gravity_angle })
+        let data = &mut &bytes[..12];
+        let euler_x = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let euler_y = f32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let euler_z = f32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        let rotation = Rotation3::from_euler_angles(euler_x as f64, euler_y as f64, euler_z as f64);
+        *bytes = &bytes[12..];
+        Ok(Self { rotation })
     }
 }
 
