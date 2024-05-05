@@ -303,7 +303,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "ats_cv"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/ats_cv.git#ed6bf16cce1df07f83b647f34c33bf9b65d29203"
+source = "git+https://github.com/odysseyarm/ats_cv.git#a4993e5a6bef6a6ec0cd885ff8f9a34d323e06a0"
 dependencies = [
  "cam-geom",
  "nalgebra",
