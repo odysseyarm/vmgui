@@ -14,7 +14,7 @@ pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
-    WriteConfig(GeneralConfig),
+    WriteConfig(GeneralWriteConfig),
     ReadConfig,
     ReadConfigResponse(GeneralConfig),
     ObjectReportRequest(ObjectReportRequest),
@@ -90,6 +90,15 @@ pub struct GeneralConfig {
     pub camera_model_wf: RosOpenCvIntrinsics<f32>,
     pub stereo_iso: Isometry3<f32>,
     pub uuid: [u8; 6],
+}
+
+#[derive(Clone, Debug)]
+pub struct GeneralWriteConfig {
+    pub impact_threshold: u8,
+    pub accel_odr: u16,
+    pub camera_model_nf: RosOpenCvIntrinsics<f32>,
+    pub camera_model_wf: RosOpenCvIntrinsics<f32>,
+    pub stereo_iso: Isometry3<f32>,
 }
 
 impl Default for GeneralConfig {
@@ -275,7 +284,7 @@ impl Packet {
             PacketType::WriteRegister => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
             PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes, ty)?),
             PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
-            PacketType::WriteConfig => PacketData::WriteConfig(GeneralConfig::parse(bytes, ty)?),
+            PacketType::WriteConfig => unimplemented!(),
             PacketType::ReadConfig => PacketData::ReadConfig,
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
@@ -302,7 +311,7 @@ impl Packet {
             PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
             PacketData::ReadRegister(_) => calculate_length!(Register)+1,
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
-            PacketData::WriteConfig(_) => 4,
+            PacketData::WriteConfig(_) => 164,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 4,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
@@ -455,7 +464,7 @@ impl GeneralConfig {
         let mut uuid = [0; 6];
         uuid.clone_from_slice(&bytes[..6]);
 
-        *bytes = &bytes[..6];
+        *bytes = &bytes[..7];
 
         Ok(Self { impact_threshold, accel_odr, camera_model_nf, camera_model_wf, stereo_iso, uuid })
     }
@@ -468,6 +477,17 @@ impl GeneralConfig {
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
         buf.extend_from_slice(&self.uuid);
         buf.push(0); // padding
+    }
+}
+
+impl GeneralWriteConfig {
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], 0]);
+        MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
+        MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
+        MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
+        buf.push(0);
     }
 }
 

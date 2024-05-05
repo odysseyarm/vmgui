@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use ats_usb::{device::UsbDevice, packet::{GeneralConfig, MarkerPattern, Port}};
+use ats_usb::{device::UsbDevice, packet::{GeneralConfig, GeneralWriteConfig, MarkerPattern, Port}};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
@@ -327,16 +327,16 @@ impl GeneralSettingsForm {
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
                 (Compact, "Accelerometer ODR") : let x = Spinbox(enabled: connected, signal: accel_odr)
-                (Compact, "Upload Nearfield Calibration") : let upload_nf_yml = Button("Upload")
-                (Compact, "Upload Widefield Calibration") : let upload_wf_yml = Button("Upload")
-                (Compact, "Upload Stereo Calibration") : let upload_stereo_yml = Button("Upload")
+                (Compact, "Upload Nearfield Calibration") : let upload_nf_json = Button("Upload")
+                (Compact, "Upload Widefield Calibration") : let upload_wf_json = Button("Upload")
+                (Compact, "Upload Stereo Calibration") : let upload_stereo_json = Button("Upload")
             }
         }
         set_calibration_upload_handlers(
             &ui,
-            &mut upload_nf_yml,
-            &mut upload_wf_yml,
-            &mut upload_stereo_yml,
+            &mut upload_nf_json,
+            &mut upload_wf_json,
+            &mut upload_stereo_json,
             nf_intrinsics.c(),
             wf_intrinsics.c(),
             stereo_iso.c(),
@@ -406,16 +406,22 @@ impl GeneralSettingsForm {
 
     /// Make sure to call `validate()` before calling this method.
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
-        let config = GeneralConfig {
+        let config = GeneralWriteConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             accel_odr: self.accel_odr.get_untracked() as u16,
             camera_model_nf: self.nf_intrinsics.get_untracked(),
             camera_model_wf: self.wf_intrinsics.get_untracked(),
             stereo_iso: self.stereo_iso.get_untracked(),
-            uuid: self.mot_runner.lock().general_config.uuid,
         };
         device.write_config(config.clone()).await?;
-        self.mot_runner.lock().general_config = config.clone();
+        {
+            let general_config = &mut self.mot_runner.lock().general_config;
+            general_config.impact_threshold = config.impact_threshold;
+            general_config.accel_odr = config.accel_odr;
+            general_config.camera_model_nf = config.camera_model_nf;
+            general_config.camera_model_wf = config.camera_model_wf;
+            general_config.stereo_iso = config.stereo_iso;
+        }
         Ok(())
     }
 
@@ -442,6 +448,7 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
                     let reader = std::fs::File::open(&path)?;
                     let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     nf_intrinsics.set(intrinsics);
+                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
