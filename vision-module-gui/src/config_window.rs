@@ -1,10 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
 use ats_usb::{device::UsbDevice, packet::{GeneralConfig, MarkerPattern, Port}};
+use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use iui::{
-    controls::Form,
+    controls::{Button, Form},
     prelude::{Window, WindowType},
     UI,
 };
@@ -48,7 +49,7 @@ pub fn config_window(
             }
         }
     }
-    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only(), mot_runner);
+    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only(), mot_runner, config_win.c());
     let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
     tab_group.append(&ui, "General", general_form);
@@ -83,7 +84,7 @@ pub fn config_window(
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
                     UsbDevice::connect_tcp(sim_addr)?
                 } else {
-                    UsbDevice::connect_hub("0.0.0.0:23456", udp_addr.as_ref().unwrap()).await?
+                    UsbDevice::connect_hub("0.0.0.0:23457", udp_addr.as_ref().unwrap()).await?
                 };
                 general_settings.load_from_device(&usb_device, true).await?;
                 wf_settings.load_from_device(&usb_device).await?;
@@ -308,25 +309,47 @@ pub fn config_window(
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
     accel_odr: RwSignal<i32>,
+    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>,
     mot_runner: Arc<Mutex<MotRunner>>,
 }
 
 impl GeneralSettingsForm {
-    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>) -> (Form, Self) {
+    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>, win: Window) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let accel_odr = create_rw_signal(0);
+        let nf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
+        let wf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+        let stereo_iso = create_rw_signal(nalgebra::Isometry3::identity());
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
                 (Compact, "Accelerometer ODR") : let x = Spinbox(enabled: connected, signal: accel_odr)
+                (Compact, "Upload Nearfield Calibration") : let upload_nf_yml = Button("Upload")
+                (Compact, "Upload Widefield Calibration") : let upload_wf_yml = Button("Upload")
+                (Compact, "Upload Stereo Calibration") : let upload_stereo_yml = Button("Upload")
             }
         }
+        set_yml_upload_handlers(
+            &ui,
+            &mut upload_nf_yml,
+            &mut upload_wf_yml,
+            &mut upload_stereo_yml,
+            nf_intrinsics.c(),
+            wf_intrinsics.c(),
+            stereo_iso.c(),
+            win,
+        );
         (
             form,
             Self {
                 impact_threshold,
                 accel_odr,
+                nf_intrinsics,
+                wf_intrinsics,
+                stereo_iso,
                 mot_runner,
             },
         )
@@ -386,9 +409,13 @@ impl GeneralSettingsForm {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             accel_odr: self.accel_odr.get_untracked() as u16,
+            camera_model_nf: self.nf_intrinsics.get_untracked(),
+            camera_model_wf: self.wf_intrinsics.get_untracked(),
+            stereo_iso: self.stereo_iso.get_untracked(),
+            uuid: self.mot_runner.lock().general_config.uuid,
         };
-        device.write_config(config).await?;
-        self.mot_runner.lock().general_config = config;
+        device.write_config(config.clone()).await?;
+        self.mot_runner.lock().general_config = config.clone();
         Ok(())
     }
 
@@ -400,6 +427,31 @@ impl GeneralSettingsForm {
         self.impact_threshold.set(5);
         self.accel_odr.set(800);
     }
+}
+
+fn set_yml_upload_handlers(ui: &UI, upload_nf_yml: &mut Button, upload_wf_yml: &mut Button, upload_stereo_yml: &mut Button,
+    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>, wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>, win: Window)
+{
+    upload_nf_yml.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.open_file(&ui) {
+                let Ok(()) = (|| {
+                    let reader = std::fs::File::open(&path)?;
+                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(reader)?;
+                    nf_intrinsics.set(intrinsics);
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to upload calibration", "No file selected");
+            }
+        }
+    });
 }
 
 #[derive(Copy, Clone)]

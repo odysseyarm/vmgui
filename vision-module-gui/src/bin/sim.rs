@@ -11,6 +11,7 @@ use iui::{
 use nalgebra::{
     Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
 };
+use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
 use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
@@ -124,7 +125,13 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::EulerAnglesReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig { impact_threshold: 0, accel_odr: 100 })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig {
+                impact_threshold: 0,
+                accel_odr: 100,
+                camera_model_nf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
+                camera_model_wf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
+                stereo_iso: nalgebra::Isometry3::identity(),
+            })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
