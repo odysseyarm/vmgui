@@ -169,7 +169,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
             let down = mot_data.boundary_down as f64 / 98.;
             let right = mot_data.boundary_right as f64 / 98.;
             let up = mot_data.boundary_up as f64 / 98.;
-            
+
             custom_shapes::draw_rectangle(ctx, &nf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
             custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", mot_data.cx, mot_data.cy, i));
         }
