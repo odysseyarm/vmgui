@@ -471,7 +471,7 @@ impl GeneralConfig {
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], 0]);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
@@ -604,8 +604,6 @@ impl CombinedMarkersReport {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let before = buf.len();
-
         buf.extend_from_slice(&self.timestamp.to_le_bytes());
 
         for p in self.nf_points.iter().chain(&self.wf_points) {
@@ -619,7 +617,6 @@ impl CombinedMarkersReport {
         for w in self.nf_radii.chunks(2).chain(self.wf_radii.chunks(2)) {
             buf.push((w[0] & 0x0f) | (w[1] << 4));
         }
-        let after = buf.len();
     }
 }
 
