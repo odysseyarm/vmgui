@@ -69,15 +69,17 @@ char *commonItemDialog(HWND parent, REFCLSID clsid, REFIID iid, FILEOPENDIALOGOP
 		logHRESULT(L"error setting options", hr);
 		goto out;
 	}
-	filter_specs = (COMDLG_FILTERSPEC *) uiprivAlloc(sizeof(COMDLG_FILTERSPEC) * filters_len, "COMDLG_FILTERSPEC[]");
-	for (int i = 0; i < filters_len; i++) {
-		filter_specs[i] = build_filter_spec(filters[i]);
+	if (filters_len != 0) {
+		filter_specs = (COMDLG_FILTERSPEC *) uiprivAlloc(sizeof(COMDLG_FILTERSPEC) * filters_len, "COMDLG_FILTERSPEC[]");
+		for (int i = 0; i < filters_len; i++) {
+			filter_specs[i] = build_filter_spec(filters[i]);
+		}
+		hr = d->SetFileTypes(filters_len, filter_specs);
+		for (int i = 0; i < filters_len; i++) {
+			free_filter_spec(filter_specs[i]);
+		}
+		uiprivFree(filter_specs);
 	}
-	hr = d->SetFileTypes(filters_len, filter_specs);
-	for (int i = 0; i < filters_len; i++) {
-		free_filter_spec(filter_specs[i]);
-	}
-	uiprivFree(filter_specs);
 	if (hr != S_OK) {
 		logHRESULT(L"error setting file type filters", hr);
 		goto out;
