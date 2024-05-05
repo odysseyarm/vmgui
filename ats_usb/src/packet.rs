@@ -1,6 +1,7 @@
 use std::{fmt::Display, error::Error as StdError};
 
-use nalgebra::{coordinates::XY, Point2, Rotation3};
+use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3};
+use opencv_ros_camera::RosOpenCvIntrinsics;
 
 #[derive(Clone, Debug)]
 pub struct Packet {
@@ -80,10 +81,27 @@ impl MarkerPattern {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct GeneralConfig {
     pub impact_threshold: u8,
     pub accel_odr: u16,
+    pub camera_model_nf: RosOpenCvIntrinsics<f32>,
+    pub camera_model_wf: RosOpenCvIntrinsics<f32>,
+    pub stereo_iso: Isometry3<f32>,
+    pub uuid: [u8; 6],
+}
+
+impl Default for GeneralConfig {
+    fn default() -> Self {
+        Self {
+            impact_threshold: 0,
+            accel_odr: 0,
+            camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
+            camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
+            stereo_iso: Isometry3::identity(),
+            uuid: [0; 6],
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -409,14 +427,36 @@ impl WriteRegister {
 
 impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
+        println!("{:?}", bytes);
         use Error as E;
-        let [impact_threshold, accel_odr0, accel_odr1, _, ..] = **bytes else {
+        let [impact_threshold, accel_odr0, accel_odr1, ..] = **bytes else {
             return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
         let accel_odr: [u8; 2] = [accel_odr0, accel_odr1];
         let accel_odr = u16::from_le_bytes(accel_odr);
-        *bytes = &bytes[4..];
-        Ok(Self { impact_threshold, accel_odr })
+        *bytes = &bytes[3..];
+        
+        let camera_model_nf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+            Ok(x) => x.into(),
+            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+        };
+
+        let camera_model_wf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+            Ok(x) => x.into(),
+            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+        };
+
+        let stereo_iso = match ats_cv::ocv_types::MinimalStereoCalibrationParams::parse(bytes) {
+            Ok(x) => x.into(),
+            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+        };
+
+        let mut uuid = [0; 6];
+        uuid.clone_from_slice(&bytes[..6]);
+
+        *bytes = &bytes[..6];
+
+        Ok(Self { impact_threshold, accel_odr, camera_model_nf, camera_model_wf, stereo_iso, uuid })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {

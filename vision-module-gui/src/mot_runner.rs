@@ -1,14 +1,12 @@
 use std::sync::Arc;
 use ats_cv::kalman::Pva2d;
-use opencv_ros_camera::{NamedIntrinsicParameters, RosOpenCvIntrinsics};
+use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
 use std::time::Duration;
-use ahrs::Ahrs;
 use arrayvec::ArrayVec;
-use ats_cv::get_perspective_transform;
 use iui::concurrent::Context;
-use leptos_reactive::{RwSignal, SignalSet, SignalUpdate};
-use nalgebra::{Const, Isometry3, Matrix, Matrix1xX, Matrix2xX, Matrix3, MatrixXx1, MatrixXx2, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
+use leptos_reactive::RwSignal;
+use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -156,8 +154,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let filtered_nf_points_slice = filtered_nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
             let filtered_wf_points_slice = filtered_wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
 
-            let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.state.camera_model_nf);
-            let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.state.camera_model_wf);
+            let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
+            let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
 
             let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
             let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
@@ -179,9 +177,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 &wf_points_transformed,
                 runner.state.orientation,
                 runner.state.screen_id,
-                &runner.state.camera_model_nf,
-                &runner.state.camera_model_wf,
-                runner.state.stereo_iso
+                &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf),
+                &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf),
+                runner.general_config.stereo_iso.cast(),
             );
             if let Some(rotation) = rotation {
                 runner.state.rotation_mat = rotation;
@@ -193,11 +191,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aim_point = fv_aim_point;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.state.camera_model_nf) {
+            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
                 runner.state.nf_aim_point = x;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, runner.state.orientation, Some(&runner.state.stereo_iso), &runner.state.camera_model_wf) {
+            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, runner.state.orientation, Some(&runner.general_config.stereo_iso.cast()), &runner.general_config.camera_model_wf) {
                 runner.state.wf_aim_point = x;
             }
 
@@ -211,7 +209,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f64>>, intrinsics: &RosOpenCvIntrinsics<f64>) -> Option<Point2<f64>> {
+fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>) -> Option<Point2<f64>> {
     let fx = intrinsics.p.m11 * (4095./98.);
     let fy = intrinsics.p.m22 * (4095./98.);
 
@@ -227,7 +225,7 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3
         let projections = ats_cv::calculate_projections(
             &points,
             // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
-            Vector2::new(fx, fy),
+            Vector2::new(fx as f64, fy as f64),
             Vector2::new(4095., 4095.),
         );
         let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
@@ -254,6 +252,7 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3
             );
 
             if let Some(iso) = iso {
+                let iso = iso.cast();
                 let rotation_mat = flip_yz * (iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz;
                 let translation_mat = flip_yz * ctf.translation.vector;
 
@@ -280,9 +279,9 @@ fn filter_and_create_point_id_tuples(points: &[Point2<u16>], radii: &[u8]) -> Ve
         .collect()
 }
 
-fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f64>) -> Vec<Point2<f64>> {
+fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f32>) -> Vec<Point2<f64>> {
     let scaled_points = points.iter().map(|p| Point2::new(p.x / 4095. * 98., p.y / 4095. * 98.)).collect::<Vec<_>>();
-    let undistorted_points = ats_cv::undistort_points(camera_intrinsics, &scaled_points);
+    let undistorted_points = ats_cv::undistort_points(&ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics), &scaled_points);
     undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
 }
 

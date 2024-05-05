@@ -45,18 +45,11 @@ pub struct MotState {
     pub nf_pva2ds: [Pva2d<f64>; 16],
     pub wf_pva2ds: [Pva2d<f64>; 16],
 
-    nf_radii: [u8; 4],
-    wf_radii: [u8; 4],
-
     pub screen_id: u8,
     pub orientation: Rotation3<f64>,
 
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
-
-    pub camera_model_nf: RosOpenCvIntrinsics<f64>,
-    pub camera_model_wf: RosOpenCvIntrinsics<f64>,
-    pub stereo_iso: Isometry3<f64>,
 
     pub nf_aim_point_history: [Point2<f64>; 40],
     pub nf_aim_point_history_index: usize,
@@ -64,61 +57,6 @@ pub struct MotState {
 
 impl Default for MotState {
     fn default() -> Self {
-        let nf_default_yaml = b"
-            camera_matrix: !!opencv-matrix
-                rows: 3
-                cols: 3
-                dt: d
-                data: [ 145.10303635182407, 0., 47.917007513463489, 0.,
-                    145.29149528441428, 49.399597700110256, 0., 0., 1. ]
-            dist_coeffs: !!opencv-matrix
-                rows: 1
-                cols: 5
-                dt: d
-                data: [ -0.20386528104463086, 2.2361997667805928,
-                    0.0058579118546963271, -0.0013804251043507982,
-                    -7.7712738787306455 ]
-            rms_error: 0.074045711900311811
-            num_captures: 62
-        ";
-
-        let wf_default_yaml = b"
-            camera_matrix: !!opencv-matrix
-               rows: 3
-               cols: 3
-               dt: d
-               data: [ 34.34121647200962, 0., 48.738547789766642, 0.,
-                   34.394866762375322, 49.988446965249153, 0., 0., 1. ]
-            dist_coeffs: !!opencv-matrix
-               rows: 1
-               cols: 5
-               dt: d
-               data: [ 0.039820534469617412, -0.039933169314557031,
-                   0.00043006078813049756, -0.0012057066028621883,
-                   0.0053022349797757964 ]
-            rms_error: 0.066816050332039037
-            num_captures: 64
-        ";
-
-        let stereo_default_yaml = b"
-            r: !!opencv-matrix
-                rows: 3
-                cols: 3
-                dt: d
-                data: [ 0.99998692169365289, -0.0051111539633757353,
-                    -0.00018040735794555248, 0.0050780667355570033,
-                    0.99647084468055069, -0.083785851668757322,
-                    0.00060801306019016873, 0.083783839771118418, 0.99648376731049981 ]
-            t: !!opencv-matrix
-                rows: 3
-                cols: 1
-                dt: d
-                data: [ -0.011673356870756095, -0.33280456937540659,
-                    0.19656043337961257 ]
-            rms_error: 0.1771451374078685
-            num_captures: 49
-        ";
-
         Self {
             fv_aim_point: Point2::new(0.0, 0.0),
             nf_aim_point: Point2::new(0.0, 0.0),
@@ -131,13 +69,8 @@ impl Default for MotState {
             orientation: Rotation3::identity(),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
-            camera_model_nf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&nf_default_yaml[..]).unwrap(),
-            camera_model_wf: ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(&wf_default_yaml[..]).unwrap(),
-            stereo_iso: ats_cv::get_isometry_from_opencv_stereo_calibration_yaml(&stereo_default_yaml[..]).unwrap(),
             nf_points: Default::default(),
             wf_points: Default::default(),
-            nf_radii: Default::default(),
-            wf_radii: Default::default(),
             nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
             nf_aim_point_history_index: 0,
         }

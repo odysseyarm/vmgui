@@ -7,8 +7,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git" }
 enumn = "0.1.13"
 nalgebra = "0.32.3"
+opencv-ros-camera = { version = "0.14.1" }
 pin-project = "1.1.4"
 serial2 = "0.2.19"
 socket2 = "0.5.7"
