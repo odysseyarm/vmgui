@@ -6,7 +6,7 @@ use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}}
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{EulerAnglesReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{CombinedMarkersReport, EulerAnglesReport, GeneralConfig, GeneralWriteConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -364,7 +364,7 @@ impl UsbDevice {
         Ok(r)
     }
 
-    pub async fn write_config(&self, config: GeneralConfig) -> Result<()> {
+    pub async fn write_config(&self, config: GeneralWriteConfig) -> Result<()> {
         let data = PacketData::WriteConfig(config);
         let pkt = Packet {
             id: 255,

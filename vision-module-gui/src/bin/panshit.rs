@@ -1,5 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use ats_usb::packet::{Packet, PacketData, Port, Register, StreamUpdate};
+use ats_usb::packet::{Packet, PacketData};
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 // use multicast_socket::MulticastSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};

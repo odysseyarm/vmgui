@@ -131,7 +131,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 camera_model_nf: RosOpenCvIntrinsics::from_params(nf_focal_length() as f32, 0., nf_focal_length() as f32, 49., 49.),
                 camera_model_wf: RosOpenCvIntrinsics::from_params(wf_focal_length() as f32, 0., wf_focal_length() as f32, 49., 49.),
                 stereo_iso: nalgebra::Isometry3::identity(),
-                uuid: [0; 6],
+                uuid: [42, 69, 3, 7, 9, 13],
             })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
