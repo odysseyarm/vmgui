@@ -40,7 +40,7 @@ static char *filedialog(GtkWindow *parent, GtkFileChooserAction mode, const gcha
 			gtk_file_chooser_add_filter(fc, gfilter);
 		}
 	}
-	uiprivFree(pattern);
+	if (pattern != NULL) uiprivFree(pattern);
 
 	response = gtk_dialog_run(GTK_DIALOG(fcd));
 	if (response != GTK_RESPONSE_ACCEPT) {
