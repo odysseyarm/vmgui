@@ -1,5 +1,6 @@
 use std::{fmt::Display, error::Error as StdError};
 
+use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
 use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 
@@ -435,7 +436,7 @@ impl GeneralConfig {
         let accel_odr: [u8; 2] = [accel_odr0, accel_odr1];
         let accel_odr = u16::from_le_bytes(accel_odr);
         *bytes = &bytes[3..];
-        
+
         let camera_model_nf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
@@ -462,6 +463,11 @@ impl GeneralConfig {
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
         buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], 0]);
+        MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
+        MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
+        MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
+        buf.extend_from_slice(&self.uuid);
+        buf.push(0); // padding
     }
 }
 

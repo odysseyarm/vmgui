@@ -332,7 +332,7 @@ impl GeneralSettingsForm {
                 (Compact, "Upload Stereo Calibration") : let upload_stereo_yml = Button("Upload")
             }
         }
-        set_yml_upload_handlers(
+        set_calibration_upload_handlers(
             &ui,
             &mut upload_nf_yml,
             &mut upload_wf_yml,
@@ -429,18 +429,18 @@ impl GeneralSettingsForm {
     }
 }
 
-fn set_yml_upload_handlers(ui: &UI, upload_nf_yml: &mut Button, upload_wf_yml: &mut Button, upload_stereo_yml: &mut Button,
+fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &mut Button, upload_stereo: &mut Button,
     nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>, wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
     stereo_iso: RwSignal<nalgebra::Isometry3<f32>>, win: Window)
 {
-    upload_nf_yml.on_clicked(&ui, {
+    upload_nf.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
         move |_| {
             if let Some(path) = win.open_file(&ui) {
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
-                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_yaml(reader)?;
+                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     nf_intrinsics.set(intrinsics);
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
