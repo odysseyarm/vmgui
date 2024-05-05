@@ -431,7 +431,10 @@ impl GeneralSettingsForm {
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
-        self.accel_odr.set(800);
+        self.accel_odr.set(50);
+        self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
+        self.wf_intrinsics.set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+        self.stereo_iso.set(nalgebra::Isometry3::identity());
     }
 }
 

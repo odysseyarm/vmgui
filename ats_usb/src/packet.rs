@@ -483,7 +483,7 @@ impl GeneralConfig {
 impl GeneralWriteConfig {
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], 0]);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
