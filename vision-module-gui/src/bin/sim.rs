@@ -128,9 +128,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig {
                 impact_threshold: 0,
                 accel_odr: 100,
-                camera_model_nf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
-                camera_model_wf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
+                camera_model_nf: RosOpenCvIntrinsics::from_params(nf_focal_length() as f32, 0., nf_focal_length() as f32, 49., 49.),
+                camera_model_wf: RosOpenCvIntrinsics::from_params(wf_focal_length() as f32, 0., wf_focal_length() as f32, 49., 49.),
                 stereo_iso: nalgebra::Isometry3::identity(),
+                uuid: [0; 6],
             })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
@@ -199,26 +200,31 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             //     marker_pattern[2],
             //     marker_pattern[3],
             // ).unwrap();
-            let mut nf_radii = [0; 16];
-            let nf_positions = std::array::from_fn(|i| {
-                let Some(XY { x, y }) = nf_markers.get(i).map(|x| **x) else {
-                    return Point2::default()
-                };
-                if (0..4096).contains(&x) && (0..4096).contains(&y) {
-                    nf_radii[i] = 1;
-                    Point2::new(x as u16, y as u16)
-                } else {
-                    Point2::default()
-                }
-            });
+            let make_positions = |markers: &[Point2<i16>]| {
+                let mut radii = [0; 16];
+                let positions = std::array::from_fn(|i| {
+                    let Some(XY { x, y }) = markers.get(i).map(|x| **x) else {
+                        return Point2::default()
+                    };
+                    if (0..4096).contains(&x) && (0..4096).contains(&y) {
+                        radii[i] = 1;
+                        Point2::new(x as u16, y as u16)
+                    } else {
+                        Point2::default()
+                    }
+                });
+                (positions, radii)
+            };
+            let (nf_positions, nf_radii) = make_positions(&nf_markers);
+            let (wf_positions, wf_radii) = make_positions(&wf_markers);
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     timestamp: 0,
                     nf_points: nf_positions,
-                    wf_points: Default::default(),
+                    wf_points: wf_positions,
                     nf_radii,
-                    wf_radii: Default::default(),
+                    wf_radii,
                 })
             };
             buf.clear();
@@ -316,10 +322,8 @@ impl State {
         yaw * pitch
     }
 
-    fn perspective_matrix(&self) -> Matrix4<f64> {
-        let fov_deg = 38.3;
-        let fov = fov_deg / 180.0 * std::f64::consts::PI;
-        let f = 1. / (fov / 2.).tan();
+    fn nf_perspective_matrix(&self) -> Matrix4<f64> {
+        let f = nf_focal_length();
         #[rustfmt::skip]
         let r = Matrix4::new(
             f, 0.,  0., 0.,
@@ -331,9 +335,7 @@ impl State {
     }
 
     fn wf_perspective_matrix(&self) -> Matrix4<f64> {
-        let fov_deg = 111.3;
-        let fov = fov_deg / 180.0 * std::f64::consts::PI;
-        let f = 1. / (fov / 2.).tan();
+        let f = wf_focal_length();
         #[rustfmt::skip]
         let r = Matrix4::new(
             f, 0.,  0., 0.,
@@ -344,8 +346,21 @@ impl State {
         r
     }
 
+    /// Ratio of the image plane size of nf to wf.
+    fn nf_wf_ratio(&self) -> f64 {
+        let nf_fov_deg = 38.3;
+        let nf_fov = nf_fov_deg / 180.0 * std::f64::consts::PI;
+        let nf_s = (nf_fov / 2.).tan();
+
+        let wf_fov_deg = 111.3;
+        let nf_fov = wf_fov_deg / 180.0 * std::f64::consts::PI;
+        let wf_s = (nf_fov / 2.).tan();
+
+        nf_s / wf_s
+    }
+
     fn calculate_nf_positions(&self) -> Vec<Point2<i16>> {
-        let transform = self.perspective_matrix()
+        let transform = self.nf_perspective_matrix()
             * self.camera_matrix();
         let device_transform =
             Scale2::new(2047.5, -2047.5).to_homogeneous() * Translation2::new(1.0, -1.0).to_homogeneous();
@@ -420,10 +435,23 @@ impl AreaHandler for MainCanvas {
         bg.end(ctx);
         ctx.fill(&bg, &Brush::Solid(SolidBrush { r: 0., g: 0., b: 0., a: 1. }));
 
+        {
+            // yellow square for nearfield
+            let sq = Path::new(ctx, FillMode::Winding);
+            let size = size * state.nf_wf_ratio();
+            sq.new_figure(ctx, w/2. - size/2., h/2. - size/2.);
+            sq.line_to(ctx, w/2. + size/2., h/2. - size/2.);
+            sq.line_to(ctx, w/2. + size/2., h/2. + size/2.);
+            sq.line_to(ctx, w/2. - size/2., h/2. + size/2.);
+            sq.close_figure(ctx);
+            sq.end(ctx);
+            ctx.stroke(&sq, &Brush::Solid(SolidBrush { r: 1., g: 1., b: 0., a: 1. }), &thin_line);
+        }
+
         // map normalized coordinates into screen coordinates
         let device_transform = Translation2::new(w / 2., h / 2.).to_homogeneous()
             * Scale2::new(size / 2., -size / 2.).to_homogeneous();
-        let transform = state.perspective_matrix() * state.camera_matrix();
+        let transform = state.wf_perspective_matrix() * state.camera_matrix();
 
         // Draw the grid at the origin
         let grid_path = Path::new(ctx, FillMode::Winding);
@@ -609,4 +637,16 @@ fn clip_line<const N: usize>(
         }
     }
     Some((p1, p2))
+}
+
+fn nf_focal_length() -> f64 {
+    let fov_deg = 38.3;
+    let fov = fov_deg / 180.0 * std::f64::consts::PI;
+    1. / (fov / 2.).tan()
+}
+
+fn wf_focal_length() -> f64 {
+    let fov_deg = 111.3;
+    let fov = fov_deg / 180.0 * std::f64::consts::PI;
+    1. / (fov / 2.).tan()
 }

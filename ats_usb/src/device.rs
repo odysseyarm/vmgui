@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, os::windows::io::AsSocket, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
