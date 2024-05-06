@@ -101,6 +101,7 @@ impl UsbDevice {
         })?;
 
         read_port.set_read_timeout(Duration::from_millis(10))?;
+        read_port.set_dtr(true)?;
 
         let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
             let mut buf = vec![0xff];
@@ -120,7 +121,6 @@ impl UsbDevice {
         }).await??;
 
         port.set_read_timeout(Duration::from_millis(3000))?;
-        port.set_dtr(true).unwrap();
         let writer = port.try_clone().context("Failed to clone serial port")?;
         let reader = port;
         Ok(Self::new(reader, writer))

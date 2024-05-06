@@ -144,14 +144,18 @@ pub fn config_window(
             }.into_iter().filter(|port| {
                 match &port.port_type {
                     UsbPort(port_info) => {
-                        if let Some(i) = port_info.interface {
-                            // interface 0: cdc acm module
-                            // interface 1: cdc acm module functional subordinate interface
-                            // interface 2: cdc acm dfu
-                            // interface 3: cdc acm dfu subordinate interface
-                            i == 0
+                        if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210 {
+                            if let Some(i) = port_info.interface {
+                                // interface 0: cdc acm module
+                                // interface 1: cdc acm module functional subordinate interface
+                                // interface 2: cdc acm dfu
+                                // interface 3: cdc acm dfu subordinate interface
+                                i == 0
+                            } else {
+                                true
+                            }
                         } else {
-                            true
+                            false
                         }
                     },
                     _ => false,
