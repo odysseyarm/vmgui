@@ -575,7 +575,7 @@ impl SensorSettingsForm {
 
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
-        let timeout = Duration::from_millis(500);
+        let timeout = Duration::from_millis(2000);
         let pid = retry(|| device.product_id(self.port), timeout, 3).await.unwrap()?;
         let res_x = retry(|| device.resolution_x(self.port), timeout, 3).await.unwrap()?;
         let res_y = retry(|| device.resolution_y(self.port), timeout, 3).await.unwrap()?;
