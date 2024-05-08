@@ -325,6 +325,7 @@ impl UsbDevice {
     }
 
     pub async fn read_register(&self, port: Port, bank: u8, address: u8) -> Result<u8> {
+        println!("read_register: bank={} address={}", bank, address);
         let r = self
             .request(PacketData::ReadRegister(Register {
                 port,
@@ -334,6 +335,7 @@ impl UsbDevice {
             .await?
             .read_register_response()
             .with_context(|| "unexpected response")?;
+        println!("read_register: bank={} address={} data={}", bank, address, r.data);
         assert_eq!(r.bank, bank);
         assert_eq!(r.address, address);
         Ok(r.data)

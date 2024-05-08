@@ -1,5 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use ats_usb::packet::{Packet, PacketData};
+use ats_usb::packet::{Packet, PacketData, Port, Register};
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 // use multicast_socket::MulticastSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -9,7 +9,7 @@ fn main() {
     let multicast = Ipv4Addr::new(224, 0, 2, 52);
     let multicast_addr_std = SocketAddrV4::new(multicast.into(), 23456);
     let multicast_addr = SockAddr::from(multicast_addr_std);
-    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 23456));
+    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 23457));
 
     // todo MulticastSocket has to be turned into Ext for std, socket2, and tokio
     // let client = MulticastSocket::all_interfaces(multicast_addr_std).unwrap();
@@ -31,13 +31,13 @@ fn main() {
     // client.broadcast(&[255, 1]);
     client.send_to(&[255, 1], &multicast_addr).unwrap();
 
-    // let mut udp_packet = vec![1, 0, 255];
-    // let pkt = Packet {
-    //     id: 0,
-    //     data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
-    // };
-    // pkt.serialize(&mut udp_packet);
-    // client.send_to(&udp_packet, &multicast_addr).unwrap();
+    let mut udp_packet = vec![1, 0, 255];
+    let pkt = Packet {
+        id: 0,
+        data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
+    };
+    pkt.serialize(&mut udp_packet);
+    client.send_to(&udp_packet, &multicast_addr).unwrap();
 
     // let mut udp_packet = vec![1, 0, 255];
     // let pkt = Packet {
