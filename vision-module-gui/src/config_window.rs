@@ -466,6 +466,48 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
             }
         }
     });
+
+    upload_wf.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.open_file(&ui) {
+                let Ok(()) = (|| {
+                    let reader = std::fs::File::open(&path)?;
+                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
+                    wf_intrinsics.set(intrinsics);
+                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to upload calibration", "No file selected");
+            }
+        }
+    });
+
+    upload_stereo.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.open_file(&ui) {
+                let Ok(()) = (|| {
+                    let reader = std::fs::File::open(&path)?;
+                    let iso = ats_cv::get_isometry_from_opencv_stereo_calibration_json(reader)?;
+                    stereo_iso.set(iso);
+                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to upload calibration", "No file selected");
+            }
+        }
+    });
 }
 
 #[derive(Copy, Clone)]
