@@ -6,7 +6,7 @@ use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}}
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{CombinedMarkersReport, EulerAnglesReport, GeneralConfig, GeneralWriteConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{AccelReport, CombinedMarkersReport, EulerAnglesReport, GeneralConfig, GeneralWriteConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -57,6 +57,7 @@ num_variants! {
         MotData,
         CombinedMarkers,
         Accel,
+        EulerAngles,
         Impact,
     }
 }
@@ -413,8 +414,12 @@ impl UsbDevice {
         Ok(self.stream(StreamType::CombinedMarkers).await?.filter_map(|x| x.combined_markers_report()))
     }
 
+    pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
+        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.accel_report()))
+    }
+
     pub async fn stream_euler_angles(&self) -> Result<impl Stream<Item = EulerAnglesReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.euler_angles_report()))
+        Ok(self.stream(StreamType::EulerAngles).await?.filter_map(|x| x.euler_angles_report()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
