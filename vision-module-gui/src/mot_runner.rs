@@ -289,9 +289,9 @@ async fn euler_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut euler_stream = device.stream_euler_angles().await.unwrap();
     while runner.lock().device.is_some() {
-        if let Some(accel) = euler_stream.next().await {
+        if let Some(euler_angles) = euler_stream.next().await {
             let mut runner = runner.lock();
-            runner.state.orientation = accel.rotation;
+            runner.state.orientation = euler_angles.rotation;
         }
     }
 }

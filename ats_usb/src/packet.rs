@@ -20,6 +20,7 @@ pub enum PacketData {
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
     CombinedMarkersReport(CombinedMarkersReport),
+    AccelReport(AccelReport),
     EulerAnglesReport(EulerAnglesReport),
     ImpactReport(ImpactReport),
     StreamUpdate(StreamUpdate),
@@ -29,6 +30,7 @@ pub enum PacketData {
 pub enum StreamChoice {
     Object,
     CombinedMarkers,
+    Accel,
     EulerAngles,
     Impact,
 }
@@ -86,6 +88,7 @@ impl MarkerPattern {
 pub struct GeneralConfig {
     pub impact_threshold: u8,
     pub accel_odr: u16,
+    pub euler_angles_odr: u16,
     pub camera_model_nf: RosOpenCvIntrinsics<f32>,
     pub camera_model_wf: RosOpenCvIntrinsics<f32>,
     pub stereo_iso: Isometry3<f32>,
@@ -96,6 +99,7 @@ pub struct GeneralConfig {
 pub struct GeneralWriteConfig {
     pub impact_threshold: u8,
     pub accel_odr: u16,
+    pub euler_angles_odr: u16,
     pub camera_model_nf: RosOpenCvIntrinsics<f32>,
     pub camera_model_wf: RosOpenCvIntrinsics<f32>,
     pub stereo_iso: Isometry3<f32>,
@@ -104,8 +108,9 @@ pub struct GeneralWriteConfig {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            impact_threshold: 0,
-            accel_odr: 0,
+            impact_threshold: 2,
+            accel_odr: 100,
+            euler_angles_odr: 10,
             camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
             camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
             stereo_iso: Isometry3::identity(),
@@ -148,6 +153,12 @@ pub struct CombinedMarkersReport {
     pub wf_points: [Point2<u16>; 16],
     pub nf_radii: [u8; 16],
     pub wf_radii: [u8; 16],
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AccelReport {
+    pub accel: [f64; 3],
+    pub gyro: [f64; 3],
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -218,6 +229,7 @@ pub enum PacketType {
     ObjectReportRequest,
     ObjectReport,
     CombinedMarkersReport,
+    AccelReport,
     EulerAnglesReport,
     ImpactReport,
     StreamUpdate,
@@ -238,11 +250,12 @@ impl TryFrom<u8> for PacketType {
             6 => Ok(Self::ObjectReportRequest),
             7 => Ok(Self::ObjectReport),
             8 => Ok(Self::CombinedMarkersReport),
-            9 => Ok(Self::EulerAnglesReport),
-            10 => Ok(Self::ImpactReport),
-            11 => Ok(Self::StreamUpdate),
-            12 => Ok(Self::FlashSettings),
-            13 => Ok(Self::End),
+            9 => Ok(Self::AccelReport),
+            10 => Ok(Self::EulerAnglesReport),
+            11 => Ok(Self::ImpactReport),
+            12 => Ok(Self::StreamUpdate),
+            13 => Ok(Self::FlashSettings),
+            14 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -260,6 +273,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
             PacketData::ObjectReport(_) => PacketType::ObjectReport,
             PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
+            PacketData::AccelReport(_) => PacketType::AccelReport,
             PacketData::EulerAnglesReport(_) => PacketType::EulerAnglesReport,
             PacketData::ImpactReport(_) => PacketType::ImpactReport,
             PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
@@ -290,6 +304,7 @@ impl Packet {
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
+            PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
             PacketType::EulerAnglesReport => PacketData::EulerAnglesReport(EulerAnglesReport::parse(bytes)?),
             PacketType::ImpactReport => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
             PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
@@ -311,12 +326,13 @@ impl Packet {
             PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
             PacketData::ReadRegister(_) => calculate_length!(Register)+1,
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
-            PacketData::WriteConfig(_) => 164,
+            PacketData::WriteConfig(_) => 166,
             PacketData::ReadConfig => 0,
             PacketData::ReadConfigResponse(_) => 4,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
+            PacketData::AccelReport(_) => 12,
             PacketData::EulerAnglesReport(_) => 12,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
@@ -336,6 +352,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
+            PacketData::AccelReport(x) => unimplemented!(),
             PacketData::EulerAnglesReport(x) => unimplemented!(),
             PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
@@ -369,6 +386,13 @@ impl PacketData {
     pub fn combined_markers_report(self) -> Option<CombinedMarkersReport> {
         match self {
             PacketData::CombinedMarkersReport(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn accel_report(self) -> Option<AccelReport> {
+        match self {
+            PacketData::AccelReport(x) => Some(x),
             _ => None,
         }
     }
@@ -439,12 +463,14 @@ impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         println!("{:?}", bytes);
         use Error as E;
-        let [impact_threshold, accel_odr0, accel_odr1, ..] = **bytes else {
+        let [impact_threshold, accel_odr0, accel_odr1, euler_angles_odr0, euler_angles_odr1, ..] = **bytes else {
             return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
         let accel_odr: [u8; 2] = [accel_odr0, accel_odr1];
         let accel_odr = u16::from_le_bytes(accel_odr);
-        *bytes = &bytes[3..];
+        let euler_angles_odr: [u8; 2] = [euler_angles_odr0, euler_angles_odr1];
+        let euler_angles_odr = u16::from_le_bytes(euler_angles_odr);
+        *bytes = &bytes[5..];
 
         let camera_model_nf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
@@ -466,12 +492,13 @@ impl GeneralConfig {
 
         *bytes = &bytes[..7];
 
-        Ok(Self { impact_threshold, accel_odr, camera_model_nf, camera_model_wf, stereo_iso, uuid })
+        Ok(Self { impact_threshold, accel_odr, euler_angles_odr, camera_model_nf, camera_model_wf, stereo_iso, uuid })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
+        let euler_angles_odr: [u8; 2] = u16::to_le_bytes(self.euler_angles_odr);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], euler_angles_odr[0], euler_angles_odr[1]]);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
@@ -483,7 +510,8 @@ impl GeneralConfig {
 impl GeneralWriteConfig {
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
+        let euler_angles_odr: [u8; 2] = u16::to_le_bytes(self.euler_angles_odr);
+        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1], euler_angles_odr[0], euler_angles_odr[1]]);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
@@ -629,6 +657,28 @@ impl EulerAnglesReport {
         let rotation = Rotation3::from_euler_angles(euler_x as f64, euler_y as f64, euler_z as f64);
         *bytes = &bytes[12..];
         Ok(Self { rotation })
+    }
+}
+
+impl AccelReport {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        // accel: x, y, z, 16384 = 1g
+        // gyro: x, y, z, 16.4 = 1dps
+        let data = &mut &bytes[..12];
+        let accel = [(); 3].map(|_| {
+            let x = i16::from_le_bytes([data[0], data[1]]);
+            let x = x as f64 / 16384.0;
+            *data = &data[2..];
+            x
+        });
+        let gyro = [(); 3].map(|_| {
+            let x = i16::from_le_bytes([data[0], data[1]]);
+            let x = x as f64 / 16.4;
+            *data = &data[2..];
+            x
+        });
+        *bytes = &bytes[12..];
+        Ok(Self { accel, gyro })
     }
 }
 
