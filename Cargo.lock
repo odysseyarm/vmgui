@@ -114,9 +114,9 @@ name = "ahrs"
 version = "0.6.0"
 source = "git+https://github.com/jmagnuson/ahrs-rs#bf7b41d09115b47ce8f6060624ed6a8a9bc445d4"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.32.5",
  "num-traits",
- "simba",
+ "simba 0.8.1",
 ]
 
 [[package]]
@@ -193,6 +193,15 @@ name = "anyhow"
 version = "1.0.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f538837af36e6f6a9be0faa67f9a314f8119e4e4b5867c6ab40ed60360142519"
+
+[[package]]
+name = "approx"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f2a05fd1bd10b2527e20a2cd32d8873d115b8b39fe219ee25f42a8aca6ba278"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "approx"
@@ -306,12 +315,12 @@ version = "0.1.0"
 source = "git+https://github.com/odysseyarm/ats_cv.git#81f5834a556f01858acb3d4195141f4796d09659"
 dependencies = [
  "cam-geom",
- "nalgebra",
+ "nalgebra 0.32.5",
  "num",
  "opencv-ros-camera",
  "serde",
  "serde_json",
- "simba",
+ "simba 0.8.1",
  "sqpnp",
 ]
 
@@ -322,7 +331,7 @@ dependencies = [
  "anyhow",
  "ats_cv",
  "enumn",
- "nalgebra",
+ "nalgebra 0.32.5",
  "opencv-ros-camera",
  "pin-project",
  "serial2",
@@ -1104,7 +1113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa66539aa93d8522b146bf82de429714ea6370a6061fc1f1ff7bcacd4e64c6c4"
 dependencies = [
  "accesskit_winit",
- "approx",
+ "approx 0.5.1",
  "bevy_a11y",
  "bevy_app",
  "bevy_derive",
@@ -1304,9 +1313,9 @@ version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35cbc78121508edaef40f74082f1224f9d650f5f7c4d3824e098b4aea4f0046c"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "itertools 0.11.0",
- "nalgebra",
+ "nalgebra 0.32.5",
  "num-iter",
 ]
 
@@ -1808,6 +1817,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "eskf"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04b2a1dede94b60138e5c8ac20176c14631396b2e98d778100137ff29b54980a"
+dependencies = [
+ "nalgebra 0.25.4",
+]
+
+[[package]]
 name = "euclid"
 version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2053,6 +2071,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "generic-array"
+version = "0.14.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
+dependencies = [
+ "typenum",
+ "version_check",
+]
+
+[[package]]
 name = "gethostname"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2206,7 +2234,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc32c2334f00ca5ac3695c5009ae35da21da8c62d255b5b96d56e2597a637a38"
 dependencies = [
  "ab_glyph",
- "approx",
+ "approx 0.5.1",
  "xi-unicode",
 ]
 
@@ -2787,17 +2815,34 @@ dependencies = [
 
 [[package]]
 name = "nalgebra"
+version = "0.25.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c70c9e8c5f213c8e93fc8c112ade4edd3ee62062fb897776c23dcebac7932900"
+dependencies = [
+ "approx 0.4.0",
+ "generic-array",
+ "matrixmultiply",
+ "num-complex 0.3.1",
+ "num-rational 0.3.2",
+ "num-traits",
+ "serde",
+ "simba 0.4.0",
+ "typenum",
+]
+
+[[package]]
+name = "nalgebra"
 version = "0.32.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ea4908d4f23254adda3daa60ffef0f1ac7b8c3e9a864cf3cc154b251908a2ef"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "matrixmultiply",
  "nalgebra-macros",
- "num-complex",
- "num-rational",
+ "num-complex 0.4.5",
+ "num-rational 0.4.1",
  "num-traits",
- "simba",
+ "simba 0.8.1",
  "typenum",
 ]
 
@@ -2906,10 +2951,19 @@ version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3135b08af27d103b0a51f2ae0f8632117b7b185ccf931445affa8df530576a41"
 dependencies = [
- "num-complex",
+ "num-complex 0.4.5",
  "num-integer",
  "num-iter",
- "num-rational",
+ "num-rational 0.4.1",
+ "num-traits",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
+dependencies = [
  "num-traits",
 ]
 
@@ -2947,6 +3001,17 @@ name = "num-iter"
 version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
 dependencies = [
  "autocfg",
  "num-integer",
@@ -3126,7 +3191,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bc14a21e40eddf29fc187ecceb39f84d7e36a783b231ade7810ade8def455d7"
 dependencies = [
  "cam-geom",
- "nalgebra",
+ "nalgebra 0.32.5",
  "thiserror",
 ]
 
@@ -3671,13 +3736,25 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "simba"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5132a955559188f3d13c9ba831e77c802ddc8782783f050ed0c52f5988b95f4c"
+dependencies = [
+ "approx 0.4.0",
+ "num-complex 0.3.1",
+ "num-traits",
+ "paste",
+]
+
+[[package]]
+name = "simba"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "061507c94fc6ab4ba1c9a0305018408e312e17c041eb63bef8aa726fa33aceae"
 dependencies = [
- "approx",
+ "approx 0.5.1",
  "libm",
- "num-complex",
+ "num-complex 0.4.5",
  "num-traits",
  "paste",
  "wide",
@@ -3750,7 +3827,7 @@ name = "sqpnp"
 version = "0.1.0"
 source = "git+https://github.com/0e4ef622/sqpnp.git#dfc269a984a472edf6c48a8aab1336c176022859"
 dependencies = [
- "nalgebra",
+ "nalgebra 0.32.5",
 ]
 
 [[package]]
@@ -4155,10 +4232,11 @@ dependencies = [
  "csv",
  "directories",
  "enumn",
+ "eskf",
  "hidapi",
  "iui",
  "leptos_reactive",
- "nalgebra",
+ "nalgebra 0.32.5",
  "opencv-ros-camera",
  "parking_lot",
  "pin-project",

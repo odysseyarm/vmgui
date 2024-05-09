@@ -1,5 +1,6 @@
 use ahrs::Madgwick;
 use arrayvec::ArrayVec;
+use eskf;
 use nalgebra::{Isometry3, Matrix3, Matrix3x1, Point2, Rotation3};
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
@@ -51,6 +52,8 @@ pub struct MotState {
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
 
+    pub filter: eskf::ESKF,
+
     pub nf_aim_point_history: [Point2<f64>; 40],
     pub nf_aim_point_history_index: usize,
 }
@@ -71,6 +74,7 @@ impl Default for MotState {
             translation_mat: Default::default(),
             nf_points: Default::default(),
             wf_points: Default::default(),
+            filter: eskf::Builder::new().build(),
             nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
             nf_aim_point_history_index: 0,
         }

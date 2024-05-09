@@ -364,7 +364,7 @@ impl GeneralSettingsForm {
     }
 
     async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
-        let timeout = Duration::from_millis(500);
+        let timeout = Duration::from_millis(1000);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
