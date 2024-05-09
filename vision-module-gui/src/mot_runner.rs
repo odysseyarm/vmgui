@@ -285,6 +285,17 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
     undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
 }
 
+async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
+    let device = runner.lock().device.c().unwrap();
+    let mut accel_stream = device.stream_accel().await.unwrap();
+    while runner.lock().device.is_some() {
+        if let Some(accel) = accel_stream.next().await {
+            let mut runner = runner.lock();
+            // runner.state.filter.predict(accel.accel, accel.gyro, 1/runner.general_config.accel_odr);
+        }
+    }
+}
+
 async fn euler_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut euler_stream = device.stream_euler_angles().await.unwrap();
