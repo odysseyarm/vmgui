@@ -1,4 +1,4 @@
-use std::{borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
@@ -126,10 +126,10 @@ impl UsbDevice {
             Ok(read_port)
         }).await??;
 
-        port.set_read_timeout(Duration::from_millis(3000))?;
         let writer = port.try_clone().context("Failed to clone serial port")?;
+        port.set_read_timeout(Duration::from_millis(3000))?;
         let reader = port;
-        Ok(Self::new(reader, writer))
+        Ok(Self::new(reader, writer, wait_dsr))
     }
 
     pub fn connect_tcp(addr: &str) -> Result<Self> {
@@ -137,7 +137,7 @@ impl UsbDevice {
         let conn = TcpStream::connect(addr)?;
         conn.set_read_timeout(Some(Duration::from_millis(3000)))?;
         let conn2 = conn.try_clone().context("Failed to clone tcp stream")?;
-        Ok(Self::new(conn, conn2))
+        Ok(Self::new(conn, conn2, false))
     }
 
     pub async fn connect_hub(local_addr: impl ToSocketAddrs, device_addr: &str) -> Result<Self> {
@@ -171,12 +171,12 @@ impl UsbDevice {
         let sock2 = sock.try_clone().context("Failed to clone udp socket")?;
         let read = UdpStream::with_capacity(sock, 1472, 0, 2, &[]);
         let write = UdpStream::with_capacity(sock2, 0, 1472, 2, &[1, 0]);
-        Ok(Self::new(read, write))
+        Ok(Self::new(read, write, false))
     }
 
-    pub fn new<R, W>(reader: R, writer: W) -> Self
+    pub fn new<R, W>(mut reader: R, writer: W, check_dsr: bool) -> Self
     where
-        R: Read + Send + 'static,
+        R: Any + Read + Send + 'static,
         W: Write + Send + 'static,
     {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
@@ -211,7 +211,15 @@ impl UsbDevice {
 
         // Reader thread.
         std::thread::spawn(move || {
-            let mut reader = BufReader::new(reader);
+            let mut port = None;
+            let mut _serialport;
+            let mut reader: BufReader<&mut dyn Read> = if check_dsr {
+                _serialport = (&reader as &dyn Any).downcast_ref::<serial2::SerialPort>().unwrap();
+                port = Some(_serialport);
+                BufReader::new(&mut _serialport)
+            } else {
+                BufReader::new(&mut reader)
+            };
             let mut buf = vec![];
             let mut io_error_count = 0;
             loop {
@@ -240,6 +248,22 @@ impl UsbDevice {
                         if e.kind() == ErrorKind::TimedOut || e.kind() == ErrorKind::WouldBlock {
                             debug!("read timed out");
                             io_error_count = 0;
+                            if let Some(usb_device) = port {
+                                if let Ok(dsr) = usb_device.read_dsr() {
+                                    if !dsr {
+                                        info!("device disconnected");
+                                        break;
+                                    }
+                                } else {
+                                    if io_error_count < 3 {
+                                        warn!("error reading from device: {}, ignoring", e);
+                                        io_error_count += 1;
+                                        continue;
+                                    }
+                                    error!("error reading from device: {}", e);
+                                    break;
+                                }
+                            }
                             continue;
                         }
                         if io_error_count < 3 {
