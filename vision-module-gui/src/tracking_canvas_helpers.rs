@@ -136,7 +136,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
         dashes: vec![],
         dash_phase: 0.,
     };
-    ctx.stroke(&nf_grid_path, &brush, &stroke);
+    // ctx.stroke(&nf_grid_path, &brush, &stroke);
 
     // Center point
     let brush = Brush::Solid(SolidBrush {
