@@ -88,7 +88,7 @@ impl std::ops::IndexMut<StreamType> for StreamsActive {
 impl UsbDevice {
     /// Connect to the device using the serial port at `path`. Starts two background threads to
     /// service reads and writes.
-    pub async fn connect_serial<'a>(path: impl Into<Cow<'a, str>>) -> Result<Self> {
+    pub async fn connect_serial<'a>(path: impl Into<Cow<'a, str>>, wait_dsr: bool) -> Result<Self> {
         let path = path.into();
         info!("Connecting to {path}...");
         let mut read_port = serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
@@ -105,6 +105,11 @@ impl UsbDevice {
         read_port.set_dtr(true)?;
 
         let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
+            if wait_dsr {
+                while read_port.read_dsr()? == false {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
             let mut buf = vec![0xff];
             Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();

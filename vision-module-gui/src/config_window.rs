@@ -74,23 +74,33 @@ pub fn config_window(
             wf_settings.clear();
             nf_settings.clear();
             let Ok(i) = usize::try_from(i) else { return };
-            let path = device_list.with_untracked(|d| Some(d.get(i)?.port_name.clone()));
+            let _device = device_list.with_untracked(|d| d.get(i).cloned());
             let sim_addr = sim_addr.c();
             let udp_addr = udp_addr.c();
             let general_settings = general_settings.c();
             let task = async move {
-                let usb_device = if let Some(path) = path {
-                    UsbDevice::connect_serial(path).await?
+                let usb_device = if let Some(_device) = _device {
+                    match &_device.port_type {
+                        UsbPort(port_info) => {
+                            Ok(UsbDevice::connect_serial(&_device.port_name, port_info.pid == 0x5210).await?)
+                        },
+                        _ => Err(anyhow::anyhow!("Not a USB device")),
+                    }
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
-                    UsbDevice::connect_tcp(sim_addr)?
+                    Ok(UsbDevice::connect_tcp(sim_addr)?)
                 } else {
-                    UsbDevice::connect_hub("0.0.0.0:23457", udp_addr.as_ref().unwrap()).await?
+                    Ok(UsbDevice::connect_hub("0.0.0.0:23457", udp_addr.as_ref().unwrap()).await?)
                 };
-                general_settings.load_from_device(&usb_device, true).await?;
-                wf_settings.load_from_device(&usb_device).await?;
-                nf_settings.load_from_device(&usb_device).await?;
-                device.set(Some(usb_device.c()));
-                Result::<()>::Ok(())
+                match usb_device {
+                    Ok(usb_device) => {
+                        general_settings.load_from_device(&usb_device, true).await?;
+                        wf_settings.load_from_device(&usb_device).await?;
+                        nf_settings.load_from_device(&usb_device).await?;
+                        device.set(Some(usb_device));
+                        Result::<()>::Ok(())
+                    },
+                    Err(e) => Err(e),
+                }
             };
             ui.spawn({
                 let ui = ui.c();
