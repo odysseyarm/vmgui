@@ -19,7 +19,8 @@ async fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     let device = match &*args[1] {
-        "-s" => UsbDevice::connect_serial(&args[2]).await.unwrap(),
+        "-s" => UsbDevice::connect_serial(&args[2], false).await.unwrap(),
+        "-sw" => UsbDevice::connect_serial(&args[2], true).await.unwrap(),
         "-t" => UsbDevice::connect_tcp(&args[2]).unwrap(),
         "-u" => UsbDevice::connect_hub("0.0.0.0:0", &args[2]).await.unwrap(),
         _ => {
