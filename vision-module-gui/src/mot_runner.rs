@@ -199,8 +199,15 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.wf_aim_point = x;
             }
 
-            runner.state.nf_points = nf_points_transformed.into_iter().collect();
-            runner.state.wf_points = wf_points_transformed.into_iter().collect();
+            let (_, wf_markers) = ats_cv::foveated::identify_markers(&[], &wf_points_transformed);
+            let (_, nf_markers) = ats_cv::foveated::identify_markers(&[], &nf_points_transformed);
+            let nf_markers: ArrayVec<_, 16> = nf_markers.into_iter().flatten().collect();
+            let wf_markers: ArrayVec<_, 16> = wf_markers.into_iter().flatten().collect();
+
+            runner.state.nf_points = nf_points_transformed.into_iter().filter(|p| !nf_markers.contains(&p)).collect();
+            runner.state.wf_points = wf_points_transformed.into_iter().filter(|p| !wf_markers.contains(&p)).collect();
+            runner.state.nf_markers = nf_markers;
+            runner.state.wf_markers = wf_markers;
 
             let index = runner.state.nf_aim_point_history_index;
             runner.state.nf_aim_point_history[index] = runner.state.nf_aim_point;

@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_square};
+use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, solid_brush};
 use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, MotRunner};
 use crate::MotState;
@@ -229,8 +229,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
 fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
     for (i, point) in state.nf_points.iter().enumerate() {
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095.
-            - Vector2::new(0.5, 0.5);
+        let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
 
@@ -249,6 +248,37 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
     }
     wf_path.end(ctx);
+
+    let thin = StrokeParams {
+        cap: 0, // Bevel
+        join: 0, // Flat
+        thickness: 1.,
+        miter_limit: 0.,
+        dashes: vec![],
+        dash_phase: 0.,
+    };
+    let wf_marker_path = Path::new(ctx, FillMode::Winding);
+    let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
+    for point in wf_to_nf_markers {
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = point / 4095. - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+        draw_crosshair_rotated(&ctx, &wf_marker_path, p.x, p.y, 50.);
+    }
+    wf_marker_path.end(&ctx);
+    ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
+
+    let nf_marker_path = Path::new(ctx, FillMode::Winding);
+    for (i, point) in state.nf_markers.iter().enumerate() {
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = point / 4095. - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+        custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
+    }
+    nf_marker_path.end(&ctx);
+    ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
 
     if state.nf_points.len() >= 4 {
         let mut points = state.nf_points.clone();
