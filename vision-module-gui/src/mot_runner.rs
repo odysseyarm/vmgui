@@ -157,20 +157,20 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
             let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
 
-            let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
-            let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
+            // let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
+            // let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
 
-            fn update_positions(pva2ds: &mut [Pva2d<f64>], points: Vec<(usize, &mut Point2<f64>)>) {
-                for (i, point) in points {
-                    pva2ds[i].step();
-                    pva2ds[i].observe(point.coords.as_ref(), &[100.0, 100.0]);
-                    point.x = pva2ds[i].position()[0];
-                    point.y = pva2ds[i].position()[1];
-                }
-            }
+            // fn update_positions(pva2ds: &mut [Pva2d<f64>], points: Vec<(usize, &mut Point2<f64>)>) {
+            //     for (i, point) in points {
+            //         pva2ds[i].step();
+            //         pva2ds[i].observe(point.coords.as_ref(), &[100.0, 100.0]);
+            //         point.x = pva2ds[i].position()[0];
+            //         point.y = pva2ds[i].position()[1];
+            //     }
+            // }
 
-            update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
-            update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
+            // update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
+            // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
             let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
                 &nf_points_transformed,
