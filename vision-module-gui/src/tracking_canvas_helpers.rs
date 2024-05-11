@@ -11,11 +11,17 @@ use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, MotRunner};
 use crate::MotState;
 
+
 pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &AreaDrawParams, raw: bool) {
     let ctx = &draw_params.context;
     let awidth = draw_params.area_width;
     let aheight = draw_params.area_height;
     let draw_size = (awidth.min(aheight).powi(2)/2.0).sqrt();
+    let draw_size = if raw {
+        draw_size
+    } else {
+        draw_size / 4.0
+    };
     let stroke2 = StrokeParams {
         cap: 0, // Bevel
         join: 0, // Flat
@@ -240,8 +246,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     let wf_to_nf_points = ats_cv::wf_to_nf_points(&state.wf_points, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
     for point in wf_to_nf_points {
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095.
-            - Vector2::new(0.5, 0.5);
+        let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
 

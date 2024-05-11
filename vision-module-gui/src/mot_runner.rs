@@ -279,10 +279,21 @@ fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3
     None
 }
 
-fn filter_and_create_point_id_tuples(points: &[Point2<u16>], radii: &[u8]) -> Vec<(usize, Point2<f64>)> {
-    points.iter().zip(radii.iter())
+fn filter_and_create_point_id_tuples(
+    points: &[Point2<u16>],
+    radii: &[u8],
+) -> Vec<(usize, Point2<f64>)> {
+    points
+        .iter()
+        .zip(radii.iter())
         .enumerate()
-        .filter_map(|(id, (pos, &r))| if r > 0 { Some((id, Point2::new(pos.x as f64, pos.y as f64))) } else { None })
+        .filter_map(|(id, (pos, &r))| {
+            if r > 0 && (400..3696).contains(&pos.x) && (400..3696).contains(&pos.y) {
+                Some((id, Point2::new(pos.x as f64, pos.y as f64)))
+            } else {
+                None
+            }
+        })
         .collect()
 }
 
