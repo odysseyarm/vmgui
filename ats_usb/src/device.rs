@@ -1,4 +1,4 @@
-use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, task::Poll, time::Duration};
+use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, Weak}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
@@ -24,7 +24,7 @@ enum ResponseChannel {
 #[derive(Clone)]
 pub struct UsbDevice {
     to_thread: mpsc::Sender<Packet>,
-    thread_state: Arc<State>,
+    thread_state: Weak<State>,
 }
 
 struct State {
@@ -35,7 +35,7 @@ struct State {
 
 /// A helper struct to deal with cancellation
 struct ResponseSlot {
-    thread_state: Arc<State>,
+    thread_state: Weak<State>,
     id: u8,
     finished: bool,
 }
@@ -45,7 +45,9 @@ impl Drop for ResponseSlot {
         // If the future holding the slot was cancelled, remove the sender from the
         // channel.
         if !self.finished {
-            self.thread_state.response_channels.lock().unwrap()[usize::from(self.id)] = ResponseChannel::None;
+            if let Some(thread_state) = self.thread_state.upgrade() {
+                thread_state.response_channels.lock().unwrap()[usize::from(self.id)] = ResponseChannel::None;
+            }
         }
     }
 }
@@ -184,7 +186,8 @@ impl UsbDevice {
             response_channels: Mutex::new(response_channels),
             streams_active: StreamsActive::default(),
         });
-        let thread_state = Arc::clone(&state);
+
+        let thread_state = Arc::downgrade(&state);
 
         // Writer thread
         let (sender, mut receiver) = mpsc::channel::<Packet>(16);
@@ -223,10 +226,6 @@ impl UsbDevice {
             let mut buf = vec![];
             let mut io_error_count = 0;
             loop {
-                if Arc::strong_count(&state) == 1 {
-                    // We are the only ones with a reference to the state
-                    break;
-                }
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
                     reader.read_until(SLIP_FRAME_END, &mut buf)?;
@@ -308,46 +307,50 @@ impl UsbDevice {
         }
     }
 
-    fn get_oneshot_slot(&self) -> (ResponseSlot, oneshot::Receiver<PacketData>) {
-        let mut response_channels = self.thread_state.response_channels.lock().unwrap();
-        for (i, c) in response_channels.iter_mut().enumerate() {
-            if let ResponseChannel::None = c {
-                let (send, receiver) = oneshot::channel();
-                *c = ResponseChannel::Oneshot(send);
-                return (
-                    ResponseSlot {
-                        thread_state: self.thread_state.clone(),
-                        id: i as u8,
-                        finished: false,
-                    },
-                    receiver,
-                );
+    fn get_oneshot_slot(&self) -> Result<(ResponseSlot, oneshot::Receiver<PacketData>), anyhow::Error> {
+        if let Some(thread_state) = self.thread_state.upgrade() {
+            let mut response_channels = thread_state.response_channels.lock().unwrap();
+            for (i, c) in response_channels.iter_mut().enumerate() {
+                if let ResponseChannel::None = c {
+                    let (send, receiver) = oneshot::channel();
+                    *c = ResponseChannel::Oneshot(send);
+                    return Ok((
+                        ResponseSlot {
+                            thread_state: self.thread_state.clone(),
+                            id: i as u8,
+                            finished: false,
+                        },
+                        receiver,
+                    ));
+                }
             }
         }
-        panic!("Failed to allocate request id");
+        Err(anyhow::anyhow!("Failed to allocate request id"))
     }
 
-    fn get_stream_slot(&self, buffer: usize) -> (ResponseSlot, mpsc::Receiver<PacketData>) {
-        let mut response_channels = self.thread_state.response_channels.lock().unwrap();
-        for (i, c) in response_channels.iter_mut().enumerate() {
-            if let ResponseChannel::None = c {
-                let (send, receiver) = mpsc::channel(buffer);
-                *c = ResponseChannel::Stream(send);
-                return (
-                    ResponseSlot {
-                        thread_state: self.thread_state.clone(),
-                        id: i as u8,
-                        finished: false,
-                    },
-                    receiver,
-                );
+    fn get_stream_slot(&self, buffer: usize) -> Result<(ResponseSlot, mpsc::Receiver<PacketData>), anyhow::Error> {
+        if let Some(thread_state) = self.thread_state.upgrade() {
+            let mut response_channels = thread_state.response_channels.lock().unwrap();
+            for (i, c) in response_channels.iter_mut().enumerate() {
+                if let ResponseChannel::None = c {
+                    let (send, receiver) = mpsc::channel(buffer);
+                    *c = ResponseChannel::Stream(send);
+                    return Ok((
+                        ResponseSlot {
+                            thread_state: self.thread_state.clone(),
+                            id: i as u8,
+                            finished: false,
+                        },
+                        receiver,
+                    ));
+                }
             }
         }
-        panic!("Failed to allocate request id");
+        Err(anyhow::anyhow!("Failed to allocate request id"))
     }
 
     pub async fn request(&self, packet: PacketData) -> Result<PacketData> {
-        let (mut response_slot, receiver) = self.get_oneshot_slot();
+        let (mut response_slot, receiver) = self.get_oneshot_slot()?;
         self.to_thread.send(Packet { id: response_slot.id, data: packet }).await?;
         let result = receiver.await;
         response_slot.finished = true;
@@ -416,23 +419,26 @@ impl UsbDevice {
     }
 
     pub async fn stream(&self, stream_type: StreamType) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
-        if self.thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
-            return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
+        if let Some(thread_state) = self.thread_state.upgrade() {
+            if thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
+                return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
+            }
+            let (slot, receiver) = self.get_stream_slot(100)?;
+            self.to_thread.send(Packet {
+                id: slot.id,
+                data: PacketData::StreamUpdate(StreamUpdate {
+                    mask: stream_type.mask(),
+                    active: true
+                })
+            }).await?;
+            return Ok(PacketStream {
+                slot,
+                receiver: ReceiverStream::new(receiver),
+                to_thread: self.to_thread.clone(),
+                stream_type,
+            });
         }
-        let (slot, receiver) = self.get_stream_slot(100);
-        self.to_thread.send(Packet {
-            id: slot.id,
-            data: PacketData::StreamUpdate(StreamUpdate {
-                mask: stream_type.mask(),
-                active: true
-            })
-        }).await?;
-        Ok(PacketStream {
-            slot,
-            receiver: ReceiverStream::new(receiver),
-            to_thread: self.to_thread.clone(),
-            stream_type,
-        })
+        Err(anyhow!("thread state dropped"))
     }
 
     pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
@@ -543,11 +549,13 @@ impl Stream for PacketStream {
 #[pinned_drop]
 impl PinnedDrop for PacketStream {
     fn drop(self: Pin<&mut Self>) {
-        self.slot.thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
-        let _ = self.to_thread.try_send(Packet {
-            id: 255,
-            data: PacketData::StreamUpdate(StreamUpdate { mask: self.stream_type.mask(), active: false }),
-        }).inspect_err(|e| warn!("Failed to stop stream: {e}"));
+        if let Some(thread_state) = self.slot.thread_state.upgrade() {
+            thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
+            let _ = self.to_thread.try_send(Packet {
+                id: 255,
+                data: PacketData::StreamUpdate(StreamUpdate { mask: self.stream_type.mask(), active: false }),
+            }).inspect_err(|e| warn!("Failed to stop stream: {e}"));
+        }
     }
 }
 
