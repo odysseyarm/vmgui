@@ -45,6 +45,7 @@ pub struct MotState {
     pub wf_markers: ArrayVec<Point2<f64>, 16>,
     pub nf_pva2ds: [Pva2d<f64>; 16],
     pub wf_pva2ds: [Pva2d<f64>; 16],
+    pub wf_reproj: ArrayVec<Point2<f64>, 16>,
 
     pub screen_id: u8,
     pub orientation: Rotation3<f64>,
@@ -76,6 +77,7 @@ impl Default for MotState {
             wf_points: Default::default(),
             nf_markers: Default::default(),
             wf_markers: Default::default(),
+            wf_reproj: Default::default(),
             filter: eskf::Builder::new().build(),
             nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
             nf_aim_point_history_index: 0,

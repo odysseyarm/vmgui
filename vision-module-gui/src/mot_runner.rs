@@ -6,7 +6,7 @@ use std::time::Duration;
 use arrayvec::ArrayVec;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, Vector2, Vector3};
+use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -156,6 +156,20 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
             let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
+            let wf_normalized: Vec<_> = wf_points_transformed.iter().map(|&p| {
+                let fx = runner.general_config.camera_model_wf.p.m11 as f64;
+                let fy = runner.general_config.camera_model_wf.p.m22 as f64;
+                let cx = runner.general_config.camera_model_wf.p.m13 as f64;
+                let cy = runner.general_config.camera_model_wf.p.m23 as f64;
+                Point2::new((p.x/4095.*98. - cx) / fx, (p.y/4095.*98. - cy) / fy)
+            }).collect();
+            let nf_normalized: Vec<_> = nf_points_transformed.iter().map(|&p| {
+                let fx = runner.general_config.camera_model_nf.p.m11 as f64;
+                let fy = runner.general_config.camera_model_nf.p.m22 as f64;
+                let cx = runner.general_config.camera_model_nf.p.m13 as f64;
+                let cy = runner.general_config.camera_model_nf.p.m23 as f64;
+                Point2::new((p.x/4095.*98. - cx) / fx, (p.y/4095.*98. - cy) / fy)
+            }).collect();
 
             // let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
             // let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
@@ -199,15 +213,43 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.wf_aim_point = x;
             }
 
-            let (_, wf_markers) = ats_cv::foveated::identify_markers(&[], &wf_points_transformed);
-            let (_, nf_markers) = ats_cv::foveated::identify_markers(&[], &nf_points_transformed);
-            let nf_markers: ArrayVec<_, 16> = nf_markers.into_iter().flatten().collect();
-            let wf_markers: ArrayVec<_, 16> = wf_markers.into_iter().flatten().collect();
+            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
+            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec);
+            // let nf_markers = ats_cv::foveated::identify_markers2(&nf_normalized, gravity_vec);
+            // let nf_markers: ArrayVec<_, 16> = nf_markers.into_iter().flatten().collect();
+            let wf_marker_ix: ArrayVec<_, 16> = match wf_markers {
+                Some((markers, _)) => markers.into_iter().collect(),
+                _ => Default::default(),
+            };
+            let wf_reproj: ArrayVec<_, 16> = match wf_markers {
+                Some((_, reproj)) => reproj.map(|x| x.into()).into_iter().collect(),
+                _ => Default::default(),
+            };
 
-            runner.state.nf_points = nf_points_transformed.into_iter().filter(|p| !nf_markers.contains(&p)).collect();
-            runner.state.wf_points = wf_points_transformed.into_iter().filter(|p| !wf_markers.contains(&p)).collect();
-            runner.state.nf_markers = nf_markers;
-            runner.state.wf_markers = wf_markers;
+            runner.state.nf_points = nf_points_transformed.into_iter().collect();
+            // runner.state.wf_points = wf_points_transformed.into_iter().collect();
+            // runner.state.nf_points = nf_points_transformed
+            //     .iter()
+            //     .enumerate()
+            //     .filter(|(i, _)| !nf_markers.contains(&i))
+            //     .map(|x| *x.1)
+            //     .collect();
+            runner.state.wf_points = wf_points_transformed
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| !wf_marker_ix.contains(&i))
+                .map(|x| *x.1)
+                .collect();
+            // runner.state.nf_markers = nf_markers
+            //     .into_iter()
+            //     .map(|i| nf_points_transformed[i])
+            //     .collect();
+            runner.state.wf_markers = wf_marker_ix
+                .into_iter()
+                .map(|i| wf_points_transformed[i])
+                .collect();
+            runner.state.wf_reproj = wf_reproj;
 
             let index = runner.state.nf_aim_point_history_index;
             runner.state.nf_aim_point_history[index] = runner.state.nf_aim_point;
