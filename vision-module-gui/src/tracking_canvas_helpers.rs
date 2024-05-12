@@ -327,14 +327,20 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     nf_grid_path.end(ctx);
 
 
-    let fx = config.camera_model_nf.p.m11 as f64;
-    let fy = config.camera_model_nf.p.m22 as f64;
-    let cx = config.camera_model_nf.p.m13 as f64;
-    let cy = config.camera_model_nf.p.m23 as f64;
+    let fx = config.camera_model_wf.p.m11 as f64;
+    let fy = config.camera_model_wf.p.m22 as f64;
+    let cx = config.camera_model_wf.p.m13 as f64;
+    let cy = config.camera_model_wf.p.m23 as f64;
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
         let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
+        let p = ats_cv::wf_to_nf_point(
+            p,
+            &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf),
+            &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf),
+            &config.stereo_iso.cast(),
+        );
         let p = p / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
