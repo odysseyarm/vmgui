@@ -262,6 +262,14 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dashes: vec![],
         dash_phase: 0.,
     };
+    let thick = StrokeParams {
+        cap: 0, // Bevel
+        join: 0, // Flat
+        thickness: 2.,
+        miter_limit: 0.,
+        dashes: vec![],
+        dash_phase: 0.,
+    };
     let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
     for (i, point) in wf_to_nf_markers.iter().enumerate() {
         let wf_marker_path = Path::new(ctx, FillMode::Winding);
@@ -319,10 +327,10 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     nf_grid_path.end(ctx);
 
 
-    let fx = config.camera_model_wf.p.m11 as f64;
-    let fy = config.camera_model_wf.p.m22 as f64;
-    let cx = config.camera_model_wf.p.m13 as f64;
-    let cy = config.camera_model_wf.p.m23 as f64;
+    let fx = config.camera_model_nf.p.m11 as f64;
+    let fy = config.camera_model_nf.p.m22 as f64;
+    let cx = config.camera_model_nf.p.m13 as f64;
+    let cy = config.camera_model_nf.p.m23 as f64;
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
@@ -330,8 +338,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = p / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
-        draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 50.);
+        draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 20.);
         wf_reproj_path.end(&ctx);
-        ctx.stroke(&wf_reproj_path, &solid_brush(1.0, 1.0, 1.0), &thin);
+        ctx.stroke(&wf_reproj_path, &solid_brush(1.0, 1.0, 0.0), &thin);
     }
 }
