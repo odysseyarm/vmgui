@@ -20,7 +20,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     let draw_size = if raw {
         draw_size
     } else {
-        draw_size / 4.0
+        draw_size / 2.0
     };
     let stroke2 = StrokeParams {
         cap: 0, // Bevel
@@ -340,6 +340,6 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 20.);
         wf_reproj_path.end(&ctx);
-        ctx.stroke(&wf_reproj_path, &solid_brush(1.0, 1.0, 0.0), &thin);
+        ctx.stroke(&wf_reproj_path, &solid_brush(0.627, 0.125, 0.941), &thick);
     }
 }
