@@ -326,7 +326,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x*fx + cx, p.y*fy + cy);
+        let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
         let p = p / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
