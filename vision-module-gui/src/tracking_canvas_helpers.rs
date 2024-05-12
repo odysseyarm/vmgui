@@ -44,7 +44,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     let state = &runner.state;
 
     let gravity_vec = state.orientation.inverse_transform_vector(&Vector3::z());
-	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + PI/2.;
+    let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + PI/2.;
 
     // Border around the square drawing area
     {
@@ -262,17 +262,23 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dashes: vec![],
         dash_phase: 0.,
     };
-    let wf_marker_path = Path::new(ctx, FillMode::Winding);
     let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
-    for point in wf_to_nf_markers {
+    for (i, point) in wf_to_nf_markers.iter().enumerate() {
+        let wf_marker_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_marker_path, p.x, p.y, 50.);
+        wf_marker_path.end(&ctx);
+        if i == 0 {
+            ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
+        } else if i == 1 {
+            ctx.stroke(&wf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin);
+        } else {
+            ctx.stroke(&wf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
+        }
     }
-    wf_marker_path.end(&ctx);
-    ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
 
     let nf_marker_path = Path::new(ctx, FillMode::Winding);
     for (i, point) in state.nf_markers.iter().enumerate() {
@@ -311,4 +317,21 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         }
     }
     nf_grid_path.end(ctx);
+
+
+    let fx = config.camera_model_wf.p.m11 as f64;
+    let fy = config.camera_model_wf.p.m22 as f64;
+    let cx = config.camera_model_wf.p.m13 as f64;
+    let cy = config.camera_model_wf.p.m23 as f64;
+    for p in &state.wf_reproj {
+        let wf_reproj_path = Path::new(ctx, FillMode::Winding);
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = Point2::new(p.x*fx + cx, p.y*fy + cy);
+        let p = p / 4095. - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+        draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 50.);
+        wf_reproj_path.end(&ctx);
+        ctx.stroke(&wf_reproj_path, &solid_brush(1.0, 1.0, 1.0), &thin);
+    }
 }
