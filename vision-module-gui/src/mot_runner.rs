@@ -240,6 +240,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     let j = match_result.0[i];
                     if let Some(j) = j {
                         nf_markers.push(nf_points_transformed[j]);
+                    } else {
+                        nf_markers.push(Point2::new(-9999., -9999.));
                     }
                 }
             }

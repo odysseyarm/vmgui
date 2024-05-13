@@ -296,14 +296,14 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let nf_marker_path = Path::new(ctx, FillMode::Winding);
         custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
         nf_marker_path.end(&ctx);
-        if i == 0 {
+        if i == 0 || i == 3 {
             ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
-        } else if i == 1 {
+        } else if i == 1 || i == 4 {
             ctx.stroke(&nf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin);
-        } else if i == 2 {
+        } else if i == 2 || i == 5 {
             ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
         } else {
-            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 1.0, 0.0), &thin);
+            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin);
         }
     }
 
