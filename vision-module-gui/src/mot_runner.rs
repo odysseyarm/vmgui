@@ -188,8 +188,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
             let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(
-                &nf_points_transformed,
-                &wf_points_transformed,
+                &nf_normalized,
+                &wf_normalized,
                 runner.state.orientation,
             );
             if let Some(rotation) = rotation {
