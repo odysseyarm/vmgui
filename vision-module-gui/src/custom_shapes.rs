@@ -1,4 +1,4 @@
-use iui::draw::{self, Brush, SolidBrush};
+use iui::draw::{self, Brush, FillMode, SolidBrush, StrokeParams};
 use iui::draw::Path;
 use nalgebra::{Point2, Rotation2, SMatrix, Transform2, Vector2};
 
@@ -89,7 +89,21 @@ pub fn draw_rectangle(ctx: &draw::DrawContext, path: &Path, bounds: &[f64; 4], g
     path.close_figure(ctx);
 }
 
-
 pub fn solid_brush(r: f64, g: f64, b: f64) -> Brush {
     Brush::Solid(SolidBrush { r, g, b, a: 1.0 })
+}
+
+pub fn draw_line(ctx: &draw::DrawContext, x1: f64, y1: f64, x2: f64, y2: f64, brush: &Brush, thickness: f64) {
+    let path = Path::new(&ctx, FillMode::Winding);
+    path.new_figure(&ctx, x1, y1);
+    path.line_to(ctx, x2, y2);
+    path.end(&ctx);
+    ctx.stroke(&path, brush, &StrokeParams {
+        cap: 0, // Bevel
+        join: 0, // Flat
+        thickness,
+        miter_limit: 0.,
+        dashes: vec![],
+        dash_phase: 0.,
+    });
 }

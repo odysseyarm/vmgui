@@ -244,24 +244,19 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            runner.state.nf_points = nf_points_transformed.into_iter().collect();
+            // runner.state.nf_points = nf_points_transformed.into_iter().collect();
             // runner.state.wf_points = wf_points_transformed.into_iter().collect();
-            // runner.state.nf_points = nf_points_transformed
-            //     .iter()
-            //     .enumerate()
-            //     .filter(|(i, _)| !nf_markers.contains(&i))
-            //     .map(|x| *x.1)
-            //     .collect();
+            runner.state.nf_points = nf_points_transformed
+                .into_iter()
+                .filter(|p| !nf_markers.contains(&p))
+                .collect();
             runner.state.wf_points = wf_points_transformed
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| !wf_marker_ix.contains(&i))
                 .map(|x| *x.1)
                 .collect();
-            // runner.state.nf_markers = nf_markers
-            //     .into_iter()
-            //     .map(|i| nf_points_transformed[i])
-            //     .collect();
+            runner.state.nf_markers = nf_markers;
             runner.state.wf_markers = wf_marker_ix
                 .into_iter()
                 .map(|i| wf_points_transformed[i])
