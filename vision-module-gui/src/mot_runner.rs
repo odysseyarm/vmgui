@@ -236,6 +236,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     wf_normalized[wf_marker_ix[5]].coords,
                 ];
                 let match_result = ats_cv::foveated::match2(&nf_normalized, &chosen_wf_markers);
+                println!("{:?}", match_result.0);
                 for i in 0..6 {
                     let j = match_result.0[i];
                     if let Some(j) = j {
