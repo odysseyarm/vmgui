@@ -303,7 +303,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         } else if i == 2 {
             ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
         } else {
-            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 0.0), &thin);
+            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 1.0, 0.0), &thin);
         }
     }
 
