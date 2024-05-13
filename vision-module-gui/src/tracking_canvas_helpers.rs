@@ -288,16 +288,24 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         }
     }
 
-    let nf_marker_path = Path::new(ctx, FillMode::Winding);
     for (i, point) in state.nf_markers.iter().enumerate() {
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
+        let nf_marker_path = Path::new(ctx, FillMode::Winding);
         custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
+        nf_marker_path.end(&ctx);
+        if i == 0 {
+            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
+        } else if i == 1 {
+            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin);
+        } else if i == 2 {
+            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
+        } else {
+            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 0.0), &thin);
+        }
     }
-    nf_marker_path.end(&ctx);
-    ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
 
     if state.nf_points.len() >= 4 {
         let mut points = state.nf_points.clone();
