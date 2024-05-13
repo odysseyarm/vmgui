@@ -156,11 +156,12 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
             let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
-            let wf_normalized: Vec<_> = wf_points_transformed.iter().map(|&p| {
-                let fx = runner.general_config.camera_model_wf.p.m11 as f64;
-                let fy = runner.general_config.camera_model_wf.p.m22 as f64;
-                let cx = runner.general_config.camera_model_wf.p.m13 as f64;
-                let cy = runner.general_config.camera_model_wf.p.m23 as f64;
+            let wf_to_nf = ats_cv::wf_to_nf_points(&wf_points_transformed, &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf), runner.general_config.stereo_iso.cast());
+            let wf_normalized: Vec<_> = wf_to_nf.iter().map(|&p| {
+                let fx = runner.general_config.camera_model_nf.p.m11 as f64;
+                let fy = runner.general_config.camera_model_nf.p.m22 as f64;
+                let cx = runner.general_config.camera_model_nf.p.m13 as f64;
+                let cy = runner.general_config.camera_model_nf.p.m23 as f64;
                 Point2::new((p.x/4095.*98. - cx) / fx, (p.y/4095.*98. - cy) / fy)
             }).collect();
             let nf_normalized: Vec<_> = nf_points_transformed.iter().map(|&p| {
@@ -186,14 +187,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
-            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint_foveated(
+            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(
                 &nf_points_transformed,
                 &wf_points_transformed,
                 runner.state.orientation,
-                runner.state.screen_id,
-                &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf),
-                &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf),
-                runner.general_config.stereo_iso.cast(),
             );
             if let Some(rotation) = rotation {
                 runner.state.rotation_mat = rotation;
