@@ -328,7 +328,7 @@ impl Packet {
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
             PacketData::WriteConfig(_) => 166,
             PacketData::ReadConfig => 0,
-            PacketData::ReadConfigResponse(_) => 4,
+            PacketData::ReadConfigResponse(_) => calculate_length!(GeneralConfig)+1,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
@@ -461,7 +461,6 @@ impl WriteRegister {
 
 impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
-        println!("{:?}", bytes);
         use Error as E;
         let [impact_threshold, accel_odr0, accel_odr1, euler_angles_odr0, euler_angles_odr1, ..] = **bytes else {
             return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
