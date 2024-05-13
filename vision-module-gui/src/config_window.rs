@@ -380,6 +380,10 @@ impl GeneralSettingsForm {
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.accel_odr.set(config.accel_odr as i32);
         self.euler_angles_odr.set(config.euler_angles_odr as i32);
+        self.nf_intrinsics.set(config.camera_model_nf.clone());
+        self.wf_intrinsics.set(config.camera_model_wf.clone());
+        self.stereo_iso.set(config.stereo_iso.clone());
+
         if first_load {
             self.mot_runner.lock().general_config = config;
         }
@@ -447,6 +451,7 @@ impl GeneralSettingsForm {
     }
 
     fn clear(&self) {
+        self.accel_odr.set(0);
         self.euler_angles_odr.set(0);
     }
 
