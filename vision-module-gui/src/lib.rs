@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use eskf;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
-use ats_cv::kalman::Pva2d;
+use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
 use serde::Serialize;
 use ats_usb::packet::MotData;
 
@@ -53,7 +53,7 @@ pub struct MotState {
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
 
-    pub filter: eskf::ESKF,
+    pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
     pub nf_aim_point_history: [Point2<f64>; 40],
     pub nf_aim_point_history_index: usize,
@@ -78,7 +78,7 @@ impl Default for MotState {
             nf_markers: Default::default(),
             wf_markers: Default::default(),
             wf_reproj: Default::default(),
-            filter: eskf::Builder::new().build(),
+            fv_state: FoveatedAimpointState::new(),
             nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
             nf_aim_point_history_index: 0,
         }

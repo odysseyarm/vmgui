@@ -109,7 +109,8 @@ pub struct MotRunner {
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     tokio::join!(
         combined_markers_loop(runner.clone()),
-        euler_loop(runner.clone()),
+        accel_stream(runner.clone()),
+        euler_stream(runner.clone()),
         impact_loop(runner.clone()),
     );
 }
@@ -187,19 +188,32 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
-            let (rotation, translation, fv_aim_point) = ats_cv::get_pose_and_aimpoint(
-                &nf_normalized,
-                &wf_normalized,
-                runner.state.orientation,
+            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized);
+
+            let orientation = runner.state.fv_state.filter.orientation;
+            let position = runner.state.fv_state.filter.position;
+
+            let flip_yz = Matrix3::new(
+                1., 0., 0.,
+                0., -1., 0.,
+                0., 0., -1.,
             );
-            if let Some(rotation) = rotation {
-                runner.state.rotation_mat = rotation;
-            }
-            if let Some(translation) = translation {
-                runner.state.translation_mat = translation;
-            }
-            if let Some(fv_aim_point) = fv_aim_point {
-                runner.state.fv_aim_point = fv_aim_point;
+    
+            let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
+            let transmat = flip_yz * position;
+    
+            let screen_3dpoints = ats_cv::calculate_screen_3dpoints(108., 16./9.);
+    
+            let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
+                &rotmat,
+                &transmat.coords,
+                &screen_3dpoints,
+            );
+
+            runner.state.rotation_mat = rotmat.cast();
+            runner.state.translation_mat = transmat.coords.cast();
+            if let Some(fv_aimpoint) = fv_aimpoint {
+                runner.state.fv_aim_point = Point2::new(fv_aimpoint.x as f64, fv_aimpoint.y as f64);
             }
 
             if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
@@ -359,18 +373,19 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
     undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
 }
 
-async fn accel_loop(runner: Arc<Mutex<MotRunner>>) {
+async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
-            // runner.state.filter.predict(accel.accel, accel.gyro, 1/runner.general_config.accel_odr);
+            let accel_odr = runner.general_config.accel_odr;
+            runner.state.fv_state.predict(accel.accel, accel.gyro, Duration::from_secs_f32(1./accel_odr as f32));
         }
     }
 }
 
-async fn euler_loop(runner: Arc<Mutex<MotRunner>>) {
+async fn euler_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut euler_stream = device.stream_euler_angles().await.unwrap();
     while runner.lock().device.is_some() {

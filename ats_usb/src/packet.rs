@@ -1,7 +1,7 @@
 use std::{fmt::Display, error::Error as StdError};
 
 use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
-use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3};
+use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 
 #[derive(Clone, Debug)]
@@ -157,8 +157,8 @@ pub struct CombinedMarkersReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
-    pub accel: [f64; 3],
-    pub gyro: [f64; 3],
+    pub accel: Vector3<f32>,
+    pub gyro: Vector3<f32>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -666,18 +666,18 @@ impl AccelReport {
         let data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f64 / 16384.0;
+            let x = (x as f32 / 16384.0) * 9.81;
             *data = &data[2..];
             x
         });
         let gyro = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f64 / 16.4;
+            let x = x as f32 / 16.4;
             *data = &data[2..];
             x
         });
         *bytes = &bytes[12..];
-        Ok(Self { accel, gyro })
+        Ok(Self { accel: Vector3::from(accel), gyro: Vector3::from(gyro) })
     }
 }
 
