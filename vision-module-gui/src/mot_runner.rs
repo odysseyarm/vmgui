@@ -380,7 +380,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
             let accel_odr = runner.general_config.accel_odr;
-            runner.state.fv_state.predict(accel.accel, accel.gyro, Duration::from_secs_f32(1./accel_odr as f32));
+            runner.state.fv_state.predict(accel.accel.xzy(), accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
         }
     }
 }

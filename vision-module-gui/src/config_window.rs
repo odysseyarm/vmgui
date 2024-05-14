@@ -431,7 +431,7 @@ impl GeneralSettingsForm {
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
         let config = GeneralWriteConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
-            accel_odr: self.euler_angles_odr.get_untracked() as u16,
+            accel_odr: self.accel_odr.get_untracked() as u16,
             euler_angles_odr: self.euler_angles_odr.get_untracked() as u16,
             camera_model_nf: self.nf_intrinsics.get_untracked(),
             camera_model_wf: self.wf_intrinsics.get_untracked(),

@@ -672,7 +672,7 @@ impl AccelReport {
         });
         let gyro = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = x as f32 / 16.4;
+            let x = (x as f32 / 16.4).to_radians();
             *data = &data[2..];
             x
         });
