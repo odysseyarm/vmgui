@@ -128,10 +128,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::WriteConfig(_) => None,
             PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig {
                 impact_threshold: 0,
-                accel_odr: 100,
                 camera_model_nf: RosOpenCvIntrinsics::from_params(nf_focal_length() as f32, 0., nf_focal_length() as f32, 49., 49.),
                 camera_model_wf: RosOpenCvIntrinsics::from_params(wf_focal_length() as f32, 0., wf_focal_length() as f32, 49., 49.),
                 stereo_iso: nalgebra::Isometry3::identity(),
+                accel_odr: 100,
                 euler_angles_odr: 100,
                 uuid: [42, 69, 3, 7, 9, 13],
             })),
@@ -272,11 +272,11 @@ impl State {
                 // tf * Point3::new(1.0, 0.5, 0.0),
 
                 // tf * Point3::new(0.2, 0.9, 0.0),
-                tf * Point3::new(0.5, 0.9, 0.0),
-                tf * Point3::new(0.8, 0.9, 0.0),
+                // tf * Point3::new(0.5, 0.9, 0.0),
+                // tf * Point3::new(0.8, 0.9, 0.0),
                 // tf * Point3::new(0.2, 0.2, 0.0),
-                tf * Point3::new(0.5, 0.2, 0.0),
-                tf * Point3::new(0.8, 0.2, 0.0),
+                // tf * Point3::new(0.5, 0.2, 0.0),
+                // tf * Point3::new(0.8, 0.2, 0.0),
 
                 // tf * Point3::new(0.35, 1.0, 0.0),
                 // tf * Point3::new(0.65, 1.0, 0.0),
@@ -289,6 +289,13 @@ impl State {
                 // tf * Point3::new(GRID_WIDTH + 0.35, 0.0, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.35, -0.2, 0.0),
                 // tf * Point3::new(GRID_WIDTH + 0.65, -0.2, 0.0),
+
+                tf * Point3::new(0.2, 1.0, 0.0),
+                tf * Point3::new(0.5, 1.0, 0.0),
+                tf * Point3::new(0.8, 1.0, 0.0),
+                tf * Point3::new(0.2, 0.1, 0.0),
+                tf * Point3::new(0.5, 0.0, 0.0),
+                tf * Point3::new(0.8, 0.1, 0.0),
             ],
             prev_mouse: Point2::new(0., 0.),
             moving_fwd: false,
@@ -392,8 +399,8 @@ struct MainCanvas {
 
 // const GRID_WIDTH: f64 = 16.0 / 9.0;
 // const GRID_HEIGHT: f64 = 1.0;
-const GRID_WIDTH: f64 = 140.0 / 12.0;
-const GRID_HEIGHT: f64 = 80.0 / 12.0;
+const GRID_WIDTH: f64 = 160.0 / 12.0;
+const GRID_HEIGHT: f64 = 90.0 / 12.0;
 const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 13.0);
 
 impl AreaHandler for MainCanvas {
