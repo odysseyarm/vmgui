@@ -666,7 +666,7 @@ impl AccelReport {
         let data = &mut &bytes[..12];
         let accel = [(); 3].map(|_| {
             let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = (x as f32 / 16384.0) * 9.81;
+            let x = (x as f32 / 2048.0) * 9.81;
             *data = &data[2..];
             x
         });
