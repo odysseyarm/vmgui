@@ -380,17 +380,12 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
     while runner.lock().device.is_some() {
-        // if let Some(accel) = accel_stream.next().await {
-        //     let mut runner = runner.lock();
-        //     let accel_odr = runner.general_config.accel_odr;
-        //     // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
-        //     runner.state.fv_state.predict(accel.accel.xzy(), accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
-        // }
-        {
+        if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
-            runner.state.fv_state.predict(Vector3::zeros(), Vector3::zeros(), Duration::from_secs_f32(1./100. as f32));
+            let accel_odr = runner.general_config.accel_odr;
+            // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
+            runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
