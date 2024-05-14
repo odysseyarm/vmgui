@@ -8,7 +8,7 @@ use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
 use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
-use tokio::time::sleep;
+use tokio::time::{sleep, Instant};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 use crate::{CloneButShorter, Frame, MotState};
@@ -188,10 +188,15 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
-            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized);
+            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
+            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
+
+            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec);
 
             let orientation = runner.state.fv_state.filter.orientation;
             let position = runner.state.fv_state.filter.position;
+
+            // println!("{}", runner.state.fv_state.filter.rot_bias);
 
             let flip_yz = Matrix3::new(
                 1., 0., 0.,
@@ -224,8 +229,6 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.wf_aim_point = x;
             }
 
-            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
-            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
             let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec);
             // let nf_markers = ats_cv::foveated::identify_markers2(&nf_normalized, gravity_vec);
             // let nf_markers: ArrayVec<_, 16> = nf_markers.into_iter().flatten().collect();
@@ -377,11 +380,17 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
     while runner.lock().device.is_some() {
-        if let Some(accel) = accel_stream.next().await {
+        // if let Some(accel) = accel_stream.next().await {
+        //     let mut runner = runner.lock();
+        //     let accel_odr = runner.general_config.accel_odr;
+        //     // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
+        //     runner.state.fv_state.predict(accel.accel.xzy(), accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+        // }
+        {
             let mut runner = runner.lock();
-            let accel_odr = runner.general_config.accel_odr;
-            runner.state.fv_state.predict(accel.accel.xzy(), accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+            runner.state.fv_state.predict(Vector3::zeros(), Vector3::zeros(), Duration::from_secs_f32(1./100. as f32));
         }
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 

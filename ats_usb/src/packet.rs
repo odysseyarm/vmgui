@@ -328,7 +328,7 @@ impl Packet {
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
             PacketData::WriteConfig(_) => 166,
             PacketData::ReadConfig => 0,
-            PacketData::ReadConfigResponse(_) => calculate_length!(GeneralConfig)+1,
+            PacketData::ReadConfigResponse(_) => 172,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
             PacketData::CombinedMarkersReport(_) => 112,
