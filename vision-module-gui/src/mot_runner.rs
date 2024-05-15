@@ -384,6 +384,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             let mut runner = runner.lock();
             let accel_odr = runner.general_config.accel_odr;
             // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
+            // println!("{}", accel.accel.norm());
             runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
         }
     }

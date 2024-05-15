@@ -11,6 +11,7 @@ use bevy::{
     prelude::*,
     window::{PresentMode, WindowTheme},
 };
+use bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin};
 use bevy_infinite_grid::{
     GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
 };
@@ -132,6 +133,7 @@ fn setup(
             ..default()
         },
         GridShadowCamera,
+        AtmosphereCamera::default(),
     ));
 
     // Add a light source so we can see clearly.
@@ -148,7 +150,7 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
     let translation = runner.state.translation_mat;
 
     let (_camera, mut camera_transform) = camera_query.single_mut();
-    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32);
+    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) / 100.;
     let rotation = Mat3::from_cols_slice(rotation.cast().as_slice());
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
@@ -306,6 +308,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // LogDiagnosticsPlugin::default(),
                 // FrameTimeDiagnosticsPlugin,
                 InfiniteGridPlugin,
+                AtmospherePlugin,
             ))
             .add_systems(Startup, setup)
             .add_systems(Update, (read_stream, show_window, rotate_cube, hide_instead_of_close))
