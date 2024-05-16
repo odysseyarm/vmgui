@@ -139,6 +139,30 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
+fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (Matrix3<f32>, nalgebra::Point3<f32>, Option<Point2<f32>>) {
+    let orientation = fv_state.filter.orientation;
+    let position = fv_state.filter.position;
+
+    let flip_yz = Matrix3::new(
+        1., 0., 0.,
+        0., -1., 0.,
+        0., 0., -1.,
+    );
+
+    let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
+    let transmat = flip_yz * position;
+
+    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(108., 16./9.);
+
+    let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
+        &rotmat,
+        &transmat.coords,
+        &screen_3dpoints,
+    );
+
+    (rotmat, transmat, fv_aimpoint)
+}
+
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
@@ -152,11 +176,13 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_radii);
             let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_radii);
 
+            println!("nf: {} wf: {}", filtered_nf_point_tuples.len(), filtered_wf_point_tuples.len());
+
             let filtered_nf_points_slice = filtered_nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
             let filtered_wf_points_slice = filtered_wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
 
-            let mut nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
-            let mut wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
+            let nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
+            let wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
             let wf_to_nf = ats_cv::wf_to_nf_points(&wf_points_transformed, &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf), runner.general_config.stereo_iso.cast());
             let wf_normalized: Vec<_> = wf_to_nf.iter().map(|&p| {
                 let fx = runner.general_config.camera_model_nf.p.m11 as f64;
@@ -188,37 +214,22 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // update_positions(&mut runner.state.nf_pva2ds, nf_point_tuples_transformed);
             // update_positions(&mut runner.state.wf_pva2ds, wf_point_tuples_transformed);
 
+            // step at marker hz
+            runner.state.fv_aimpoint_pva2d.step();
+
             let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
             let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
 
             runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec);
 
-            let orientation = runner.state.fv_state.filter.orientation;
-            let position = runner.state.fv_state.filter.position;
-
-            // println!("{}", runner.state.fv_state.filter.rot_bias);
-
-            let flip_yz = Matrix3::new(
-                1., 0., 0.,
-                0., -1., 0.,
-                0., 0., -1.,
-            );
-    
-            let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
-            let transmat = flip_yz * position;
-    
-            let screen_3dpoints = ats_cv::calculate_screen_3dpoints(108., 16./9.);
-    
-            let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
-                &rotmat,
-                &transmat.coords,
-                &screen_3dpoints,
-            );
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
 
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aim_point = Point2::new(fv_aimpoint.x as f64, fv_aimpoint.y as f64);
+                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[200.0, 200.0]);
+                let new_position = runner.state.fv_aimpoint_pva2d.position();
+                runner.state.fv_aim_point = Point2::new(new_position[0], new_position[1]);
             }
 
             if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
@@ -379,13 +390,32 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
+    let mut time = Instant::now();
+    let mut accel_samples = 0;
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
             let accel_odr = runner.general_config.accel_odr;
             // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{}", accel.accel.norm());
+            accel_samples += 1;
+            // println!("Accel hz: {}", accel_samples as f32 / time.elapsed().as_secs_f32());
+            // print rotation in degrees
+            // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
+
             runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+
+            {
+                let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
+
+                runner.state.rotation_mat = rotmat.cast();
+                runner.state.translation_mat = transmat.coords.cast();
+                if let Some(fv_aimpoint) = fv_aimpoint {
+                    runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[2000.0, 2000.0]);
+                    let new_position = runner.state.fv_aimpoint_pva2d.position();
+                    runner.state.fv_aim_point = Point2::new(new_position[0], new_position[1]);
+                }
+            }
         }
     }
 }
@@ -393,8 +423,12 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 async fn euler_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut euler_stream = device.stream_euler_angles().await.unwrap();
+    let time = Instant::now();
+    let mut euler_samples = 0;
     while runner.lock().device.is_some() {
         if let Some(euler_angles) = euler_stream.next().await {
+            euler_samples += 1;
+            println!("Euler hz: {}", euler_samples as f32 / time.elapsed().as_secs_f32());
             let mut runner = runner.lock();
             runner.state.orientation = euler_angles.rotation;
         }
