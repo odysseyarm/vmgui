@@ -2,7 +2,7 @@ use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write
 use anyhow::{anyhow, Context, Result};
 use pin_project::{pin_project, pinned_drop};
 use serial2;
-use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}};
+use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}, time::sleep};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
@@ -167,6 +167,12 @@ impl UsbDevice {
                 }
             }
         }
+
+        let mut buf = vec![0xff];
+        Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
+        sock.send(&buf).await?;
+        sleep(Duration::from_millis(100)).await;
+
         let sock = sock.into_std()?;
         sock.set_nonblocking(false)?;
         sock.set_read_timeout(Some(Duration::from_millis(3000)))?;
