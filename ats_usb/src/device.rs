@@ -103,7 +103,7 @@ impl UsbDevice {
             Ok(settings)
         })?;
 
-        read_port.set_read_timeout(Duration::from_millis(10))?;
+        read_port.set_read_timeout(Duration::from_millis(300))?;
         read_port.set_dtr(true)?;
 
         let mut port = tokio::task::spawn_blocking(move || -> Result<_> {
