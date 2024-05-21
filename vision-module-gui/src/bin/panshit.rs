@@ -6,7 +6,7 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::UdpSocket;
 
 fn main() {
-    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 23457));
+    let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0));
 
     // todo MulticastSocket has to be turned into Ext for std, socket2, and tokio
     // let client = MulticastSocket::all_interfaces(multicast_addr_std).unwrap();
