@@ -270,7 +270,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dashes: vec![],
         dash_phase: 0.,
     };
-    for (i, point) in state.wf_markers.iter().enumerate() {
+    let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
+    for (i, point) in wf_to_nf_markers.iter().enumerate() {
         let wf_marker_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
