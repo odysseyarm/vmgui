@@ -146,16 +146,13 @@ impl UsbDevice {
         info!("Connecting to {device_addr}...");
         let sock = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
         sock.set_nonblocking(true)?;
-        sock.set_reuse_address(true)?;
         let addr = match lookup_host(local_addr).await?.next() {
             Some(addr) => addr,
             None => anyhow::bail!("Failed to resolve local address"),
         };
         sock.bind(&socket2::SockAddr::from(addr))?;
         let sock = UdpSocket::from_std(sock.into())?;
-        let multicast = Ipv4Addr::new(224, 0, 2, 52);
-        sock.join_multicast_v4(multicast, Ipv4Addr::UNSPECIFIED).unwrap();
-        sock.set_multicast_ttl_v4(5).unwrap();
+        sock.set_broadcast(true)?;
         sock.connect(device_addr).await?;
         sock.send(&[255, 1]).await?;
         match sock.recv(&mut []).await {

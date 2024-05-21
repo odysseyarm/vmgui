@@ -6,9 +6,6 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::UdpSocket;
 
 fn main() {
-    let multicast = Ipv4Addr::new(224, 0, 2, 52);
-    let multicast_addr_std = SocketAddrV4::new(multicast.into(), 23456);
-    let multicast_addr = SockAddr::from(multicast_addr_std);
     let local_addr = SockAddr::from(SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 23457));
 
     // todo MulticastSocket has to be turned into Ext for std, socket2, and tokio
@@ -20,16 +17,12 @@ fn main() {
         Some(Protocol::UDP),
     ).expect("ipv4 dgram socket");
 
-    client.join_multicast_v4(&multicast, &Ipv4Addr::UNSPECIFIED).unwrap();
-
-    client.set_multicast_ttl_v4(5).unwrap();
-
-    client.set_reuse_address(true).unwrap();
+    client.set_broadcast(true).unwrap();
 
     client.bind(&local_addr).unwrap();
 
-    // client.broadcast(&[255, 1]);
-    client.send_to(&[255, 1], &multicast_addr).unwrap();
+    let broadcast_addr = SockAddr::from(SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::BROADCAST), 23456));
+    client.send_to(&[255, 1], &broadcast_addr).unwrap();
 
     let mut udp_packet = vec![1, 0, 255];
     let pkt = Packet {
@@ -37,7 +30,7 @@ fn main() {
         data: PacketData::ReadRegister(Register { port: Port::Wf, bank: 0x00, address: 0x02 }),
     };
     pkt.serialize(&mut udp_packet);
-    client.send_to(&udp_packet, &multicast_addr).unwrap();
+    client.send_to(&udp_packet, &broadcast_addr).unwrap();
 
     // let mut udp_packet = vec![1, 0, 255];
     // let pkt = Packet {
