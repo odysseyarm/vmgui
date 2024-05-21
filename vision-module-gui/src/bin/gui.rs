@@ -486,18 +486,18 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut collected_text = collected_text.c();
 
             let mut frame = Frame {
-                              nf_aim_point_x: None,
-                              nf_aim_point_y: None,
+                              fv_aimpoint_x: None,
+                              fv_aimpoint_y: None,
                               };
 
             let runner = state.lock();
             let state = &runner.state;
 
             {
-                let nf_aim_point = state.nf_aim_point;
-                let nf_aim_point = nf_aim_point + runner.nf_offset;
-                frame.nf_aim_point_x = Some(nf_aim_point.x);
-                frame.nf_aim_point_y = Some(nf_aim_point.y);
+                let fv_aimpoint = state.fv_aimpoint;
+                let fv_aimpoint = fv_aimpoint;
+                frame.fv_aimpoint_x = Some(fv_aimpoint.x);
+                frame.fv_aimpoint_y = Some(fv_aimpoint.y);
             }
 
             datapoints.push(frame);

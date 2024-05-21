@@ -68,11 +68,11 @@ pub fn create(
         let ui = ui.c();
         move |_| {
             let runner = mot_runner.lock();
-            let reported_aim_point = runner.state.nf_aim_point;
-            let true_aim_point = reported_aim_point + runner.nf_offset;
+            let reported_aimpoint = runner.state.nf_aimpoint;
+            let true_aimpoint = reported_aimpoint + runner.nf_offset;
             drop(runner);
             samples.update(|s| {
-                let sample = Sample { reported_aim_point, true_aim_point };
+                let sample = Sample { reported_aimpoint, true_aimpoint };
                 debug!("{sample:?}");
                 s.push(sample);
 
@@ -83,14 +83,14 @@ pub fn create(
 
                     // do math
                     let transform = match get_perspective_transform(
-                        s1.reported_aim_point,
-                        s2.reported_aim_point,
-                        s3.reported_aim_point,
-                        s4.reported_aim_point,
-                        s1.true_aim_point,
-                        s2.true_aim_point,
-                        s3.true_aim_point,
-                        s4.true_aim_point,
+                        s1.reported_aimpoint,
+                        s2.reported_aimpoint,
+                        s3.reported_aimpoint,
+                        s4.reported_aimpoint,
+                        s1.true_aimpoint,
+                        s2.true_aimpoint,
+                        s3.true_aimpoint,
+                        s4.true_aimpoint,
                     ) {
                         Some(t) => t,
                         None => {
@@ -155,6 +155,6 @@ pub fn create(
 
 #[derive(Copy, Clone, Debug)]
 struct Sample {
-    reported_aim_point: Point2<f64>,
-    true_aim_point: Point2<f64>,
+    reported_aimpoint: Point2<f64>,
+    true_aimpoint: Point2<f64>,
 }
