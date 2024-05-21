@@ -274,8 +274,6 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            // runner.state.nf_points = nf_points_transformed.into_iter().collect();
-            // runner.state.wf_points = wf_points_transformed.into_iter().collect();
             runner.state.nf_points = nf_points_transformed
                 .into_iter()
                 .filter(|p| !nf_markers.contains(&p))
