@@ -270,8 +270,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dashes: vec![],
         dash_phase: 0.,
     };
-    let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
-    for (i, point) in wf_to_nf_markers.iter().enumerate() {
+    for (i, point) in state.wf_markers.iter().enumerate() {
         let wf_marker_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
@@ -279,12 +278,11 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_marker_path, p.x, p.y, 50.);
         wf_marker_path.end(&ctx);
-        if i == 0 {
-            ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
-        } else if i == 1 {
-            ctx.stroke(&wf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin);
-        } else {
-            ctx.stroke(&wf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
+        match i {
+            0 | 3 => ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
+            1 | 4 => ctx.stroke(&wf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
+            2 | 5 => ctx.stroke(&wf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
+            _ => ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
         }
     }
 
@@ -296,14 +294,11 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let nf_marker_path = Path::new(ctx, FillMode::Winding);
         custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
         nf_marker_path.end(&ctx);
-        if i == 0 || i == 3 {
-            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin);
-        } else if i == 1 || i == 4 {
-            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin);
-        } else if i == 2 || i == 5 {
-            ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin);
-        } else {
-            ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin);
+        match i {
+            0 | 3 => ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
+            1 | 4 => ctx.stroke(&nf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
+            2 | 5 => ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
+            _ => ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
         }
     }
 
