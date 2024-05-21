@@ -16,7 +16,7 @@ use crate::marker_config_window::MarkersSettings;
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
 
-pub fn transform_aim_point_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
+pub fn transform_aimpoint_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
                         Point2::new(0.5, 1.), Point2::new(0., 0.5),
                         Point2::new(0.5, 0.), Point2::new(1., 0.5))
@@ -176,7 +176,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_radii);
             let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_radii);
 
-            println!("nf: {} wf: {}", filtered_nf_point_tuples.len(), filtered_wf_point_tuples.len());
+            // println!("nf: {} wf: {}", filtered_nf_point_tuples.len(), filtered_wf_point_tuples.len());
 
             let filtered_nf_points_slice = filtered_nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
             let filtered_wf_points_slice = filtered_wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
@@ -227,17 +227,18 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[200.0, 200.0]);
+                // use lower variance until imu is brought back in
+                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[50.0, 50.0]);
                 let new_position = runner.state.fv_aimpoint_pva2d.position();
-                runner.state.fv_aim_point = Point2::new(new_position[0], new_position[1]);
+                runner.state.fv_aimpoint = Point2::new(new_position[0], new_position[1]);
             }
 
-            if let Some(x) = calculate_individual_aim_point(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
-                runner.state.nf_aim_point = x;
+            if let Some(x) = calculate_individual_aimpoint(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
+                runner.state.nf_aimpoint = x;
             }
 
-            if let Some(x) = calculate_individual_aim_point(&wf_points_transformed, runner.state.orientation, Some(&runner.general_config.stereo_iso.cast()), &runner.general_config.camera_model_wf) {
-                runner.state.wf_aim_point = x;
+            if let Some(x) = calculate_individual_aimpoint(&wf_points_transformed, runner.state.orientation, Some(&runner.general_config.stereo_iso.cast()), &runner.general_config.camera_model_wf) {
+                runner.state.wf_aimpoint = x;
             }
 
             let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec);
@@ -291,14 +292,14 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 .collect();
             runner.state.wf_reproj = wf_reproj;
 
-            let index = runner.state.nf_aim_point_history_index;
-            runner.state.nf_aim_point_history[index] = runner.state.nf_aim_point;
-            runner.state.nf_aim_point_history_index = (index + 1) % runner.state.nf_aim_point_history.len();
+            let index = runner.state.fv_aimpoint_history_index;
+            runner.state.fv_aimpoint_history[index] = runner.state.nf_aimpoint;
+            runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
         }
     }
 }
 
-fn calculate_individual_aim_point(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>) -> Option<Point2<f64>> {
+fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>) -> Option<Point2<f64>> {
     let fx = intrinsics.p.m11 * (4095./98.);
     let fy = intrinsics.p.m22 * (4095./98.);
 
@@ -411,7 +412,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
                 if let Some(fv_aimpoint) = fv_aimpoint {
                     runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[2000.0, 2000.0]);
                     let new_position = runner.state.fv_aimpoint_pva2d.position();
-                    runner.state.fv_aim_point = Point2::new(new_position[0], new_position[1]);
+                    runner.state.fv_aimpoint = Point2::new(new_position[0], new_position[1]);
                 }
             }
         }
@@ -426,7 +427,7 @@ async fn euler_stream(runner: Arc<Mutex<MotRunner>>) {
     while runner.lock().device.is_some() {
         if let Some(euler_angles) = euler_stream.next().await {
             euler_samples += 1;
-            println!("Euler hz: {}", euler_samples as f32 / time.elapsed().as_secs_f32());
+            // println!("Euler hz: {}", euler_samples as f32 / time.elapsed().as_secs_f32());
             let mut runner = runner.lock();
             runner.state.orientation = euler_angles.rotation;
         }
@@ -442,15 +443,15 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
             let runner = runner.lock();
             if runner.record_impact {
                 let mut frame = Frame {
-                    nf_aim_point_x: None,
-                    nf_aim_point_y: None,
+                    fv_aimpoint_x: None,
+                    fv_aimpoint_y: None,
                 };
 
                 {
-                    let nf_aim_point = runner.state.nf_aim_point_history[runner.state.nf_aim_point_history_index];
-                    let nf_aim_point = nf_aim_point + runner.nf_offset;
-                    frame.nf_aim_point_x = Some(nf_aim_point.x);
-                    frame.nf_aim_point_y = Some(nf_aim_point.y);
+                    let fv_aimpoint = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
+                    let fv_aimpoint = fv_aimpoint;
+                    frame.fv_aimpoint_x = Some(fv_aimpoint.x);
+                    frame.fv_aimpoint_y = Some(fv_aimpoint.y);
                 }
 
                 if runner.datapoints.is_locked() {

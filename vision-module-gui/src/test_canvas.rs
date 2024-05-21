@@ -40,8 +40,8 @@ impl AreaHandler for TestCanvas {
         let runner = self.runner.lock();
         let state = &runner.state;
         {
-            let aim_point = state.fv_aim_point;
-            draw_crosshair(&ctx, &fv_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 30.);
+            let aimpoint = state.fv_aimpoint;
+            draw_crosshair(&ctx, &fv_ch_path, aimpoint.x*draw_params.area_width, aimpoint.y*draw_params.area_height, 30.);
         }
         fv_ch_path.end(ctx);
         ctx.draw_text(
@@ -55,15 +55,15 @@ impl AreaHandler for TestCanvas {
             &format!("screen_id = {}", runner.state.screen_id),
         );
         {
-            let aim_point = state.nf_aim_point;
-            let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aim_point + runner.nf_offset);
+            let aimpoint = state.nf_aimpoint;
+            let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aimpoint + runner.nf_offset);
             draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
             ctx.draw_text(p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
         }
         nf_ch_path.end(ctx);
         {
-            let aim_point = state.wf_aim_point;
-            draw_crosshair(&ctx, &wf_ch_path, aim_point.x*draw_params.area_width, aim_point.y*draw_params.area_height, 15.);
+            let aimpoint = state.wf_aimpoint;
+            draw_crosshair(&ctx, &wf_ch_path, aimpoint.x*draw_params.area_width, aimpoint.y*draw_params.area_height, 15.);
         }
         wf_ch_path.end(ctx);
 
@@ -182,9 +182,9 @@ impl AreaHandler for TestCanvas {
             let Some(w) = self.last_draw_width else { return };
             let Some(h) = self.last_draw_height else { return };
             let mut state = self.runner.lock();
-            let aim_point = state.state.nf_aim_point;
-            state.nf_offset.x = mouse_event.x / w - aim_point.x;
-            state.nf_offset.y = mouse_event.y / h - aim_point.y;
+            let aimpoint = state.state.nf_aimpoint;
+            state.nf_offset.x = mouse_event.x / w - aimpoint.x;
+            state.nf_offset.y = mouse_event.y / h - aimpoint.y;
         }
     }
 }

@@ -456,9 +456,9 @@ impl GeneralSettingsForm {
     }
 
     fn load_defaults(&self) {
-        self.impact_threshold.set(5);
+        self.impact_threshold.set(2);
         self.accel_odr.set(100);
-        self.euler_angles_odr.set(10);
+        self.euler_angles_odr.set(15);
         self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
         self.wf_intrinsics.set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         self.stereo_iso.set(nalgebra::Isometry3::identity());
@@ -779,7 +779,7 @@ impl SensorSettingsForm {
 
         match self.port {
             Port::Nf => self.gain.set(i32::from(Gain::index_from_reg(16, 0))),
-            Port::Wf => self.gain.set(i32::from(Gain::index_from_reg(16, 3))),
+            Port::Wf => self.gain.set(i32::from(Gain::index_from_reg(16, 2))),
         }
     }
 }

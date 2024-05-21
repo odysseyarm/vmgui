@@ -26,15 +26,15 @@ impl<T: Clone> CloneButShorter for T {}
 
 #[derive(Serialize)]
 pub struct Frame {
-    pub nf_aim_point_x: Option<f64>,
-    pub nf_aim_point_y: Option<f64>,
+    pub fv_aimpoint_x: Option<f64>,
+    pub fv_aimpoint_y: Option<f64>,
 }
 
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
-    pub fv_aim_point: Point2<f64>,
-    pub nf_aim_point: Point2<f64>,
-    pub wf_aim_point: Point2<f64>,
+    pub fv_aimpoint: Point2<f64>,
+    pub nf_aimpoint: Point2<f64>,
+    pub wf_aimpoint: Point2<f64>,
 
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
@@ -55,16 +55,16 @@ pub struct MotState {
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
-    pub nf_aim_point_history: [Point2<f64>; 40],
-    pub nf_aim_point_history_index: usize,
+    pub fv_aimpoint_history: [Point2<f64>; 40],
+    pub fv_aimpoint_history_index: usize,
 }
 
 impl Default for MotState {
     fn default() -> Self {
         Self {
-            fv_aim_point: Point2::new(0.0, 0.0),
-            nf_aim_point: Point2::new(0.0, 0.0),
-            wf_aim_point: Point2::new(0.0, 0.0),
+            fv_aimpoint: Point2::new(0.0, 0.0),
+            nf_aimpoint: Point2::new(0.0, 0.0),
+            wf_aimpoint: Point2::new(0.0, 0.0),
             nf_data: None,
             wf_data: None,
             screen_id: 0,
@@ -79,8 +79,8 @@ impl Default for MotState {
             fv_aimpoint_pva2d: Pva2d::new(0.02, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
-            nf_aim_point_history: [Point2::new(0.0, 0.0); 40],
-            nf_aim_point_history_index: 0,
+            fv_aimpoint_history: [Point2::new(0.0, 0.0); 40],
+            fv_aimpoint_history_index: 0,
         }
     }
 }
