@@ -396,9 +396,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner.c())).abort_handle())
                 }
             } else {
-                if let Some(Some(abort_handle)) = abort_handle {
-                    abort_handle.abort();
-                }
+                abort_handle??.abort();
                 None
             }
         }
