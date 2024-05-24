@@ -48,7 +48,7 @@ impl Read for UdpStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         while self.read_pos == self.read_len {
             self.read_len = self.socket.recv(&mut self.read_buf)?;
-            if self.read_buf.starts_with(self.read_prefix) {
+            if self.read_len >= self.read_prefix.len() && self.read_buf.starts_with(self.read_prefix) {
                 self.read_pos = self.read_prefix.len();
             } else {
                 self.read_len = 0;
