@@ -174,8 +174,8 @@ impl UsbDevice {
         sock.set_nonblocking(false)?;
         sock.set_read_timeout(Some(Duration::from_millis(3000)))?;
         let sock2 = sock.try_clone().context("Failed to clone udp socket")?;
-        let read = UdpStream::with_capacity(sock, 1472, 0, 2, &[]);
-        let write = UdpStream::with_capacity(sock2, 0, 1472, 2, &[1, 0]);
+        let read = UdpStream::with_capacity(sock, 1472, 0, &[1, 0], &[]);
+        let write = UdpStream::with_capacity(sock2, 0, 1472, &[], &[1, 0]);
         Ok(Self::new(read, write, false))
     }
 
@@ -231,7 +231,11 @@ impl UsbDevice {
             loop {
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
-                    reader.read_until(SLIP_FRAME_END, &mut buf)?;
+                    let bytes_read = reader.read_until(SLIP_FRAME_END, &mut buf)?;
+                    if bytes_read == 0 {
+                        // eof
+                        return Err(std::io::Error::new(ErrorKind::BrokenPipe, "disconnected"));
+                    }
                     buf.pop();
                     if buf.contains(&SLIP_FRAME_ESC) {
                         match decode_slip_frame(&mut buf) {
@@ -247,26 +251,33 @@ impl UsbDevice {
                 let reply = match reply {
                     // IO error
                     Err(e) => {
-                        if e.kind() == ErrorKind::TimedOut || e.kind() == ErrorKind::WouldBlock {
-                            debug!("read timed out");
-                            io_error_count = 0;
-                            if let Some(usb_device) = port {
-                                if let Ok(dsr) = usb_device.read_dsr() {
-                                    if !dsr {
-                                        info!("device disconnected");
+                        match e.kind() {
+                            ErrorKind::TimedOut | ErrorKind::WouldBlock => {
+                                debug!("read timed out");
+                                io_error_count = 0;
+                                if let Some(usb_device) = port {
+                                    if let Ok(dsr) = usb_device.read_dsr() {
+                                        if !dsr {
+                                            info!("device disconnected");
+                                            break;
+                                        }
+                                    } else {
+                                        if io_error_count < 3 {
+                                            warn!("error reading from device: {}, ignoring", e);
+                                            io_error_count += 1;
+                                            continue;
+                                        }
+                                        error!("error reading from device: {}", e);
                                         break;
                                     }
-                                } else {
-                                    if io_error_count < 3 {
-                                        warn!("error reading from device: {}, ignoring", e);
-                                        io_error_count += 1;
-                                        continue;
-                                    }
-                                    error!("error reading from device: {}", e);
-                                    break;
                                 }
+                                continue;
                             }
-                            continue;
+                            ErrorKind::BrokenPipe => {
+                                info!("device disconnected");
+                                break;
+                            }
+                            _ => (),
                         }
                         if io_error_count < 3 {
                             warn!("error reading from device: {}, ignoring", e);
