@@ -13,7 +13,7 @@ pub struct UdpStream {
     read_pos: usize,
     read_len: usize,
     write_pos: usize,
-    read_prefix: usize,
+    read_prefix: &'static [u8],
     write_prefix: usize,
 }
 
@@ -21,12 +21,12 @@ impl UdpStream {
     /// Create the adapter with the specified read and write capacities. The max datagram size that
     /// can be received and sent is dictated by the read and write capacities respectively.
     ///
-    /// `read_prefix` can be used to ignore some number of bytes at the start of each datagram.
+    /// `read_prefix` can be used to ignore packets that don't begin with the specified prefix.
     pub fn with_capacity(
         socket: UdpSocket,
         read_capacity: usize,
         write_capacity: usize,
-        read_prefix: usize,
+        read_prefix: &'static [u8],
         write_prefix: &[u8],
     ) -> Self {
         let mut vec = vec![0; write_capacity];
@@ -46,17 +46,19 @@ impl UdpStream {
 
 impl Read for UdpStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.read_len == 0 {
+        while self.read_pos == self.read_len {
             self.read_len = self.socket.recv(&mut self.read_buf)?;
-            self.read_pos = self.read_prefix;
+            if self.read_buf.starts_with(self.read_prefix) {
+                self.read_pos = self.read_prefix.len();
+            } else {
+                self.read_len = 0;
+                self.read_pos = 0;
+            }
         };
 
         let consume = std::cmp::min(buf.len(), self.read_len - self.read_pos);
         buf[..consume].copy_from_slice(&self.read_buf[self.read_pos..][..consume]);
         self.read_pos += consume;
-        if self.read_pos == self.read_len {
-            self.read_len = 0;
-        }
         Ok(consume)
     }
 }
