@@ -185,7 +185,7 @@ impl UsbDevice {
         W: Write + Send + 'static,
     {
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
-        let state = Arc::new(State {
+        let mut state = Arc::new(State {
             response_channels: Mutex::new(response_channels),
             streams_active: StreamsActive::default(),
         });
@@ -229,6 +229,10 @@ impl UsbDevice {
             let mut buf = vec![];
             let mut io_error_count = 0;
             loop {
+                if Arc::get_mut(&mut state).is_some() {
+                    info!("no more thread_state references");
+                    break;
+                }
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
                     let bytes_read = reader.read_until(SLIP_FRAME_END, &mut buf)?;
