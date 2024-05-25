@@ -120,7 +120,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     let stroke = StrokeParams {
         cap: 0, // Bevel
         join: 0, // Flat
-        thickness: 6.,
+        thickness: 2.,
         miter_limit: 0.,
         dashes: vec![],
         dash_phase: 0.,

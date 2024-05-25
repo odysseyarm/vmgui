@@ -76,7 +76,7 @@ impl Default for MotState {
             nf_markers: Default::default(),
             wf_markers: Default::default(),
             wf_reproj: Default::default(),
-            fv_aimpoint_pva2d: Pva2d::new(0.02, 1.0),
+            fv_aimpoint_pva2d: Pva2d::new(0.2, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
             fv_aimpoint_history: [Point2::new(0.0, 0.0); 40],

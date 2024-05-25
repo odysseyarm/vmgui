@@ -326,7 +326,6 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "ats_cv"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/ats_cv.git#cff9c8b7f6fcc19ea36a7522b60bb57f6577a83a"
 dependencies = [
  "arrayvec 0.7.4",
  "cam-geom",
@@ -4744,9 +4743,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.20"
+version = "0.7.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21e005a4cc35784183a9e39cb22e9a9c46353ef6a7f113fd8d36ddc58c15ef3c"
+checksum = "cd8dc749a1b03f3c255a3064a4f5c0ee5ed09b7c6bc6d4525d31f779cd74d7fc"
 dependencies = [
  "bytemuck",
  "safe_arch",

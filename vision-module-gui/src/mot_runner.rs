@@ -228,7 +228,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.translation_mat = transmat.coords.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
                 // use lower variance until imu is brought back in
-                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[50.0, 50.0]);
+                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[20.0, 20.0]);
                 let new_position = runner.state.fv_aimpoint_pva2d.position();
                 runner.state.fv_aimpoint = Point2::new(new_position[0], new_position[1]);
             }
