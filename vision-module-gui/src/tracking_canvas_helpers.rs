@@ -1,7 +1,8 @@
 use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
-use nalgebra::{Point2, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
+use ats_cv::foveated::marker_pattern;
+use nalgebra::{Isometry3, Point2, Point3, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
 use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
@@ -262,13 +263,17 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dashes: vec![],
         dash_phase: 0.,
     };
-    let thick = StrokeParams {
+    let thick2 = StrokeParams {
         cap: 0, // Bevel
         join: 0, // Flat
         thickness: 2.,
         miter_limit: 0.,
         dashes: vec![],
         dash_phase: 0.,
+    };
+    let thick3 = StrokeParams {
+        thickness: 3.,
+        ..thick2.clone()
     };
     let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
     for (i, point) in wf_to_nf_markers.iter().enumerate() {
@@ -335,6 +340,22 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     let fy = config.camera_model_nf.p.m22 as f64;
     let cx = config.camera_model_nf.p.m13 as f64;
     let cy = config.camera_model_nf.p.m23 as f64;
+    for p in marker_pattern::<f64>() {
+        let position = state.fv_state.filter.position;
+        let orientation = state.fv_state.filter.orientation;
+        let reproj_tf = Isometry3::from_parts(position.into(), orientation);
+        let fv_reproj_path = Path::new(ctx, FillMode::Winding);
+        let p = reproj_tf.cast().inverse_transform_point(&p.into());
+        let p = p / p.z;
+        // todo don't use hardcoded 4095x4095 res assumption
+        let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
+        let p = p / 4095. - Vector2::new(0.5, 0.5);
+        let p = gravity_rot * p;
+        let p = draw_tf * p;
+        draw_crosshair_rotated(&ctx, &fv_reproj_path, p.x, p.y, 20.);
+        fv_reproj_path.end(&ctx);
+        ctx.stroke(&fv_reproj_path, &solid_brush(0.0, 0.69, 0.42), &thick3);
+    }
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
@@ -344,6 +365,6 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 20.);
         wf_reproj_path.end(&ctx);
-        ctx.stroke(&wf_reproj_path, &solid_brush(0.627, 0.125, 0.941), &thick);
+        ctx.stroke(&wf_reproj_path, &solid_brush(0.627, 0.125, 0.941), &thick2);
     }
 }
