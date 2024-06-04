@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+bin = ["tokio/signal"]
+
 [dependencies]
 anyhow = "1.0.75"
 ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git" }
