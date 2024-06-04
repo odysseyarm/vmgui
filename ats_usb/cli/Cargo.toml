@@ -1,0 +1,10 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ats_usb = { version = "0.1.0", path = ".." }
+futures = "0.3.30"
+nalgebra = "0.32.5"
+tokio = { version = "1.38.0", features = ["signal"] }
