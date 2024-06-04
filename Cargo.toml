@@ -5,6 +5,7 @@ members = [
     "libui-rs/iui",
     "libui-rs/ui-sys",
     "ats_usb",
+    "ats_usb/cli",
     "vision-module-gui",
 ]
 
