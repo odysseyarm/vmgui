@@ -30,9 +30,9 @@ impl TryFrom<u32> for SlantStyle {
 impl SlantStyle {
     pub fn as_ui_text_italic(self) -> ui_sys::uiTextItalic {
         match self {
-            SlantStyle::Normal => ui_sys::uiTextItalicNormal,
-            SlantStyle::Oblique => ui_sys::uiTextItalicOblique,
-            SlantStyle::Italic => ui_sys::uiTextItalicItalic,
+            SlantStyle::Normal => ui_sys::uiTextItalicNormal as _,
+            SlantStyle::Oblique => ui_sys::uiTextItalicOblique as _,
+            SlantStyle::Italic => ui_sys::uiTextItalicItalic as _,
         }
     }
 }
@@ -72,15 +72,15 @@ impl TryFrom<u32> for StretchStyle {
 impl StretchStyle {
     pub fn as_ui_text_stretch(self) -> ui_sys::uiTextStretch {
         match self {
-            StretchStyle::UltraCondensed => ui_sys::uiTextStretchUltraCondensed,
-            StretchStyle::ExtraCondensed => ui_sys::uiTextStretchExtraCondensed,
-            StretchStyle::Condensed => ui_sys::uiTextStretchCondensed,
-            StretchStyle::SemiCondensed => ui_sys::uiTextStretchSemiCondensed,
-            StretchStyle::Normal => ui_sys::uiTextStretchNormal,
-            StretchStyle::SemiExpanded => ui_sys::uiTextStretchSemiExpanded,
-            StretchStyle::Expanded => ui_sys::uiTextStretchExpanded,
-            StretchStyle::ExtraExpanded => ui_sys::uiTextStretchExtraExpanded,
-            StretchStyle::UltraExpanded => ui_sys::uiTextStretchUltraExpanded,
+            StretchStyle::UltraCondensed => ui_sys::uiTextStretchUltraCondensed as _,
+            StretchStyle::ExtraCondensed => ui_sys::uiTextStretchExtraCondensed as _,
+            StretchStyle::Condensed => ui_sys::uiTextStretchCondensed as _,
+            StretchStyle::SemiCondensed => ui_sys::uiTextStretchSemiCondensed as _,
+            StretchStyle::Normal => ui_sys::uiTextStretchNormal as _,
+            StretchStyle::SemiExpanded => ui_sys::uiTextStretchSemiExpanded as _,
+            StretchStyle::Expanded => ui_sys::uiTextStretchExpanded as _,
+            StretchStyle::ExtraExpanded => ui_sys::uiTextStretchExtraExpanded as _,
+            StretchStyle::UltraExpanded => ui_sys::uiTextStretchUltraExpanded as  _,
         }
     }
 }
