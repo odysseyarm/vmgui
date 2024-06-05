@@ -150,7 +150,7 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
     let translation = runner.state.translation_mat;
 
     let (_camera, mut camera_transform) = camera_query.single_mut();
-    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) / 100.;
+    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) * 10.;
     let rotation = Mat3::from_cols_slice(rotation.cast().as_slice());
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
@@ -211,12 +211,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         mot_runner.c(),
         tokio_handle,
     );
-    let mut marker_config_win = marker_config_window::marker_config_window(
-        &ui,
-        marker_offset_calibrating,
-        // marker_pattern_memo,
-        mot_runner.c(),
-    );
+    // let mut marker_config_win = marker_config_window::marker_config_window(
+    //     &ui,
+    //     marker_offset_calibrating,
+    //     // marker_pattern_memo,
+    //     mot_runner.c(),
+    // );
 
 
     let mut test_win = iui::prelude::Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);

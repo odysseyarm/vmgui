@@ -152,7 +152,13 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (
     let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
     let transmat = flip_yz * position;
 
-    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(108., 16./9.);
+    // 1920x1080 abe's wall
+    let screen_height_meters = 1.2838;
+
+    // 3840x2160 (16:9) SVT
+    // let screen_height_meters: f64 = ???;
+
+    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(screen_height_meters, 16./9.);
 
     let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
         &rotmat,
@@ -389,15 +395,15 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
-    let mut time = Instant::now();
-    let mut accel_samples = 0;
+    // let mut time = Instant::now();
+    // let mut accel_samples = 0;
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
             let accel_odr = runner.general_config.accel_odr;
-            // println!("{} {}", accel.accel.xzy(), accel.gyro.xzy());
-            // println!("{}", accel.accel.norm());
-            accel_samples += 1;
+            // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
+            // println!("{:7.3?}", accel.accel.norm());
+            // accel_samples += 1;
             // println!("Accel hz: {}", accel_samples as f32 / time.elapsed().as_secs_f32());
             // print rotation in degrees
             // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
