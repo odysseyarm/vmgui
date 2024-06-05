@@ -1,5 +1,5 @@
-use iui::draw::{self, Brush, FillMode, SolidBrush, StrokeParams};
-use iui::draw::Path;
+use iui::controls::{FontDescription, SlantStyle, StretchStyle};
+use iui::draw::{self, text, Brush, FillMode, Path, SolidBrush, StrokeParams, Transform};
 use nalgebra::{Point2, Rotation2, SMatrix, Transform2, Vector2};
 
 pub fn draw_crosshair(ctx: &draw::DrawContext, path: &Path, x: f64, y: f64, r: f64) {
@@ -64,7 +64,7 @@ pub fn draw_square(ctx: &draw::DrawContext, path: &Path, transform: Transform2<f
 /// Draws a crosshair and associated text at a given position.
 pub fn draw_marker(ctx: &draw::DrawContext, path: &Path, position: Point2<f64>, label: &str) {
     draw_crosshair(&ctx, path, position.x, position.y, 50.0);
-    ctx.draw_text(position.x + 20.0, position.y + 20.0, label);
+    draw_text(&ctx, position.x + 20.0, position.y + 20.0, label);
 }
 
 /// Handles drawing a rectangle defined by boundaries and transforms.
@@ -106,4 +106,17 @@ pub fn draw_line(ctx: &draw::DrawContext, x1: f64, y1: f64, x2: f64, y2: f64, br
         dashes: vec![],
         dash_phase: 0.,
     });
+}
+
+pub fn draw_text(ctx: &draw::DrawContext, x: f64, y: f64, s: &str) {
+    let font_descriptor = FontDescription {
+        family: "Courier New".into(),
+        size: 12.0,
+        weight: 400,
+        slant: SlantStyle::Normal,
+        stretch: StretchStyle::Normal,
+    };
+    let attr_str = text::AttributedString::new(s);
+    let mut layout = attr_str.layout(&font_descriptor, 200.0, text::TextAlign::Left);
+    ctx.draw_text(&mut layout, x, y);
 }

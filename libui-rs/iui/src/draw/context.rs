@@ -1,5 +1,5 @@
 use std::ffi::CString;
-use draw::{Brush, Path, StrokeParams, Transform};
+use draw::{Brush, Path, StrokeParams, Transform, text};
 use ui_sys::{self, uiDrawContext, uiDrawNewTextLayout, uiDrawTextLayoutParams, uiFontDescriptor, uiNewAttributedString};
 
 /// Drawing context, used to draw custom content on the screen.
@@ -56,34 +56,9 @@ impl DrawContext {
         unsafe { ui_sys::uiDrawRestore(self.ui_draw_context) }
     }
 
-    // pub fn draw_text(&self, tl: &mut uiDrawTextLayout, x: f64, y: f64) {
-    //     unsafe {
-    //         ui_sys::uiDrawText(self.ui_draw_context, tl, x, y)
-    //     }
-    // }
-
-    pub fn draw_text(&self, x: f64, y: f64, text: &str) {
+    pub fn draw_text(&self, text_layout: &mut text::Layout, x: f64, y: f64) {
         unsafe {
-            let c_string = CString::new(text.as_bytes().to_vec()).unwrap();
-            let string = uiNewAttributedString(c_string.as_ptr());
-            let family = CString::new("Courier New".as_bytes().to_vec()).unwrap();
-            let mut font = uiFontDescriptor {
-                Family: family.as_ptr().cast_mut(),
-                Size: 12.0,
-                Weight: 1,
-                Italic: 0,
-                Stretch: 0,
-            };
-            let mut params = uiDrawTextLayoutParams {
-                String: string,
-                DefaultFont: &mut font,
-                Width: 200.0,
-                Align: 0,
-            };
-            let layout = uiDrawNewTextLayout(&mut params);
-            ui_sys::uiDrawText(self.ui_draw_context, layout, x, y);
-            ui_sys::uiFreeAttributedString(string);
-            ui_sys::uiDrawFreeTextLayout(layout);
+            ui_sys::uiDrawText(self.ui_draw_context, text_layout.ui_draw_text_layout, x, y)
         }
     }
 }

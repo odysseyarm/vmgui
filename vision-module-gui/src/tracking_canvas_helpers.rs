@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, solid_brush};
+use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, draw_text, solid_brush};
 use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, MotRunner};
 use crate::MotState;
@@ -77,7 +77,8 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
         * Scale2::new(draw_size, draw_size).to_homogeneous()
     );
 
-    ctx.draw_text(
+    draw_text(
+        &ctx,
         20.0,
         20.0,
         &format!("screen_id = {}", state.screen_id),
