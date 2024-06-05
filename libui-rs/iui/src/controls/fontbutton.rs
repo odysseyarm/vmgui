@@ -27,6 +27,16 @@ impl TryFrom<u32> for SlantStyle {
     }
 }
 
+impl SlantStyle {
+    pub fn as_ui_text_italic(self) -> ui_sys::uiTextItalic {
+        match self {
+            SlantStyle::Normal => ui_sys::uiTextItalicNormal,
+            SlantStyle::Oblique => ui_sys::uiTextItalicOblique,
+            SlantStyle::Italic => ui_sys::uiTextItalicItalic,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum StretchStyle {
     UltraCondensed,
@@ -55,6 +65,22 @@ impl TryFrom<u32> for StretchStyle {
             7 => Ok(StretchStyle::ExtraExpanded),
             8 => Ok(StretchStyle::UltraExpanded),
             _ => Err(()),
+        }
+    }
+}
+
+impl StretchStyle {
+    pub fn as_ui_text_stretch(self) -> ui_sys::uiTextStretch {
+        match self {
+            StretchStyle::UltraCondensed => ui_sys::uiTextStretchUltraCondensed,
+            StretchStyle::ExtraCondensed => ui_sys::uiTextStretchExtraCondensed,
+            StretchStyle::Condensed => ui_sys::uiTextStretchCondensed,
+            StretchStyle::SemiCondensed => ui_sys::uiTextStretchSemiCondensed,
+            StretchStyle::Normal => ui_sys::uiTextStretchNormal,
+            StretchStyle::SemiExpanded => ui_sys::uiTextStretchSemiExpanded,
+            StretchStyle::Expanded => ui_sys::uiTextStretchExpanded,
+            StretchStyle::ExtraExpanded => ui_sys::uiTextStretchExtraExpanded,
+            StretchStyle::UltraExpanded => ui_sys::uiTextStretchUltraExpanded,
         }
     }
 }

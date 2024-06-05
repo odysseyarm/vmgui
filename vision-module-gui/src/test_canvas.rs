@@ -5,7 +5,7 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, 
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
-use crate::custom_shapes::{draw_crosshair, draw_grid};
+use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
 use crate::mot_runner::MotRunner;
 
 pub struct TestCanvas {
@@ -44,12 +44,14 @@ impl AreaHandler for TestCanvas {
             draw_crosshair(&ctx, &fv_ch_path, aimpoint.x*draw_params.area_width, aimpoint.y*draw_params.area_height, 30.);
         }
         fv_ch_path.end(ctx);
-        ctx.draw_text(
+        draw_text(
+            &ctx,
             20.0,
             20.0,
             &format!("offset = ({:.4}, {:.4})", runner.nf_offset.x, runner.nf_offset.y),
         );
-        ctx.draw_text(
+        draw_text(
+            &ctx,
             20.0,
             60.0,
             &format!("screen_id = {}", runner.state.screen_id),
@@ -58,7 +60,7 @@ impl AreaHandler for TestCanvas {
             let aimpoint = state.nf_aimpoint;
             let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aimpoint + runner.nf_offset);
             draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
-            ctx.draw_text(p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
+            draw_text(&ctx, p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
         }
         nf_ch_path.end(ctx);
         {
