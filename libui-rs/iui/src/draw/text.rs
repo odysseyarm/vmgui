@@ -1,9 +1,28 @@
 use std::{ffi::{CStr, CString}, ops::RangeBounds};
 
-use ui_sys::uiDrawFreeTextLayout;
+use ui_sys::{uiDrawFreeTextLayout, uiDrawTextLayoutExtents};
 
 use crate::controls::FontDescription;
 
+/// Represents a string of text that can
+/// optionally be embellished with formatting attributes. libui
+/// provides the list of formatting attributes, which cover common
+/// formatting traits like boldface and color as well as advanced
+/// typographical features provided by OpenType like superscripts
+/// and small caps. These attributes can be combined in a variety of
+/// ways.
+///
+/// Attributes are applied to runs of Unicode codepoints in the string.
+/// Zero-length runs are elided. Consecutive runs that have the same
+/// attribute type and value are merged. Each attribute is independent
+/// of each other attribute; overlapping attributes of different types
+/// do not split each other apart, but different values of the same
+/// attribute type do.
+///
+/// `AttributedString` does not provide enough information to be able
+/// to draw itself onto a [`DrawContext`](`::draw::DrawContext`) or respond to user actions.
+/// In order to do that, you'll need to use a [`Layout`], which
+/// is built using the [`layout`](`AttributedString::layout`) method.
 pub struct AttributedString {
     ui_attributed_string: *mut ui_sys::uiAttributedString,
 }
@@ -17,6 +36,7 @@ impl Drop for AttributedString {
 }
 
 impl AttributedString {
+    /// Create a new `AttributedString`.
     pub fn new(initial_contents: &str) -> Self {
         let initial_contents = CString::new(initial_contents).unwrap();
         Self {
@@ -26,12 +46,14 @@ impl AttributedString {
         }
     }
 
+    /// Returns the length of `self` in bytes.
     pub fn len(&self) -> usize {
         unsafe {
             ui_sys::uiAttributedStringLen(self.ui_attributed_string)
         }
     }
 
+    /// Extracts a string slice of the text content of `self`.
     pub fn as_str(&self) -> &str {
         unsafe {
             let contents = ui_sys::uiAttributedStringString(self.ui_attributed_string);
@@ -40,7 +62,7 @@ impl AttributedString {
         }
     }
 
-    /// Append the string to the end of this `AttributedString`. The new substring will be
+    /// Appends a string to the end of this `AttributedString`. The new substring will be
     /// unattributed.
     pub fn push_str(&mut self, s: &str) {
         let s = CString::new(s).unwrap();
@@ -74,6 +96,13 @@ impl AttributedString {
         }
     }
 
+    /// Creates a [`Layout`] which can be passed to
+    /// [`DrawContext::draw_text`](`::draw::DrawContext::draw_text`).
+    ///
+    /// `default_font` is used to render any text that is not attributed sufficiently.
+    ///
+    /// `width` determines the width of the bounding box of the text. The height is determined
+    /// automatically.
     pub fn layout(&self, default_font: &FontDescription, width: f64, align: TextAlign) -> Layout {
         let default_font_family = CString::new(&*default_font.family).unwrap();
         let mut default_font = ui_sys::uiFontDescriptor {
@@ -96,6 +125,17 @@ impl AttributedString {
     }
 }
 
+/// `Layout` is a concrete representation of an
+/// [`AttributedString`] that can be displayed in a [`DrawContext`](`::draw::DrawContext`).
+/// It includes information important for the drawing of a block of
+/// text, including the bounding box to wrap the text within, the
+/// alignment of lines of text within that box, areas to mark as
+/// being selected, and other things.
+///
+/// Unlike [`AttributedString`], the content of a `Layout` is
+/// immutable once it has been created.
+///
+/// This `struct` is created by the [`AttributedString::layout`] function.
 pub struct Layout {
     pub(super) ui_draw_text_layout: *mut ui_sys::uiDrawTextLayout,
 }
@@ -105,6 +145,18 @@ impl Drop for Layout {
         unsafe {
             uiDrawFreeTextLayout(self.ui_draw_text_layout)
         }
+    }
+}
+
+impl Layout {
+    /// Returns the actual width and height of the text.
+    pub fn extents(&self) -> (f64, f64) {
+        let mut width = 0.0;
+        let mut height = 0.0;
+        unsafe {
+            uiDrawTextLayoutExtents(self.ui_draw_text_layout, &mut width, &mut height);
+        }
+        (width, height)
     }
 }
 

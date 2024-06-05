@@ -56,6 +56,7 @@ impl DrawContext {
         unsafe { ui_sys::uiDrawRestore(self.ui_draw_context) }
     }
 
+    /// Draw text on this DrawContext.
     pub fn draw_text(&self, text_layout: &mut text::Layout, x: f64, y: f64) {
         unsafe {
             ui_sys::uiDrawText(self.ui_draw_context, text_layout.ui_draw_text_layout, x, y)
