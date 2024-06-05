@@ -118,9 +118,9 @@ pub enum TextAlign {
 impl TextAlign {
     pub fn as_ui_draw_text_align(self) -> ui_sys::uiDrawTextAlign {
         match self {
-            TextAlign::Left => ui_sys::uiDrawTextAlignLeft,
-            TextAlign::Center => ui_sys::uiDrawTextAlignCenter,
-            TextAlign::Right => ui_sys::uiDrawTextAlignRight,
+            TextAlign::Left => ui_sys::uiDrawTextAlignLeft as _,
+            TextAlign::Center => ui_sys::uiDrawTextAlignCenter as _,
+            TextAlign::Right => ui_sys::uiDrawTextAlignRight as _,
         }
     }
 }
