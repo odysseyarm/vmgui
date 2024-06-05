@@ -18,8 +18,8 @@ async fn main() {
         _ = tokio::signal::ctrl_c() => {},
         _ = async {
             loop {
-                let v = s.next().await.unwrap();
-                println!("accel = {:8.4?}, gyro = {:8.4?}", v.accel, v.gyro);
+                let mut v = s.next().await.unwrap();
+                println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}", v.accel, v.accel.magnitude(), v.gyro);
                 count += 1.0;
                 accel_sum += v.accel;
                 gyro_sum += v.gyro;
