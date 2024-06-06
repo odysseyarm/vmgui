@@ -1,6 +1,5 @@
-use std::ffi::CString;
 use draw::{Brush, Path, StrokeParams, Transform, text};
-use ui_sys::{self, uiDrawContext, uiDrawNewTextLayout, uiDrawTextLayoutParams, uiFontDescriptor, uiNewAttributedString};
+use ui_sys::{self, uiDrawContext};
 
 /// Drawing context, used to draw custom content on the screen.
 pub struct DrawContext {

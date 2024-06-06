@@ -35,8 +35,12 @@ appveyor = { repository = "rust-native-ui/libui-rs", branch = "trunk" }
 
 maintenance = { status = "actively-developed" }
 
+[features]
+plotters = ["dep:plotters-backend"]
+
 [dependencies]
 bitflags = "1"
 failure = "0.1"
 ui-sys = { path = "../ui-sys", version = "0.2.1" }
 futures = "0.3"
+plotters-backend = { version = "0.3.6", optional = true }

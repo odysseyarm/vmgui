@@ -6,6 +6,8 @@ mod path;
 mod strokeparams;
 mod transform;
 pub mod text;
+#[cfg(feature = "plotters")]
+pub mod plotters;
 
 pub use self::brush::*;
 pub use self::context::*;

@@ -86,7 +86,7 @@ impl AttributedString {
             std::ops::Bound::Unbounded => len,
         };
         assert!(start < len);
-        assert!(end < len);
+        assert!(end <= len);
         assert!(start <= end);
         if start != end {
             unsafe {
