@@ -587,10 +587,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     track_raw_button.on_clicked(&ui, move |_| tracking_raw.set(!tracking_raw.get_untracked()));
     track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
     test_button.on_clicked(&ui, move |_| testing.set(true));
-    record_button.on_clicked(&ui, move |_| {
-        let new_value = !recording.get_untracked();
-        recording.set(new_value);
-        mot_runner.lock().record_packets = new_value;
+    record_button.on_clicked(&ui, {
+        let mot_runner = mot_runner.c();
+        move |_| {
+            let new_value = !recording.get_untracked();
+            recording.set(new_value);
+            mot_runner.lock().record_packets = new_value;
+        }
     });
 
     clear_packets_button.on_clicked(&ui, {
@@ -604,6 +607,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui = ui.c();
         let main_win = main_win.c();
         let packets = packets.c();
+        let mot_runner = mot_runner.c();
         move |_| {
             let packets = packets.lock();
             let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("bin").extension("bin")]);
@@ -613,6 +617,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let mut file = File::create(path_buf).expect("Could not create file");
                 let mut bytes = Vec::new();
+
+                mot_runner.lock().general_config.serialize(&mut bytes);
+
                 for (timestamp, packet_data) in packets.iter() {
                     let packet = ats_usb::packet::Packet {
                         data: packet_data.clone(),
