@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Write;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -22,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, marker_config_window, Frame};
+use vision_module_gui::{config_window, marker_config_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -149,8 +150,10 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
     let rotation = runner.state.rotation_mat;
     let translation = runner.state.translation_mat;
 
+    let offset = Vec3::new(0.0, 1.6, 10.);
+
     let (_camera, mut camera_transform) = camera_query.single_mut();
-    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) * 10.;
+    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) + offset;
     let rotation = Mat3::from_cols_slice(rotation.cast().as_slice());
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
@@ -183,24 +186,30 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         [] => (),
         _ => panic!("Unrecognized arguments"),
     }
-    let datapoints: Arc<Mutex<Vec<Frame>>> = Arc::new(Mutex::new(Vec::new()));
+    let datapoints: Arc<Mutex<Vec<TestFrame>>> = Arc::new(Mutex::new(Vec::new()));
+    let packets: Arc<Mutex<Vec<ats_usb::packet::PacketData>>> = Arc::new(Mutex::new(Vec::new()));
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
+
+    let tracking_raw = RwSignal::new(false);
+    let tracking = RwSignal::new(false);
+    let testing = RwSignal::new(false);
+    let recording = RwSignal::new(false);
+    let marker_offset_calibrating = RwSignal::new(false);
+
     let mot_runner = Arc::new(Mutex::new(MotRunner {
         state,
         device: None,
         markers_settings: Default::default(),
         record_impact: false,
+        record_packets: false,
         datapoints: datapoints.c(),
+        packets: packets.c(),
         ui_update: ui_update.c(),
         ui_ctx,
         nf_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
     }));
-    let tracking_raw = RwSignal::new(false);
-    let tracking = RwSignal::new(false);
-    let testing = RwSignal::new(false);
-    let marker_offset_calibrating = RwSignal::new(false);
 
     // Create a main_window into which controls can be placed
     let mut main_win = iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
@@ -255,6 +264,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 (4, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
                 (5, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
                 (6, 0)(1, 1) Vertical (Fill, Fill) : let bevy_button = Button("Launch Bevy")
+                (0, 1)(1, 1) Vertical (Fill, Fill) : let record_button = Button(move || {
+                    if !recording.get() { "Start Recording" } else { "Stop Recording" }
+                })
+                (1, 1)(1, 1) Vertical (Fill, Fill) : let clear_packets_button = Button("Clear")
+                (2, 1)(1, 1) Vertical (Fill, Fill) : let save_packets_button = Button("Save")
             }
             Compact: let separator = HorizontalSeparator()
             Compact: let spacer = Spacer()
@@ -483,7 +497,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut datapoints = datapoints.lock();
             let mut collected_text = collected_text.c();
 
-            let mut frame = Frame {
+            let mut frame = TestFrame {
                               fv_aimpoint_x: None,
                               fv_aimpoint_y: None,
                               };
@@ -573,6 +587,44 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     track_raw_button.on_clicked(&ui, move |_| tracking_raw.set(!tracking_raw.get_untracked()));
     track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
     test_button.on_clicked(&ui, move |_| testing.set(true));
+    record_button.on_clicked(&ui, move |_| {
+        let new_value = !recording.get_untracked();
+        recording.set(new_value);
+        mot_runner.lock().record_packets = new_value;
+    });
+
+    clear_packets_button.on_clicked(&ui, {
+        let packets = packets.c();
+        move |_| {
+            packets.lock().clear();
+        }
+    });
+
+    save_packets_button.on_clicked(&ui, {
+        let ui = ui.c();
+        let main_win = main_win.c();
+        let packets = packets.c();
+        move |_| {
+            let packets = packets.lock();
+            let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("bin").extension("bin")]);
+            if let Some(mut path_buf) = path_buf {
+                if path_buf.extension() != Some("bin".as_ref()) {
+                    path_buf.as_mut_os_string().push(".bin");
+                }
+                let mut file = File::create(path_buf).expect("Could not create file");
+                let mut bytes = Vec::new();
+                for packet_data in packets.iter() {
+                    let packet = ats_usb::packet::Packet {
+                        data: packet_data.clone(),
+                        id: 0,
+                    };
+                    packet.serialize(&mut bytes);
+                }
+
+                file.write_all(&bytes).expect("Could not write to file");
+            }
+        }
+    });
 
     main_win.show(&ui);
 

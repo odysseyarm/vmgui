@@ -25,7 +25,7 @@ pub trait CloneButShorter: Clone {
 impl<T: Clone> CloneButShorter for T {}
 
 #[derive(Serialize)]
-pub struct Frame {
+pub struct TestFrame {
     pub fv_aimpoint_x: Option<f64>,
     pub fv_aimpoint_y: Option<f64>,
 }

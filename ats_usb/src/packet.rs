@@ -352,7 +352,7 @@ impl Packet {
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
-            PacketData::AccelReport(x) => unimplemented!(),
+            PacketData::AccelReport(x) => x.serialize(buf),
             PacketData::EulerAnglesReport(x) => unimplemented!(),
             PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
@@ -678,6 +678,17 @@ impl AccelReport {
         });
         *bytes = &bytes[12..];
         Ok(Self { accel: Vector3::from(accel), gyro: Vector3::from(gyro) })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        for a in self.accel.iter() {
+            let a = (a / 9.81 * 2048.0) as i16;
+            buf.extend_from_slice(&a.to_le_bytes());
+        }
+        for g in self.gyro.iter() {
+            let g = (g.to_degrees() * 16.4) as i16;
+            buf.extend_from_slice(&g.to_le_bytes());
+        }
     }
 }
 

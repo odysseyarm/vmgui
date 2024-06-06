@@ -5,16 +5,16 @@ use parking_lot::Mutex;
 use std::time::Duration;
 use arrayvec::ArrayVec;
 use iui::concurrent::Context;
-use leptos_reactive::RwSignal;
+use leptos_reactive::{RwSignal, SignalGetUntracked};
 use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio::time::{sleep, Instant};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, Frame, MotState};
+use crate::{CloneButShorter, TestFrame, MotState};
 use crate::marker_config_window::MarkersSettings;
 use ats_usb::device::UsbDevice;
-use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData};
+use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData, Packet};
 
 pub fn transform_aimpoint_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
@@ -100,7 +100,9 @@ pub struct MotRunner {
     pub markers_settings: MarkersSettings,
     pub general_config: GeneralConfig,
     pub record_impact: bool,
-    pub datapoints: Arc<Mutex<Vec<crate::Frame>>>,
+    pub record_packets: bool,
+    pub datapoints: Arc<Mutex<Vec<crate::TestFrame>>>,
+    pub packets: Arc<Mutex<Vec<ats_usb::packet::PacketData>>>,
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
     pub nf_offset: Vector2<f64>,
@@ -233,10 +235,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                // use lower variance until imu is brought back in
-                runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[20.0, 20.0]);
-                let new_position = runner.state.fv_aimpoint_pva2d.position();
-                runner.state.fv_aimpoint = Point2::new(new_position[0], new_position[1]);
+                runner.state.fv_aimpoint = fv_aimpoint.cast();
             }
 
             if let Some(x) = calculate_individual_aimpoint(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf) {
@@ -301,6 +300,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let index = runner.state.fv_aimpoint_history_index;
             runner.state.fv_aimpoint_history[index] = runner.state.nf_aimpoint;
             runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
+
+            if runner.record_packets {
+                runner.packets.lock().push(ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report));
+            }
         }
     }
 }
@@ -395,31 +398,28 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
-    // let mut time = Instant::now();
-    // let mut accel_samples = 0;
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
             let accel_odr = runner.general_config.accel_odr;
             // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{:7.3?}", accel.accel.norm());
-            // accel_samples += 1;
-            // println!("Accel hz: {}", accel_samples as f32 / time.elapsed().as_secs_f32());
+
             // print rotation in degrees
             // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
 
             runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
 
-            {
-                let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
 
-                runner.state.rotation_mat = rotmat.cast();
-                runner.state.translation_mat = transmat.coords.cast();
-                if let Some(fv_aimpoint) = fv_aimpoint {
-                    runner.state.fv_aimpoint_pva2d.observe(fv_aimpoint.coords.cast().as_ref(), &[2000.0, 2000.0]);
-                    let new_position = runner.state.fv_aimpoint_pva2d.position();
-                    runner.state.fv_aimpoint = Point2::new(new_position[0], new_position[1]);
-                }
+            runner.state.rotation_mat = rotmat.cast();
+            runner.state.translation_mat = transmat.coords.cast();
+            if let Some(fv_aimpoint) = fv_aimpoint {
+                runner.state.fv_aimpoint = fv_aimpoint.cast();
+            }
+
+            if runner.record_packets {
+                runner.packets.lock().push(ats_usb::packet::PacketData::AccelReport(accel));
             }
         }
     }
@@ -448,7 +448,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some(_impact) = impact_stream.next().await {
             let runner = runner.lock();
             if runner.record_impact {
-                let mut frame = Frame {
+                let mut frame = TestFrame {
                     fv_aimpoint_x: None,
                     fv_aimpoint_y: None,
                 };
