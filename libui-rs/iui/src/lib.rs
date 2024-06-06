@@ -23,6 +23,8 @@ extern crate bitflags;
 extern crate failure;
 extern crate ui_sys;
 extern crate futures;
+#[cfg(feature = "plotters")]
+extern crate plotters_backend;
 
 mod builder;
 mod callback_helpers;
