@@ -417,9 +417,10 @@ struct MainCanvas {
 
 // const GRID_WIDTH: f64 = 16.0 / 9.0;
 // const GRID_HEIGHT: f64 = 1.0;
-const GRID_WIDTH: f64 = 160.0 / 12.0;
-const GRID_HEIGHT: f64 = 90.0 / 12.0;
-const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 13.0);
+const GRID_WIDTH: f64 = 140.0;
+const GRID_HEIGHT: f64 = 80.0;
+// const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 360.0);
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 240.0);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
@@ -436,7 +437,7 @@ impl AreaHandler for MainCanvas {
         let mut state = self.state.lock().unwrap();
 
         #[rustfmt::skip] {
-            let movement_speed = 0.05;
+            let movement_speed = 0.5;
             let fwd = state.camera_rotation() * -Vector3::z();
             let right = state.camera_rotation() * Vector3::x();
             let up = state.camera_rotation() * Vector3::y();
