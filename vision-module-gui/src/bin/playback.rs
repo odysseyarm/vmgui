@@ -43,11 +43,15 @@ fn main() {
         let main_win = main_win.clone();
         let ui = ui.clone();
         move |_| {
-            let state = state.lock().unwrap();
+            let mut state = state.lock().unwrap();
             state.packets.lock().unwrap().clear();
 
             if let Some(path) = main_win.open_file(&ui) {
                 let mut file = std::fs::File::open(path).unwrap();
+                let mut buf = [0; 172];
+                file.read_exact(&mut buf).unwrap();
+                let general_config = GeneralConfig::parse(&mut &buf[..], ats_usb::packet::PacketType::ReadConfigResponse).unwrap();
+                state.general_config = general_config;
                 loop {
                     let mut buf = [0; 16];
                     match file.read_exact(&mut buf) {
@@ -166,27 +170,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig {
-                impact_threshold: 0,
-                camera_model_nf: RosOpenCvIntrinsics::from_params(
-                    49.0 * nf_focal_length() as f32,
-                    0.,
-                    49.0 * nf_focal_length() as f32,
-                    49.,
-                    49.,
-                ),
-                camera_model_wf: RosOpenCvIntrinsics::from_params(
-                    49.0 * wf_focal_length() as f32,
-                    0.,
-                    49.0 * wf_focal_length() as f32,
-                    49.,
-                    49.,
-                ),
-                stereo_iso: nalgebra::Isometry3::identity(),
-                accel_odr: 100,
-                euler_angles_odr: 100,
-                uuid: [42, 69, 3, 7, 9, 13],
-            })),
+            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(state.general_config.clone())),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
@@ -250,6 +234,7 @@ struct State {
     stream_combined_markers: Option<u8>,
     stream_euler: Option<u8>,
     packets: Arc<Mutex<Vec<(i128, Packet)>>>,
+    general_config: GeneralConfig,
 }
 
 impl State {
@@ -259,6 +244,27 @@ impl State {
             stream_combined_markers: None,
             stream_euler: None,
             packets: Arc::new(Mutex::new(vec![])),
+            general_config: GeneralConfig {
+                impact_threshold: 0,
+                camera_model_nf: RosOpenCvIntrinsics::from_params(
+                    49.0 * nf_focal_length() as f32,
+                    0.,
+                    49.0 * nf_focal_length() as f32,
+                    49.,
+                    49.,
+                ),
+                camera_model_wf: RosOpenCvIntrinsics::from_params(
+                    49.0 * wf_focal_length() as f32,
+                    0.,
+                    49.0 * wf_focal_length() as f32,
+                    49.,
+                    49.,
+                ),
+                stereo_iso: nalgebra::Isometry3::identity(),
+                accel_odr: 100,
+                euler_angles_odr: 100,
+                uuid: [42, 69, 3, 7, 9, 13],
+            },
         }
     }
 }
