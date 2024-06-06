@@ -2,7 +2,7 @@ use std::sync::Arc;
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
-use std::time::Duration;
+use std::time::{Duration, UNIX_EPOCH};
 use arrayvec::ArrayVec;
 use iui::concurrent::Context;
 use leptos_reactive::{RwSignal, SignalGetUntracked};
@@ -102,7 +102,7 @@ pub struct MotRunner {
     pub record_impact: bool,
     pub record_packets: bool,
     pub datapoints: Arc<Mutex<Vec<crate::TestFrame>>>,
-    pub packets: Arc<Mutex<Vec<ats_usb::packet::PacketData>>>,
+    pub packets: Arc<Mutex<Vec<(u128, ats_usb::packet::PacketData)>>>,
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
     pub nf_offset: Vector2<f64>,
@@ -302,7 +302,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
 
             if runner.record_packets {
-                runner.packets.lock().push(ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report));
+                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report)));
             }
         }
     }
@@ -419,7 +419,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             }
 
             if runner.record_packets {
-                runner.packets.lock().push(ats_usb::packet::PacketData::AccelReport(accel));
+                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::AccelReport(accel)));
             }
         }
     }

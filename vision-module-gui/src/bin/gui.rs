@@ -187,7 +187,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => panic!("Unrecognized arguments"),
     }
     let datapoints: Arc<Mutex<Vec<TestFrame>>> = Arc::new(Mutex::new(Vec::new()));
-    let packets: Arc<Mutex<Vec<ats_usb::packet::PacketData>>> = Arc::new(Mutex::new(Vec::new()));
+    let packets = Arc::new(Mutex::new(Vec::new()));
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
@@ -613,11 +613,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let mut file = File::create(path_buf).expect("Could not create file");
                 let mut bytes = Vec::new();
-                for packet_data in packets.iter() {
+                for (timestamp, packet_data) in packets.iter() {
                     let packet = ats_usb::packet::Packet {
                         data: packet_data.clone(),
                         id: 0,
                     };
+                    bytes.extend_from_slice(&timestamp.to_le_bytes());
                     packet.serialize(&mut bytes);
                 }
 
