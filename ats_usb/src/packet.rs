@@ -353,7 +353,7 @@ impl Packet {
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => x.serialize(buf),
-            PacketData::EulerAnglesReport(x) => unimplemented!(),
+            PacketData::EulerAnglesReport(x) => x.serialize(buf),
             PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::FlashSettings => (),
@@ -656,6 +656,14 @@ impl EulerAnglesReport {
         let rotation = Rotation3::from_euler_angles(euler_x as f64, euler_y as f64, euler_z as f64);
         *bytes = &bytes[12..];
         Ok(Self { rotation })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        let euler = self.rotation.euler_angles();
+        for e in [euler.0, euler.1, euler.2].iter() {
+            let e = *e as f32;
+            buf.extend_from_slice(&e.to_le_bytes());
+        }
     }
 }
 

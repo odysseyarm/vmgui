@@ -428,14 +428,15 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 async fn euler_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut euler_stream = device.stream_euler_angles().await.unwrap();
-    let time = Instant::now();
-    let mut euler_samples = 0;
     while runner.lock().device.is_some() {
         if let Some(euler_angles) = euler_stream.next().await {
-            euler_samples += 1;
             // println!("Euler hz: {}", euler_samples as f32 / time.elapsed().as_secs_f32());
             let mut runner = runner.lock();
             runner.state.orientation = euler_angles.rotation;
+
+            if runner.record_packets {
+                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::EulerAnglesReport(euler_angles)));
+            }
         }
     }
 }
