@@ -14,6 +14,7 @@ pub mod run_canvas;
 pub mod test_canvas;
 pub mod custom_shapes;
 pub mod tracking_canvas_helpers;
+pub mod plots_window;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.

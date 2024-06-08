@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, marker_config_window, TestFrame};
+use vision_module_gui::{config_window, marker_config_window, plots_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -220,6 +220,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         mot_runner.c(),
         tokio_handle,
     );
+    let mut plots_window = plots_window::plots_window(&ui);
     // let mut marker_config_win = marker_config_window::marker_config_window(
     //     &ui,
     //     marker_offset_calibrating,
@@ -254,6 +255,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let vert_box = VerticalBox(padded: true) {
             Compact: let grid = LayoutGrid(padded: true) {
                 (0, 0)(1, 1) Vertical (Fill, Fill) : let config_button = Button("Config")
+                (1, 0)(1, 1) Vertical (Fill, Fill) : let plots_button = Button("Plots")
                 // (1, 0)(1, 1) Vertical (Fill, Fill) : let marker_config_button = Button("Marker Config")
                 (2, 0)(1, 1) Vertical (Fill, Fill) : let track_raw_button = Button(move || {
                     if !tracking_raw.get() { "Start Raw Tracking" } else { "Stop Raw Tracking" }
@@ -574,6 +576,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let ui = ui.c();
         move |_| {
             config_win.show(&ui);
+        }
+    });
+
+    plots_button.on_clicked(&ui, {
+        let ui = ui.c();
+        move |_| {
+            plots_window.show(&ui);
         }
     });
 
