@@ -409,6 +409,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
 
             runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+            ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
             let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
 

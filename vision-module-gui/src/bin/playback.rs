@@ -199,7 +199,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
             if elapsed > 0 {
-                std::thread::sleep(Duration::from_millis(elapsed as u64));
+                std::thread::sleep(Duration::from_millis(elapsed as u64*2));
             }
         }
 
