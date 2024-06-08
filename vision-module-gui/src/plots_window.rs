@@ -58,24 +58,31 @@ impl AreaHandler for MainCanvas {
         )
         .into_drawing_area();
         root.fill(&WHITE).unwrap();
-        let subplots = root.split_evenly((2, 2));
+        let subplots = root.split_evenly((3, 2));
 
         gyro_chart(&subplots[0]);
         accel_chart(&subplots[1]);
         pnp_position_chart(&subplots[2]);
         pnp_orientation_chart(&subplots[3]);
+        accel_bias_chart(&subplots[4]);
+        rot_bias_chart(&subplots[5]);
     }
 }
 
 fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::imu_data();
     let mut chart = ChartBuilder::on(area)
-        .caption("Angular Velocity", ("sans-serif", 12))
+        .caption("IMU Angular Velocity", ("sans-serif", 12))
         .margin(20)
         .set_left_and_bottom_label_area_size(30)
         .build_cartesian_2d(0..series.size, -20.0..20.0)
         .unwrap();
-    chart.configure_mesh().draw().unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
 
     let data = series.values.lock().unwrap();
 
@@ -90,14 +97,15 @@ fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
 fn accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::imu_data();
     let mut chart = ChartBuilder::on(area)
-        .caption("Acceleration", ("sans-serif", 12))
+        .caption("IMU Acceleration", ("sans-serif", 12))
         .margin(20)
         .set_left_and_bottom_label_area_size(30)
         .build_cartesian_2d(0..series.size, -30.0..30.0)
         .unwrap();
     chart
         .configure_mesh()
-        .set_tick_mark_size(LabelAreaPosition::Left, 5)
+        .disable_x_mesh()
+        .max_light_lines(1)
         .draw()
         .unwrap();
 
@@ -119,7 +127,12 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         .set_left_and_bottom_label_area_size(30)
         .build_cartesian_2d(0..series.size, -10.0..10.0)
         .unwrap();
-    chart.configure_mesh().draw().unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
 
     let data = series.values.lock().unwrap();
 
@@ -139,7 +152,12 @@ fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         .set_left_and_bottom_label_area_size(30)
         .build_cartesian_2d(0..series.size, -3.15..3.15)
         .unwrap();
-    chart.configure_mesh().draw().unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
 
     let data = series.values.lock().unwrap();
 
@@ -155,6 +173,56 @@ fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         .iter()
         .map(|p| p.1.rotation.euler_angles().2)
         .enumerate();
+    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
+    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
+    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
+fn rot_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    let series = ats_cv::telemetry::eskf_rot_bias();
+    let mut chart = ChartBuilder::on(area)
+        .caption("ESKF Rot. Bias", ("sans-serif", 12))
+        .margin(20)
+        .set_left_and_bottom_label_area_size(30)
+        .build_cartesian_2d(0..series.size, -1.0f32..1.0f32)
+        .unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
+
+    let data = series.values.lock().unwrap();
+
+    let x = data.iter().map(|p| p.1.x).enumerate();
+    let y = data.iter().map(|p| p.1.y).enumerate();
+    let z = data.iter().map(|p| p.1.z).enumerate();
+    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
+    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
+    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
+fn accel_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    let series = ats_cv::telemetry::eskf_accel_bias();
+    let mut chart = ChartBuilder::on(area)
+        .caption("ESKF Accel. Bias", ("sans-serif", 12))
+        .margin(20)
+        .set_left_and_bottom_label_area_size(30)
+        .build_cartesian_2d(0..series.size, -5.0f32..5.0f32)
+        .unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
+
+    let data = series.values.lock().unwrap();
+
+    let x = data.iter().map(|p| p.1.x).enumerate();
+    let y = data.iter().map(|p| p.1.y).enumerate();
+    let z = data.iter().map(|p| p.1.z).enumerate();
     chart.draw_series(LineSeries::new(x, &RED)).unwrap();
     chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
     chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
