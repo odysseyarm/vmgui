@@ -49,10 +49,11 @@ impl AreaHandler for MainCanvas {
         )
         .into_drawing_area();
         root.fill(&WHITE);
-        let subplots = root.split_evenly((1, 2));
+        let subplots = root.split_evenly((2, 2));
 
         gyro_chart(&subplots[0]);
         accel_chart(&subplots[1]);
+        pnp_position_chart(&subplots[2]);
     }
 }
 
@@ -89,6 +90,25 @@ fn accel_chart<DB: DrawingBackend>(
     let x = data.iter().map(|p| p.1.0.x).enumerate();
     let y = data.iter().map(|p| p.1.0.y).enumerate();
     let z = data.iter().map(|p| p.1.0.z).enumerate();
+    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
+    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
+    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
+fn pnp_position_chart<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+) {
+    let series = ats_cv::telemetry::pnp_solutions();
+    let mut chart = ChartBuilder::on(area)
+        .caption("PnP Position", ("sans-serif", 12))
+        .build_cartesian_2d(0..series.size, -30.0..30.0)
+        .unwrap();
+
+    let data = series.values.lock().unwrap();
+
+    let x = data.iter().map(|p| p.1.translation.x).enumerate();
+    let y = data.iter().map(|p| p.1.translation.y).enumerate();
+    let z = data.iter().map(|p| p.1.translation.z).enumerate();
     chart.draw_series(LineSeries::new(x, &RED)).unwrap();
     chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
     chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
