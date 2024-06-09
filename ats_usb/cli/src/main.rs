@@ -2,11 +2,26 @@ use std::time::Instant;
 
 use nalgebra::Vector3;
 use futures::StreamExt;
+use serialport::SerialPortType;
 
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let path = &args[1];
+    let path = match args.get(1) {
+        Some(p) => p.clone(),
+        None => {
+            let mut ports = get_serialport_devices();
+            if ports.len() == 0 {
+                eprintln!("No devices connected");
+                return;
+            } else if ports.len() == 1 {
+                ports.remove(0)
+            } else {
+                eprintln!("Multiple devices detected, please specify one: {:?}", ports);
+                return;
+            }
+        }
+    };
     let device = ats_usb::device::UsbDevice::connect_serial(path, false)
         .await
         .unwrap();
@@ -59,4 +74,36 @@ async fn main() {
     );
     println!("Mean gyro: {:.8?}", gyro_sum / count);
     println!("Samples: {count}");
+}
+
+fn get_serialport_devices() -> Vec<String> {
+    let ports = serialport::available_ports();
+    match ports {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to list serial ports: {}", e);
+            return vec![];
+        }
+    }.into_iter().filter(|port| {
+        match &port.port_type {
+            SerialPortType::UsbPort(port_info) => {
+                if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210 {
+                    if let Some(i) = port_info.interface {
+                        // interface 0: cdc acm module
+                        // interface 1: cdc acm module functional subordinate interface
+                        // interface 2: cdc acm dfu
+                        // interface 3: cdc acm dfu subordinate interface
+                        i == 0
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            },
+            _ => false,
+        }
+    })
+    .map(|port| port.port_name)
+        .collect()
 }
