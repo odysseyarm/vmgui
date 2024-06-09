@@ -75,7 +75,7 @@ fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         .caption("IMU Angular Velocity", ("sans-serif", 12))
         .margin(20)
         .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -20.0..20.0)
+        .build_cartesian_2d(0..series.size, -35.0..35.0)
         .unwrap();
     chart
         .configure_mesh()
