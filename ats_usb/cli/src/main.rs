@@ -36,6 +36,7 @@ async fn main() {
         _ = async {
             let mut prev = None;
             let mut odr_average = None;
+            let mut prev_timestamp = None;
             loop {
                 let v = s.next().await.unwrap();
                 let dt = match prev {
@@ -57,8 +58,14 @@ async fn main() {
                         }
                     }
                 }
+                let elapsed = if let Some(prev_timestamp) = prev_timestamp {
+                    v.timestamp - prev_timestamp
+                } else {
+                    0
+                };
+                prev_timestamp = Some(v.timestamp);
 
-                println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}, ODR = {:7.3?}", v.accel, v.accel.magnitude(), v.gyro, odr_average);
+                println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}, ts = {:9}, elapsed = {:7}, ODR = {:7.3?}", v.accel, v.accel.magnitude(), v.gyro, v.timestamp, elapsed, odr_average);
                 count += 1.0;
                 accel_sum += v.accel;
                 gyro_sum += v.gyro;
