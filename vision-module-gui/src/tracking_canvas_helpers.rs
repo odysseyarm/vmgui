@@ -341,7 +341,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     let fy = config.camera_model_nf.p.m22 as f64;
     let cx = config.camera_model_nf.p.m13 as f64;
     let cy = config.camera_model_nf.p.m23 as f64;
-    for p in marker_pattern::<f64>() {
+    for p in marker_pattern::<f64>() { // eskf reprojections
         let position = state.fv_state.filter.position;
         let orientation = state.fv_state.filter.orientation;
         let reproj_tf = Isometry3::from_parts(position.into(), orientation);
@@ -356,6 +356,23 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         draw_crosshair_rotated(&ctx, &fv_reproj_path, p.x, p.y, 20.);
         fv_reproj_path.end(&ctx);
         ctx.stroke(&fv_reproj_path, &solid_brush(0.0, 0.69, 0.42), &thick3);
+    }
+    let pnp_iso = ats_cv::telemetry::pnp_solutions().get_last();
+    if let Some(pnp_iso) = pnp_iso {
+        for p in marker_pattern::<f64>() { // pnp reprojections
+            let reproj_tf = pnp_iso.inverse();
+            let pnp_reproj_path = Path::new(ctx, FillMode::Winding);
+            let p = reproj_tf.cast().inverse_transform_point(&p.into());
+            let p = p / p.z;
+            // todo don't use hardcoded 4095x4095 res assumption
+            let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
+            let p = p / 4095. - Vector2::new(0.5, 0.5);
+            let p = gravity_rot * p;
+            let p = draw_tf * p;
+            draw_crosshair_rotated(&ctx, &pnp_reproj_path, p.x, p.y, 20.);
+            pnp_reproj_path.end(&ctx);
+            ctx.stroke(&pnp_reproj_path, &solid_brush(0.3, 0.3, 0.3), &thick3);
+        }
     }
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
