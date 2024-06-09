@@ -1,4 +1,4 @@
-use std::{f64::consts::{FRAC_1_SQRT_2, PI}, io::{Read, Seek, Write}, net::{TcpListener, TcpStream}, ops::{Bound, RangeBounds}, sync::{Arc, Mutex}, time::Duration};
+use std::{io::{Read, Seek, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, time::Duration};
 
 use iui::{
     controls::{
@@ -9,7 +9,7 @@ use iui::{
 };
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketData, ReadRegisterResponse}};
 
 // Positive x is right
 // Positive y is up
@@ -48,7 +48,7 @@ fn main() {
 
             if let Some(path) = main_win.open_file(&ui) {
                 let mut file = std::fs::File::open(path).unwrap();
-                let mut buf = [0; 172];
+                let mut buf = [0; 170];
                 file.read_exact(&mut buf).unwrap();
                 let general_config = GeneralConfig::parse(&mut &buf[..], ats_usb::packet::PacketType::ReadConfigResponse).unwrap();
                 state.general_config = general_config;
@@ -159,14 +159,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 if s.mask & 0b0010 != 0 {
                     state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
                 }
-                if s.mask & 0b1000 != 0 {
-                    state.stream_euler = if s.active { Some(pkt.id) } else { None };
-                }
                 None
             }
             PacketData::FlashSettings => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
-            PacketData::EulerAnglesReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
@@ -212,9 +208,6 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::CombinedMarkersReport(_) => {
                 state.stream_combined_markers
             }
-            PacketData::EulerAnglesReport(_) => {
-                state.stream_euler
-            }
             _ => None,
         } {
             pkt.id = id;
@@ -232,7 +225,6 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
 struct State {
     stream_accel: Option<u8>,
     stream_combined_markers: Option<u8>,
-    stream_euler: Option<u8>,
     packets: Arc<Mutex<Vec<(i128, Packet)>>>,
     general_config: GeneralConfig,
 }
@@ -242,7 +234,6 @@ impl State {
         Self {
             stream_accel: None,
             stream_combined_markers: None,
-            stream_euler: None,
             packets: Arc::new(Mutex::new(vec![])),
             general_config: GeneralConfig {
                 impact_threshold: 0,
@@ -262,7 +253,6 @@ impl State {
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
                 accel_odr: 100,
-                euler_angles_odr: 100,
                 uuid: [42, 69, 3, 7, 9, 13],
             },
         }
