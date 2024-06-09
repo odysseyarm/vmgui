@@ -407,9 +407,6 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             // print rotation in degrees
             // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
 
-            let _ = runner.state.madgwick.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
-            runner.state.orientation = runner.state.madgwick.quat.to_rotation_matrix();
-
             if let Some(_prev_timestamp) = prev_timestamp {
                 if accel.timestamp < _prev_timestamp {
                     prev_timestamp = None;
@@ -418,12 +415,18 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
             if let Some(prev_timestamp) = prev_timestamp {
                 let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
-                println!("elapsed: {}", elapsed);
+                // println!("elapsed: {}", elapsed);
                 runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed));
+
+                let sample_period = runner.state.madgwick.sample_period_mut();
+                *sample_period = elapsed as f32/1_000_000.;
             } else {
                 runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
             }
             prev_timestamp = Some(accel.timestamp);
+
+            let _ = runner.state.madgwick.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+            runner.state.orientation = runner.state.madgwick.quat.to_rotation_matrix();
 
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
