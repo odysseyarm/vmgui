@@ -1414,6 +1414,7 @@ dependencies = [
  "ats_usb",
  "futures",
  "nalgebra 0.32.5",
+ "serialport",
  "tokio",
 ]
 
