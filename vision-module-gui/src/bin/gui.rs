@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, marker_config_window, plots_window, TestFrame};
+use vision_module_gui::{config_window, plots_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -444,6 +444,15 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             view.lock().device = device_rs.get();
+        }
+    });
+
+    create_effect({
+        let view = mot_runner.c();
+        move |_| {
+            let view = view.c();
+            let madgwick = &mut view.lock().state.madgwick;
+            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_odr_memo.get() as f32, 0.1, madgwick.quat);
         }
     });
 

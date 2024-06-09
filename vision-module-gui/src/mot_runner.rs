@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use ahrs::Ahrs;
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
@@ -112,7 +113,6 @@ pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     tokio::join!(
         combined_markers_loop(runner.clone()),
         accel_stream(runner.clone()),
-        euler_stream(runner.clone()),
         impact_loop(runner.clone()),
     );
 }
@@ -177,9 +177,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
     while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
-            let CombinedMarkersReport { timestamp, nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
-            debug!("timestamp: {}", timestamp);
-
+            let CombinedMarkersReport { nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
             let mut runner = runner.lock();
             let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_radii);
             let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_radii);
@@ -228,7 +226,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
             let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
 
-            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec);
+            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec.cast());
 
             let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
 
@@ -246,7 +244,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.wf_aimpoint = x;
             }
 
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec);
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast());
             // let nf_markers = ats_cv::foveated::identify_markers2(&nf_normalized, gravity_vec);
             // let nf_markers: ArrayVec<_, 16> = nf_markers.into_iter().flatten().collect();
             let wf_marker_ix: ArrayVec<_, 16> = match wf_markers {
@@ -308,7 +306,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f64>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>) -> Option<Point2<f64>> {
+fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f32>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>) -> Option<Point2<f64>> {
     let fx = intrinsics.p.m11 * (4095./98.);
     let fy = intrinsics.p.m22 * (4095./98.);
 
@@ -408,6 +406,9 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             // print rotation in degrees
             // println!("Rotation: {}", accel.gyro.xzy().map(|x| x.to_degrees()));
 
+            let _ = runner.state.madgwick.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+            runner.state.orientation = runner.state.madgwick.quat.to_rotation_matrix();
+
             runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
@@ -421,22 +422,6 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
             if runner.record_packets {
                 runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::AccelReport(accel)));
-            }
-        }
-    }
-}
-
-async fn euler_stream(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().device.c().unwrap();
-    let mut euler_stream = device.stream_euler_angles().await.unwrap();
-    while runner.lock().device.is_some() {
-        if let Some(euler_angles) = euler_stream.next().await {
-            // println!("Euler hz: {}", euler_samples as f32 / time.elapsed().as_secs_f32());
-            let mut runner = runner.lock();
-            runner.state.orientation = euler_angles.rotation;
-
-            if runner.record_packets {
-                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::EulerAnglesReport(euler_angles)));
             }
         }
     }

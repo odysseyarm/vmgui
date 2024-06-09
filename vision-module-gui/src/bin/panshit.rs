@@ -53,12 +53,6 @@ fn main() {
             Ok(pkt) => {
                 println!("Received {:?} from {addr}", pkt);
                 match pkt.data {
-                    PacketData::EulerAnglesReport(_) => {
-                        let elapsed = start_time.elapsed().as_secs_f64();
-                        *total_accel_samples += 1;
-                        let accel_hz_avg = 1. / (elapsed / *total_accel_samples as f64);
-                        println!("Accel: {:?} Hz", accel_hz_avg);
-                    }
                     PacketData::CombinedMarkersReport(_) => {
                         let elapsed = start_time.elapsed().as_secs_f64();
                         *total_combined_marker_samples += 1;

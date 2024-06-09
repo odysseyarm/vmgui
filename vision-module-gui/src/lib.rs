@@ -1,5 +1,4 @@
 use arrayvec::ArrayVec;
-use eskf;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
 use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
 use serde::Serialize;
@@ -49,7 +48,8 @@ pub struct MotState {
     pub fv_aimpoint_pva2d: Pva2d<f64>,
 
     pub screen_id: u8,
-    pub orientation: Rotation3<f64>,
+    pub orientation: Rotation3<f32>,
+    pub madgwick: ahrs::Madgwick<f32>,
 
     pub rotation_mat: Matrix3<f64>,
     pub translation_mat: Matrix3x1<f64>,
@@ -70,6 +70,7 @@ impl Default for MotState {
             wf_data: None,
             screen_id: 0,
             orientation: Rotation3::identity(),
+            madgwick: ahrs::Madgwick::new(1./100., 0.1),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
             nf_points: Default::default(),

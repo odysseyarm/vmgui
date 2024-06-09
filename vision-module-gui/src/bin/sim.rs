@@ -122,7 +122,6 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             }
             PacketData::FlashSettings => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
-            PacketData::EulerAnglesReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
@@ -144,7 +143,6 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
                 accel_odr: 100,
-                euler_angles_odr: 100,
                 uuid: [42, 69, 3, 7, 9, 13],
             })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
@@ -234,7 +232,6 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
-                    timestamp: 0,
                     nf_points: nf_positions,
                     wf_points: wf_positions,
                     nf_radii,
