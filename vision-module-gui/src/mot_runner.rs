@@ -396,6 +396,7 @@ fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrins
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut accel_stream = device.stream_accel().await.unwrap();
+    let mut prev_timestamp = None;
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
@@ -409,7 +410,21 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             let _ = runner.state.madgwick.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
             runner.state.orientation = runner.state.madgwick.quat.to_rotation_matrix();
 
-            runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+            if let Some(_prev_timestamp) = prev_timestamp {
+                if accel.timestamp < _prev_timestamp {
+                    prev_timestamp = None;
+                }
+            }
+
+            if let Some(prev_timestamp) = prev_timestamp {
+                let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
+                println!("elapsed: {}", elapsed);
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed));
+            } else {
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+            }
+            prev_timestamp = Some(accel.timestamp);
+
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
             let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
