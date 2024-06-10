@@ -53,16 +53,18 @@ impl<'a> DrawingBackend for PlottersBackend<'a> {
     fn ensure_prepared(&mut self) -> Result<(), DrawingErrorKind<Self::ErrorType>> {
         if !self.init_flag {
             let AreaDrawParams {
-                clip_x: x,
-                clip_y: y,
-                clip_width: w,
-                clip_height: h,
+                area_width: w,
+                area_height: h,
+                // clip_x: x,
+                // clip_y: y,
+                // clip_width: w,
+                // clip_height: h,
                 ..
             } = *self.draw_params;
 
             let mut transform = Transform::identity();
             transform.scale(0.0, 0.0, w / self.width as f64, h / self.height as f64);
-            transform.translate(x, y);
+            // transform.translate(x, y);
             self.context.transform(&transform);
 
             self.init_flag = true;
