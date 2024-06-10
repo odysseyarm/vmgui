@@ -107,7 +107,7 @@ impl AttributedString {
         let default_font_family = CString::new(&*default_font.family).unwrap();
         let mut default_font = ui_sys::uiFontDescriptor {
             Family: default_font_family.as_ptr() as *mut _,
-            Size: default_font.size,
+            Size: default_font.size.max(1.),
             Weight: default_font.weight,
             Italic: default_font.slant.as_ui_text_italic(),
             Stretch: default_font.stretch.as_ui_text_stretch(),
