@@ -410,6 +410,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             if let Some(_prev_timestamp) = prev_timestamp {
                 if accel.timestamp < _prev_timestamp {
                     prev_timestamp = None;
+                    continue;
                 }
             }
 
