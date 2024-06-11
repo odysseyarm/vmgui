@@ -247,6 +247,7 @@ fn main() {
             {
                 src_add!(src_path(filename));
             }
+            link("X11", false);
         } else if apple {
             base_config.include(src_path("/darwin"));
 
