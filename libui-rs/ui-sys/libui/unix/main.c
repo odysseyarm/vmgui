@@ -1,5 +1,6 @@
 // 6 april 2015
 #include "uipriv_unix.h"
+#include "X11/Xlib.h"
 
 uiInitOptions uiprivOptions;
 
@@ -7,6 +8,8 @@ static GHashTable *timers;
 
 const char *uiInit(uiInitOptions *o)
 {
+	XInitThreads();
+
 	GError *err = NULL;
 	const char *msg;
 
