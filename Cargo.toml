@@ -4,6 +4,8 @@ resolver = "2"
 members = [
     "libui-rs/iui",
     "libui-rs/ui-sys",
+    "ats_playback",
+    "ats_playback_pyo3",
     "ats_usb",
     "ats_usb/cli",
     "vision-module-gui",

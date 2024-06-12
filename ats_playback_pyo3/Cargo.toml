@@ -1,0 +1,18 @@
+[package]
+name = "ats_playback_pyo3"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ats_playback"
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ats_playback = { path = "../ats_playback" }
+ats_usb = { path = "../ats_usb", features = ["pyo3"] }
+
+[dependencies.pyo3]
+git = "https://github.com/PyO3/pyo3.git"
+features = ["extension-module"]

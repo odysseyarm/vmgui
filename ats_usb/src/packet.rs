@@ -4,18 +4,20 @@ use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibration
 use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
 pub struct Packet {
     pub data: PacketData,
     pub id: u8,
 }
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
 pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
     WriteConfig(GeneralWriteConfig),
-    ReadConfig,
+    ReadConfig(),
     ReadConfigResponse(GeneralConfig),
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
@@ -23,9 +25,10 @@ pub enum PacketData {
     AccelReport(AccelReport),
     ImpactReport(ImpactReport),
     StreamUpdate(StreamUpdate),
-    FlashSettings,
+    FlashSettings(),
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 pub enum StreamChoice {
     Object,
     CombinedMarkers,
@@ -33,6 +36,7 @@ pub enum StreamChoice {
     Impact,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct Register {
     pub port: Port,
@@ -40,6 +44,7 @@ pub struct Register {
     pub address: u8,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct WriteRegister {
     pub port: Port,
@@ -48,6 +53,7 @@ pub struct WriteRegister {
     pub data: u8,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct ReadRegisterResponse {
     pub bank: u8,
@@ -82,6 +88,7 @@ impl MarkerPattern {
     }
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
 pub struct GeneralConfig {
     pub impact_threshold: u8,
@@ -92,6 +99,7 @@ pub struct GeneralConfig {
     pub uuid: [u8; 6],
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
 pub struct GeneralWriteConfig {
     pub impact_threshold: u8,
@@ -114,9 +122,11 @@ impl Default for GeneralConfig {
     }
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectReportRequest {}
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct MotData {
     pub area: u16,
@@ -135,12 +145,14 @@ pub struct MotData {
     pub vy: u8,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectReport {
     pub mot_data_nf: [MotData; 16],
     pub mot_data_wf: [MotData; 16],
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CombinedMarkersReport {
     pub nf_points: [Point2<u16>; 16],
@@ -149,6 +161,7 @@ pub struct CombinedMarkersReport {
     pub wf_radii: [u8; 16],
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
     pub accel: Vector3<f32>,
@@ -156,11 +169,13 @@ pub struct AccelReport {
     pub timestamp: u32,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ImpactReport {
     pub timestamp: u32,
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct StreamUpdate {
     pub mask: u8,
@@ -190,6 +205,7 @@ impl Display for Error {
 
 impl StdError for Error {}
 
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[repr(u8)]
 #[derive(Clone, Copy, Debug)]
 pub enum Port {
@@ -256,7 +272,7 @@ impl Packet {
             PacketData::ReadRegister(_) => PacketType::ReadRegister,
             PacketData::ReadRegisterResponse(_) => PacketType::ReadRegisterResponse,
             PacketData::WriteConfig(_) => PacketType::WriteConfig,
-            PacketData::ReadConfig => PacketType::ReadConfig,
+            PacketData::ReadConfig() => PacketType::ReadConfig,
             PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse,
             PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
             PacketData::ObjectReport(_) => PacketType::ObjectReport,
@@ -264,7 +280,7 @@ impl Packet {
             PacketData::AccelReport(_) => PacketType::AccelReport,
             PacketData::ImpactReport(_) => PacketType::ImpactReport,
             PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
-            PacketData::FlashSettings => PacketType::FlashSettings,
+            PacketData::FlashSettings() => PacketType::FlashSettings,
         }
     }
 
@@ -286,7 +302,7 @@ impl Packet {
             PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes, ty)?),
             PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
             PacketType::WriteConfig => unimplemented!(),
-            PacketType::ReadConfig => PacketData::ReadConfig,
+            PacketType::ReadConfig => PacketData::ReadConfig(),
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
@@ -294,7 +310,7 @@ impl Packet {
             PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
             PacketType::ImpactReport => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
             PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
-            PacketType::FlashSettings => PacketData::FlashSettings,
+            PacketType::FlashSettings => PacketData::FlashSettings(),
             p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
@@ -313,7 +329,7 @@ impl Packet {
             PacketData::ReadRegister(_) => calculate_length!(Register)+1,
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
             PacketData::WriteConfig(_) => 164,
-            PacketData::ReadConfig => 0,
+            PacketData::ReadConfig() => 0,
             PacketData::ReadConfigResponse(_) => 170,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
@@ -321,7 +337,7 @@ impl Packet {
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
-            PacketData::FlashSettings => 0,
+            PacketData::FlashSettings() => 0,
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
@@ -332,7 +348,7 @@ impl Packet {
             PacketData::ReadRegister(x) => x.serialize(buf),
             PacketData::ReadRegisterResponse(x) => x.serialize(buf),
             PacketData::WriteConfig(x) => x.serialize(buf),
-            PacketData::ReadConfig => (),
+            PacketData::ReadConfig() => (),
             PacketData::ReadConfigResponse(x) => x.serialize(buf),
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
@@ -340,7 +356,7 @@ impl Packet {
             PacketData::AccelReport(x) => x.serialize(buf),
             PacketData::ImpactReport(x) => unimplemented!(),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
-            PacketData::FlashSettings => (),
+            PacketData::FlashSettings() => (),
         }
     }
 }
