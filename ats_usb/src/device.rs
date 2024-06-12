@@ -408,7 +408,7 @@ impl UsbDevice {
 
     pub async fn read_config(&self) -> Result<GeneralConfig> {
         let r = self
-            .request(PacketData::ReadConfig)
+            .request(PacketData::ReadConfig())
             .await?
             .read_config_response()
             .with_context(|| "unexpected response")?;
@@ -477,7 +477,7 @@ impl UsbDevice {
     pub async fn flash_settings(&self) -> Result<()> {
         self.to_thread.send(Packet {
             id: 255,
-            data: PacketData::FlashSettings,
+            data: PacketData::FlashSettings(),
         }).await?;
         Ok(())
     }

@@ -1,4 +1,4 @@
-use std::{io::{Read, Seek, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, time::Duration};
+use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, time::Duration};
 
 use iui::{
     controls::{
@@ -47,46 +47,10 @@ fn main() {
             state.packets.lock().unwrap().clear();
 
             if let Some(path) = main_win.open_file(&ui) {
-                let mut file = std::fs::File::open(path).unwrap();
-                let mut buf = [0; 170];
-                file.read_exact(&mut buf).unwrap();
-                let general_config = GeneralConfig::parse(&mut &buf[..], ats_usb::packet::PacketType::ReadConfigResponse).unwrap();
+                let (general_config, packets) = ats_playback::read_file(&path).unwrap();
                 state.general_config = general_config;
-                loop {
-                    let mut buf = [0; 16];
-                    match file.read_exact(&mut buf) {
-                        Ok(()) => {
-                            let timestamp = i128::from_le_bytes(buf);
-                            let mut chunk = Vec::new();
-                            let mut buf = [0; 1024];
-                            let read = file.read(&mut buf).unwrap();
-                            chunk.extend_from_slice(&buf[..read]);
-
-                            let chunk_slice = &mut &chunk[..];
-                            let prev_chunk_len = chunk_slice.len();
-                            match Packet::parse(chunk_slice) {
-                                Ok(pkt) => { state.packets.lock().unwrap().push((timestamp, pkt)) },
-                                Err(e) => {
-                                    if let ats_usb::packet::Error::UnexpectedEof { packet_type: _ } = e {
-                                        panic!("Unexpected EOF");
-                                    } else {
-                                        panic!("Error parsing packet: {:?}", e);
-                                    }
-                                }
-                            };
-
-                            let new_chunk_len = chunk_slice.len();
-                            let seek_back_amount = read - (prev_chunk_len - new_chunk_len);
-                            file.seek(std::io::SeekFrom::Current(-(seek_back_amount as i64))).unwrap();
-                        } Err(e) => {
-                            if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                                break;
-                            } else {
-                                panic!("Error reading file: {:?}", e);
-                            }
-                        }
-                    }
-                }
+                state.packets.lock().unwrap().clear();
+                state.packets.lock().unwrap().extend(packets);
             }
         }
     });

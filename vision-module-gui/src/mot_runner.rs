@@ -124,7 +124,6 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
         if runner.lock().device.is_none() {
             return;
         }
-        // if let Ok((nf_data, wf_data)) = device.get_frame().await {
         if let Some(mot_data) = mot_data_stream.next().await {
             let nf_data = mot_data.mot_data_nf;
             let wf_data = mot_data.mot_data_wf;
@@ -136,8 +135,11 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             let state = &mut runner.state;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
+
+            if runner.record_packets {
+                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::ObjectReport(mot_data)));
+            }
         }
-        sleep(Duration::from_millis(5)).await;
     }
 }
 
