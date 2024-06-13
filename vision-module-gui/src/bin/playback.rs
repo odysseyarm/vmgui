@@ -27,8 +27,8 @@ fn main() {
     let mut main_win = Window::new(
         &ui,
         "Recording Playback",
-        640,
-        480,
+        200,
+        200,
         WindowType::NoMenubar,
     );
     let state = Arc::new(Mutex::new(State::new()));
