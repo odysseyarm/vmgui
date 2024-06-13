@@ -123,14 +123,17 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 if s.mask & 0b0010 != 0 {
                     state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
                 }
+                if s.mask & 0b0001 != 0 {
+                    state.stream_object_report = if s.active { Some(pkt.id) } else { None };
+                }
                 None
             }
-            PacketData::FlashSettings => None,
+            PacketData::FlashSettings() => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(state.general_config.clone())),
+            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(state.general_config.clone())),
             PacketData::ReadConfigResponse(_) => unreachable!(),
         };
 
@@ -172,6 +175,9 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::CombinedMarkersReport(_) => {
                 state.stream_combined_markers
             }
+            PacketData::ObjectReport(_) => {
+                state.stream_object_report
+            }
             _ => None,
         } {
             pkt.id = id;
@@ -189,6 +195,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
 struct State {
     stream_accel: Option<u8>,
     stream_combined_markers: Option<u8>,
+    stream_object_report: Option<u8>,
     packets: Arc<Mutex<Vec<(i128, Packet)>>>,
     general_config: GeneralConfig,
 }
@@ -198,6 +205,7 @@ impl State {
         Self {
             stream_accel: None,
             stream_combined_markers: None,
+            stream_object_report: None,
             packets: Arc::new(Mutex::new(vec![])),
             general_config: GeneralConfig {
                 impact_threshold: 0,
