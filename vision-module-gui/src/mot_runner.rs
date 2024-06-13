@@ -179,10 +179,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
     while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
-            let CombinedMarkersReport { nf_points, wf_points, nf_radii, wf_radii } = combined_markers_report;
+            let CombinedMarkersReport { nf_points, wf_points, nf_screen_ids, wf_screen_ids } = combined_markers_report;
             let mut runner = runner.lock();
-            let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_radii);
-            let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_radii);
+            let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_screen_ids);
+            let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_screen_ids);
 
             // println!("nf: {} wf: {}", filtered_nf_point_tuples.len(), filtered_wf_point_tuples.len());
 
@@ -373,14 +373,15 @@ fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<
 
 fn filter_and_create_point_id_tuples(
     points: &[Point2<u16>],
-    radii: &[u8],
+    screen_ids: &[u8],
 ) -> Vec<(usize, Point2<f64>)> {
     points
         .iter()
-        .zip(radii.iter())
+        .zip(screen_ids.iter())
         .enumerate()
-        .filter_map(|(id, (pos, &r))| {
-            if r > 0 && (400..3696).contains(&pos.x) && (400..3696).contains(&pos.y) {
+        .filter_map(|(id, (pos, &screen_id))| {
+            // screen id of 7 means there is no marker
+            if screen_id < 7 && (400..3696).contains(&pos.x) && (400..3696).contains(&pos.y) {
                 Some((id, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
