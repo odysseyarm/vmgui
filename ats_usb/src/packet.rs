@@ -635,22 +635,25 @@ impl CombinedMarkersReport {
             buf.extend_from_slice(&[byte0 as u8, byte1 as u8, byte2 as u8]);
         }
 
-        for i in 0..32 {
-            let byte_index = i / 8;
-            let bit_index = i % 8;
-            let screen_id = if i < 16 {
-                self.nf_screen_ids[i]
-            } else {
-                self.wf_screen_ids[i - 16]
-            };
-            let mask = screen_id << bit_index;
-            if bit_index <= 5 {
+        buf.extend({
+            let mut buf = [0; 12];
+            for i in 0..32 {
+                let byte_index = (i * 3) / 8;
+                let bit_index = (i * 3) % 8;
+                let screen_id = if i < 16 {
+                    self.nf_screen_ids[i]
+                } else {
+                    self.wf_screen_ids[i - 16]
+                } & 0x07; // Mask to 3 bits
+        
+                let mask = screen_id << bit_index;
                 buf[byte_index] |= mask;
-            } else {
-                buf[byte_index] |= mask;
-                buf[byte_index + 1] |= mask >> (8 - bit_index);
+                if bit_index > 5 {
+                    buf[byte_index + 1] |= screen_id >> (8 - bit_index);
+                }
             }
-        }
+            buf
+        });
     }
 }
 
