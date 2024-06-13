@@ -157,8 +157,8 @@ pub struct ObjectReport {
 pub struct CombinedMarkersReport {
     pub nf_points: [Point2<u16>; 16],
     pub wf_points: [Point2<u16>; 16],
-    pub nf_radii: [u8; 16],
-    pub wf_radii: [u8; 16],
+    pub nf_screen_ids: [u8; 16],
+    pub wf_screen_ids: [u8; 16],
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
@@ -333,7 +333,7 @@ impl Packet {
             PacketData::ReadConfigResponse(_) => 170,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 514,
-            PacketData::CombinedMarkersReport(_) => 108,
+            PacketData::CombinedMarkersReport(_) => 104,
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
@@ -580,12 +580,12 @@ impl ObjectReport {
 impl CombinedMarkersReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        if bytes.len() < 112 {
+        if bytes.len() < 108 {
             return Err(E::UnexpectedEof { packet_type: Some(PacketType::CombinedMarkersReport) });
         }
 
-        let data = &mut &bytes[..112];
-        *bytes = &bytes[112..];
+        let data = &mut &bytes[..108];
+        *bytes = &bytes[108..];
 
         let mut positions = [Point2::new(0, 0); 16*2];
         for i in 0..positions.len() {
@@ -598,22 +598,32 @@ impl CombinedMarkersReport {
         let nf_positions = positions[..16].try_into().unwrap();
         let wf_positions = positions[16..].try_into().unwrap();
 
-        // lower nibble and upper nibble are both radiuses, so we need both as separate elements in the final array
-        let mut radii = [0; 32];
-        let mut i = 0;
-        for _ in 0..16 {
-            let r = data[0] & 0x0f;
-            radii[i] = r;
-            let r = data[0] >> 4;
-            radii[i+1] = r;
-            i += 2;
-            *data = &data[1..];
+        let mut screen_ids = [0; 32];
+
+        let mut bit_offset = 0;
+        for i in 0..32 {
+            let byte_index = bit_offset / 8;
+            let bit_index = bit_offset % 8;
+            
+            screen_ids[i] = if bit_index <= 5 {
+                // The bits are within the same byte
+                (data[byte_index] >> bit_index) & 0x7
+            } else {
+                // The bits span across two bytes
+                let first_part = data[byte_index] >> bit_index;
+                let second_part = data[byte_index + 1] << (8 - bit_index);
+                (first_part | second_part) & 0x7
+            };
+        
+            bit_offset += 3;
         }
 
-        let nf_radii = radii[..16].try_into().unwrap();
-        let wf_radii = radii[16..].try_into().unwrap();
+        *data = &data[12..];
 
-        Ok(Self { nf_points: nf_positions, wf_points: wf_positions, nf_radii, wf_radii })
+        let nf_screen_ids = screen_ids[..16].try_into().unwrap();
+        let wf_screen_ids = screen_ids[16..].try_into().unwrap();
+
+        Ok(Self { nf_points: nf_positions, wf_points: wf_positions, nf_screen_ids, wf_screen_ids })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -625,8 +635,21 @@ impl CombinedMarkersReport {
             buf.extend_from_slice(&[byte0 as u8, byte1 as u8, byte2 as u8]);
         }
 
-        for w in self.nf_radii.chunks(2).chain(self.wf_radii.chunks(2)) {
-            buf.push((w[0] & 0x0f) | (w[1] << 4));
+        for i in 0..32 {
+            let byte_index = i / 8;
+            let bit_index = i % 8;
+            let screen_id = if i < 16 {
+                self.nf_screen_ids[i]
+            } else {
+                self.wf_screen_ids[i - 16]
+            };
+            let mask = screen_id << bit_index;
+            if bit_index <= 5 {
+                buf[byte_index] |= mask;
+            } else {
+                buf[byte_index] |= mask;
+                buf[byte_index + 1] |= mask >> (8 - bit_index);
+            }
         }
     }
 }
