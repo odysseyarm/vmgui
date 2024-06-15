@@ -1,8 +1,12 @@
+use std::ops::Range;
+
+use ats_cv::telemetry::Series;
 use iui::{
     controls::{Area, AreaDrawParams, AreaHandler, Window, WindowType},
     draw::plotters::PlottersBackend,
     UI,
 };
+use nalgebra::Vector3;
 use plotters::{
     backend::DrawingBackend,
     chart::{ChartBuilder, LabelAreaPosition},
@@ -58,158 +62,145 @@ impl AreaHandler for MainCanvas {
         )
         .into_drawing_area();
         root.fill(&WHITE).unwrap();
-        let subplots = root.split_evenly((3, 2));
+        let subplots = root.split_evenly((5, 2));
 
         gyro_chart(&subplots[0]);
         accel_chart(&subplots[1]);
-        pnp_position_chart(&subplots[2]);
-        pnp_orientation_chart(&subplots[3]);
+        gravity_chart(&subplots[2]);
+        local_gravity_chart(&subplots[5]);
+        apparent_accel_chart(&subplots[3]);
         accel_bias_chart(&subplots[4]);
-        rot_bias_chart(&subplots[5]);
+        rot_bias_chart(&subplots[6]);
+        velocity_chart(&subplots[7]);
+        pnp_position_chart(&subplots[8]);
+        pnp_orientation_chart(&subplots[9]);
     }
 }
 
 fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::imu_data();
-    let mut chart = ChartBuilder::on(area)
-        .caption("IMU Angular Velocity", ("sans-serif", 12))
-        .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -35.0..35.0)
-        .unwrap();
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .max_light_lines(1)
-        .draw()
-        .unwrap();
-
-    let data = series.values.lock().unwrap();
-
-    let x = data.iter().map(|p| p.1 .1.x).enumerate();
-    let y = data.iter().map(|p| p.1 .1.y).enumerate();
-    let z = data.iter().map(|p| p.1 .1.z).enumerate();
-    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
-    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
-    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+    vec3_f64_chart(
+        area,
+        "IMU Angular Velocity",
+        series.values.lock().unwrap().iter().map(|p| p.1.1),
+        series.size,
+        -5.0..5.0,
+    );
 }
 
 fn accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::imu_data();
-    let mut chart = ChartBuilder::on(area)
-        .caption("IMU Acceleration", ("sans-serif", 12))
-        .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -30.0..30.0)
-        .unwrap();
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .max_light_lines(1)
-        .draw()
-        .unwrap();
-
-    let data = series.values.lock().unwrap();
-
-    let x = data.iter().map(|p| p.1 .0.x).enumerate();
-    let y = data.iter().map(|p| p.1 .0.y).enumerate();
-    let z = data.iter().map(|p| p.1 .0.z).enumerate();
-    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
-    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
-    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+    vec3_f64_chart(
+        area,
+        "IMU Acceleration",
+        series.values.lock().unwrap().iter().map(|p| p.1.0),
+        series.size,
+        -10.0..10.0,
+    );
 }
 
 fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::pnp_solutions();
-    let mut chart = ChartBuilder::on(area)
-        .caption("PnP Position", ("sans-serif", 12))
-        .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -10.0..10.0)
-        .unwrap();
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .max_light_lines(1)
-        .draw()
-        .unwrap();
-
-    let data = series.values.lock().unwrap();
-
-    let x = data.iter().map(|p| p.1.translation.x).enumerate();
-    let y = data.iter().map(|p| p.1.translation.y).enumerate();
-    let z = data.iter().map(|p| p.1.translation.z).enumerate();
-    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
-    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
-    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+    vec3_f64_chart(
+        area,
+        "PnP Position",
+        series.values.lock().unwrap().iter().map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords),
+        series.size,
+        -5.0..5.0,
+    );
 }
 
 fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::pnp_solutions();
-    let mut chart = ChartBuilder::on(area)
-        .caption("PnP Orientation", ("sans-serif", 12))
-        .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -3.15..3.15)
-        .unwrap();
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .max_light_lines(1)
-        .draw()
-        .unwrap();
-
-    let data = series.values.lock().unwrap();
-
-    let x = data
-        .iter()
-        .map(|p| p.1.rotation.euler_angles().0)
-        .enumerate();
-    let y = data
-        .iter()
-        .map(|p| p.1.rotation.euler_angles().1)
-        .enumerate();
-    let z = data
-        .iter()
-        .map(|p| p.1.rotation.euler_angles().2)
-        .enumerate();
-    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
-    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
-    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+    vec3_f64_chart(
+        area,
+        "PnP Orientation",
+        series.values.lock().unwrap().iter().map(|p| {
+            let (x, y, z) = p.1.rotation.inverse().euler_angles();
+            Vector3::new(x, y, z)
+        }),
+        series.size,
+        -3.15..3.15,
+    );
 }
 
 fn rot_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
-    let series = ats_cv::telemetry::eskf_rot_bias();
-    let mut chart = ChartBuilder::on(area)
-        .caption("ESKF Rot. Bias", ("sans-serif", 12))
-        .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -1.0f32..1.0f32)
-        .unwrap();
-    chart
-        .configure_mesh()
-        .disable_x_mesh()
-        .max_light_lines(1)
-        .draw()
-        .unwrap();
-
-    let data = series.values.lock().unwrap();
-
-    let x = data.iter().map(|p| p.1.x).enumerate();
-    let y = data.iter().map(|p| p.1.y).enumerate();
-    let z = data.iter().map(|p| p.1.z).enumerate();
-    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
-    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
-    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+    vec3_f32_chart(
+        area,
+        "ESKF Rot. Bias",
+        ats_cv::telemetry::eskf_rot_bias(),
+        -1.0..1.0,
+    );
 }
 
 fn accel_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
-    let series = ats_cv::telemetry::eskf_accel_bias();
+    vec3_f32_chart(
+        area,
+        "ESKF Accel. Bias",
+        ats_cv::telemetry::eskf_accel_bias(),
+        -5.0..5.0,
+    );
+}
+
+fn gravity_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Gravity",
+        ats_cv::telemetry::eskf_gravity(),
+        -10.0..10.0,
+    );
+}
+
+fn local_gravity_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Local Gravity",
+        ats_cv::telemetry::eskf_local_gravity(),
+        -10.0..10.0,
+    );
+}
+
+fn apparent_accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Apparent Accel.",
+        ats_cv::telemetry::eskf_apparent_accel(),
+        -10.0..10.0,
+    );
+}
+
+fn velocity_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Velocity",
+        ats_cv::telemetry::eskf_velocity(),
+        -1.0..1.0,
+    );
+}
+
+fn vec3_f32_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>, caption: &str, series: &Series<Vector3<f32>>, default_range: Range<f32>) {
+    let data = series.values.lock().unwrap();
+    let min = data
+        .iter()
+        .flat_map(|p| p.1.as_slice())
+        .copied()
+        .min_by(f32::total_cmp)
+        .unwrap_or(default_range.start)
+        .min(default_range.start);
+    let max = data
+        .iter().
+        flat_map(|p| p.1.as_slice())
+        .copied()
+        .max_by(f32::total_cmp)
+        .unwrap_or(default_range.end)
+        .max(default_range.end);
+
     let mut chart = ChartBuilder::on(area)
-        .caption("ESKF Accel. Bias", ("sans-serif", 12))
+        .caption(caption, ("sans-serif", 12))
         .margin(20)
-        .set_left_and_bottom_label_area_size(30)
-        .build_cartesian_2d(0..series.size, -5.0f32..5.0f32)
+        // .set_left_and_bottom_label_area_size(30)
+        .set_label_area_size(LabelAreaPosition::Left, 30)
+        .build_cartesian_2d(0..series.size, min..max)
         .unwrap();
     chart
         .configure_mesh()
@@ -218,8 +209,6 @@ fn accel_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         .draw()
         .unwrap();
 
-    let data = series.values.lock().unwrap();
-
     let x = data.iter().map(|p| p.1.x).enumerate();
     let y = data.iter().map(|p| p.1.y).enumerate();
     let z = data.iter().map(|p| p.1.z).enumerate();
@@ -227,3 +216,48 @@ fn accel_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
     chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
 }
+
+fn vec3_f64_chart<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    caption: &str,
+    data: impl IntoIterator<Item = Vector3<f64>> + Clone,
+    series_size: usize,
+    default_range: Range<f64>,
+) {
+    let min = data
+        .clone()
+        .into_iter()
+        .flat_map(|p| [p.x, p.y, p.z])
+        .min_by(f64::total_cmp)
+        .unwrap_or(default_range.start)
+        .min(default_range.start);
+    let max = data
+        .clone()
+        .into_iter()
+        .flat_map(|p| [p.x, p.y, p.z])
+        .max_by(f64::total_cmp)
+        .unwrap_or(default_range.end)
+        .max(default_range.end);
+
+    let mut chart = ChartBuilder::on(area)
+        .caption(caption, ("sans-serif", 12))
+        .margin(20)
+        // .set_left_and_bottom_label_area_size(30)
+        .set_label_area_size(LabelAreaPosition::Left, 30)
+        .build_cartesian_2d(0..series_size, min..max)
+        .unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
+
+    let x = data.clone().into_iter().map(|p| p.x).enumerate();
+    let y = data.clone().into_iter().map(|p| p.y).enumerate();
+    let z = data.clone().into_iter().map(|p| p.z).enumerate();
+    chart.draw_series(LineSeries::new(x, &RED)).unwrap();
+    chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
+    chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
