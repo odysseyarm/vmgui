@@ -181,16 +181,20 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
             let CombinedMarkersReport { nf_points, wf_points, nf_screen_ids, wf_screen_ids } = combined_markers_report;
             let mut runner = runner.lock();
-            let filtered_nf_point_tuples = filter_and_create_point_id_tuples(&nf_points, &nf_screen_ids);
-            let filtered_wf_point_tuples = filter_and_create_point_id_tuples(&wf_points, &wf_screen_ids);
+            let nf_point_tuples = filter_and_create_point_tuples(&nf_points, &nf_screen_ids);
+            let wf_point_tuples = filter_and_create_point_tuples(&wf_points, &wf_screen_ids);
 
             // println!("nf: {} wf: {}", filtered_nf_point_tuples.len(), filtered_wf_point_tuples.len());
 
-            let filtered_nf_points_slice = filtered_nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
-            let filtered_wf_points_slice = filtered_wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
+            let nf_points_slice = nf_point_tuples.iter().map(|(_, _, p)| *p).collect::<Vec<_>>();
+            let wf_points_slice = wf_point_tuples.iter().map(|(_, _, p)| *p).collect::<Vec<_>>();
 
-            let nf_points_transformed = transform_points(&filtered_nf_points_slice, &runner.general_config.camera_model_nf);
-            let wf_points_transformed = transform_points(&filtered_wf_points_slice, &runner.general_config.camera_model_wf);
+            let nf_points_transformed = transform_points(&nf_points_slice, &runner.general_config.camera_model_nf);
+            let wf_points_transformed = transform_points(&wf_points_slice, &runner.general_config.camera_model_wf);
+
+            let nf_point_tuples = nf_point_tuples.iter().enumerate().map(|(i, (screen_id, id, _))| (*screen_id, *id, nf_points_transformed[i])).collect::<Vec<_>>();
+            let wf_point_tuples = wf_point_tuples.iter().enumerate().map(|(i, (screen_id, id, _))| (*screen_id, *id, wf_points_transformed[i])).collect::<Vec<_>>();
+
             let wf_to_nf = ats_cv::wf_to_nf_points(&wf_points_transformed, &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf), runner.general_config.stereo_iso.cast());
             let wf_normalized: Vec<_> = wf_to_nf.iter().map(|&p| {
                 let fx = runner.general_config.camera_model_nf.p.m11 as f64;
@@ -280,11 +284,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            runner.state.nf_points = nf_points_transformed
+            runner.state.nf_points = nf_point_tuples
                 .into_iter()
-                .filter(|p| !nf_markers.contains(&p))
+                .filter(|p| !nf_markers.contains(&p.2))
                 .collect();
-            runner.state.wf_points = wf_points_transformed
+            runner.state.wf_points = wf_point_tuples
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| !wf_marker_ix.contains(&i))
@@ -371,10 +375,10 @@ fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<
     None
 }
 
-fn filter_and_create_point_id_tuples(
+fn filter_and_create_point_tuples(
     points: &[Point2<u16>],
     screen_ids: &[u8],
-) -> Vec<(usize, Point2<f64>)> {
+) -> Vec<(u8, u8, Point2<f64>)> {
     points
         .iter()
         .zip(screen_ids.iter())
@@ -382,7 +386,7 @@ fn filter_and_create_point_id_tuples(
         .filter_map(|(id, (pos, &screen_id))| {
             // screen id of 7 means there is no marker
             if screen_id < 7 && (400..3696).contains(&pos.x) && (400..3696).contains(&pos.y) {
-                Some((id, Point2::new(pos.x as f64, pos.y as f64)))
+                Some((screen_id, id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
             }

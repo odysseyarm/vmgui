@@ -158,6 +158,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         }
 
         let (timestamp, mut pkt) = state.lock().unwrap().packets.lock().unwrap()[packet_index].clone();
+        println!("{}", timestamp);
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;

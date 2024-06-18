@@ -67,6 +67,12 @@ pub fn draw_marker(ctx: &draw::DrawContext, path: &Path, position: Point2<f64>, 
     draw_text(&ctx, position.x + 20.0, position.y + 20.0, label);
 }
 
+/// Draws a rotated crosshair and associated text at a given position.
+pub fn draw_marker_rotated(ctx: &draw::DrawContext, path: &Path, position: Point2<f64>, label: &str) {
+    draw_crosshair_rotated(&ctx, path, position.x, position.y, 50.0);
+    draw_text(&ctx, position.x + 20.0, position.y + 20.0 + 30.0, label);
+}
+
 /// Handles drawing a rectangle defined by boundaries and transforms.
 pub fn draw_rectangle(ctx: &draw::DrawContext, path: &Path, bounds: &[f64; 4], gravity_rot: &Rotation2<f64>, draw_tf: &Transform2<f64>) {
     let corner = Point2::new(bounds[0] - 0.5, bounds[3] - 0.5);
