@@ -235,24 +235,27 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
 }
 
 fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
-    for (i, point) in state.nf_points.iter().enumerate() {
+    let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
+    let wf_points = state.wf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
+
+    for (i, point) in nf_points.iter().enumerate() {
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
 
-        custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
+        custom_shapes::draw_marker(ctx, &ch_path, p, &format!("nf: sid={}, id={}", state.nf_points[i].0, state.nf_points[i].1));
     }
     nf_path.end(ctx);
 
-    let wf_to_nf_points = ats_cv::wf_to_nf_points(&state.wf_points, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
-    for point in wf_to_nf_points {
+    let wf_to_nf_points = ats_cv::wf_to_nf_points(&wf_points, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
+    for (i, point) in wf_to_nf_points.iter().enumerate() {
         // todo don't use hardcoded 4095x4095 res assumption
         let p = point / 4095. - Vector2::new(0.5, 0.5);
         let p = gravity_rot * p;
         let p = draw_tf * p;
 
-        draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
+        custom_shapes::draw_marker_rotated(ctx, &ch_path, p, &format!("wf: sid={}", state.wf_points[i].0));
     }
     wf_path.end(ctx);
 
@@ -309,8 +312,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         }
     }
 
-    if state.nf_points.len() >= 4 {
-        let mut points = state.nf_points.clone();
+    if nf_points.len() >= 4 {
+        let mut points = nf_points.clone();
         let mut chosen = ats_cv::choose_rectangle_markers(&mut points, state.screen_id, 300.);
         let points = match chosen.as_mut() {
             // Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,

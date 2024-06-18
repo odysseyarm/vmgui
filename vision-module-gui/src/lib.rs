@@ -39,8 +39,8 @@ pub struct MotState {
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
 
-    pub nf_points: ArrayVec<Point2<f64>, 16>,
-    pub wf_points: ArrayVec<Point2<f64>, 16>,
+    pub nf_points: ArrayVec<(u8, u8, Point2<f64>), 16>,
+    pub wf_points: ArrayVec<(u8, u8, Point2<f64>), 16>,
     pub nf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_reproj: ArrayVec<Point2<f64>, 16>,
