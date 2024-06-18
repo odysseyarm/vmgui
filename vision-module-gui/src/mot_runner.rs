@@ -128,9 +128,9 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             let nf_data = mot_data.mot_data_nf;
             let wf_data = mot_data.mot_data_wf;
             let mut runner = runner.lock();
-            let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter().filter(|x| x.area > 0));
+            let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter());
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
-            let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter().filter(|x| x.area > 0));
+            let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter());
 
             let state = &mut runner.state;
             state.nf_data = Some(nf_data);
