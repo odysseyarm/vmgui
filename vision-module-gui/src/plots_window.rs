@@ -62,7 +62,7 @@ impl AreaHandler for MainCanvas {
         )
         .into_drawing_area();
         root.fill(&WHITE).unwrap();
-        let subplots = root.split_evenly((5, 2));
+        let subplots = root.split_evenly((6, 2));
 
         gyro_chart(&subplots[0]);
         accel_chart(&subplots[1]);
@@ -70,10 +70,12 @@ impl AreaHandler for MainCanvas {
         local_gravity_chart(&subplots[5]);
         apparent_accel_chart(&subplots[3]);
         accel_bias_chart(&subplots[4]);
-        rot_bias_chart(&subplots[6]);
+        velocity_uncertainty_chart(&subplots[6]);
         velocity_chart(&subplots[7]);
         pnp_position_chart(&subplots[8]);
         pnp_orientation_chart(&subplots[9]);
+        accel_bias_uncertainty_chart(&subplots[10]);
+        orientation_uncertainty_chart(&subplots[11]);
     }
 }
 
@@ -106,7 +108,7 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         "PnP Position",
         series.values.lock().unwrap().iter().map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords),
         series.size,
-        -5.0..5.0,
+        -5.0..1.0,
     );
 }
 
@@ -175,6 +177,42 @@ fn velocity_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         "ESKF Velocity",
         ats_cv::telemetry::eskf_velocity(),
         -1.0..1.0,
+    );
+}
+
+fn accel_bias_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Accel. Bias Uncertainty",
+        ats_cv::telemetry::eskf_accel_bias_uncertainty(),
+        0.0..1.0,
+    );
+}
+
+fn rot_bias_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Rot. Bias Uncertainty",
+        ats_cv::telemetry::eskf_rot_bias_uncertainty(),
+        0.0..1.0,
+    );
+}
+
+fn velocity_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Velocity Uncertainty",
+        ats_cv::telemetry::eskf_velocity_uncertainty(),
+        0.0..1.0,
+    );
+}
+
+fn orientation_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Orientation Uncertainty",
+        ats_cv::telemetry::eskf_orientation_uncertainty(),
+        0.0..1.0,
     );
 }
 
