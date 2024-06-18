@@ -164,7 +164,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
         let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
         for (i, mot_data) in nf_data.iter().enumerate() {
             if mot_data.area == 0 {
-                break;
+                continue;
             }
             // todo don't use hardcoded 4095x4095 res assumption
             let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
@@ -213,7 +213,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
     if let Some(wf_data) = state.wf_data.as_ref() {
         for mot_data in wf_data {
             if mot_data.area == 0 {
-                break;
+                continue;
             }
 
             let p = Point2::new(mot_data.cx, mot_data.cy).cast::<f64>() / 4095.
