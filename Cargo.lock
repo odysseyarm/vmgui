@@ -1939,7 +1939,6 @@ dependencies = [
 [[package]]
 name = "eskf"
 version = "0.3.0"
-source = "git+https://github.com/nordmoen/eskf-rs#de7eb3c88739ef6d1dd520be43e20a4f5a487254"
 dependencies = [
  "nalgebra 0.32.5",
 ]
