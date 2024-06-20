@@ -148,6 +148,7 @@ pub struct MotData {
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ObjectReport {
+    pub timestamp: u32,
     pub mot_data_nf: [MotData; 16],
     pub mot_data_wf: [MotData; 16],
 }
@@ -164,9 +165,9 @@ pub struct CombinedMarkersReport {
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
+    pub timestamp: u32,
     pub accel: Vector3<f32>,
     pub gyro: Vector3<f32>,
-    pub timestamp: u32,
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
@@ -332,7 +333,7 @@ impl Packet {
             PacketData::ReadConfig() => 0,
             PacketData::ReadConfigResponse(_) => 170,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
-            PacketData::ObjectReport(_) => 514,
+            PacketData::ObjectReport(_) => 518,
             PacketData::CombinedMarkersReport(_) => 104,
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport(_) => 4,
@@ -554,6 +555,8 @@ impl MotData {
 impl ObjectReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
+        let timestamp = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        *bytes = &bytes[4..];
         let data = &mut &bytes[..512];
         *bytes = &bytes[512..];
         let [_format, _, ..] = **bytes else {
@@ -561,12 +564,14 @@ impl ObjectReport {
         };
         *bytes = &bytes[2..];
         Ok(Self {
+            timestamp,
             mot_data_nf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
             mot_data_wf: [(); 16].map(|_| MotData::parse(data).expect("MotData parse error")),
         })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.timestamp.to_le_bytes());
         for i in 0..16 {
             self.mot_data_nf[i].serialize(buf);
         }
