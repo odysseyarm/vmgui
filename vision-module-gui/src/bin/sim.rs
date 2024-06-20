@@ -120,12 +120,12 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 }
                 None
             }
-            PacketData::FlashSettings => None,
+            PacketData::FlashSettings() => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig => Some(PacketData::ReadConfigResponse(GeneralConfig {
+            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(GeneralConfig {
                 impact_threshold: 0,
                 camera_model_nf: RosOpenCvIntrinsics::from_params(
                     49.0 * nf_focal_length() as f32,
@@ -227,15 +227,15 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 });
                 (positions, radii)
             };
-            let (nf_positions, nf_radii) = make_positions(&nf_markers);
-            let (wf_positions, wf_radii) = make_positions(&wf_markers);
+            let (nf_positions, nf_screen_ids) = make_positions(&nf_markers);
+            let (wf_positions, wf_screen_ids) = make_positions(&wf_markers);
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     nf_points: nf_positions,
                     wf_points: wf_positions,
-                    nf_radii,
-                    wf_radii,
+                    nf_screen_ids,
+                    wf_screen_ids,
                 })
             };
             buf.clear();
