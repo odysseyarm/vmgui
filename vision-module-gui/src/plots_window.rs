@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{f64::consts::PI, ops::Range};
 
 use ats_cv::telemetry::Series;
 use iui::{
@@ -72,8 +72,10 @@ impl AreaHandler for MainCanvas {
         accel_bias_chart(&subplots[4]);
         velocity_uncertainty_chart(&subplots[6]);
         velocity_chart(&subplots[7]);
-        pnp_position_chart(&subplots[8]);
-        pnp_orientation_chart(&subplots[9]);
+        // pnp_position_chart(&subplots[8]);
+        // pnp_orientation_chart(&subplots[9]);
+        position_uncertainty_chart(&subplots[8]);
+        position_chart(&subplots[9]);
         accel_bias_uncertainty_chart(&subplots[10]);
         orientation_uncertainty_chart(&subplots[11]);
     }
@@ -208,11 +210,18 @@ fn velocity_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>)
 }
 
 fn orientation_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
-    vec3_f32_chart(
+    let series = ats_cv::telemetry::eskf_orientation_uncertainty();
+    vec3_f64_chart(
         area,
         "ESKF Orientation Uncertainty",
-        ats_cv::telemetry::eskf_orientation_uncertainty(),
-        0.0..1.0,
+        series
+            .values
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|p| p.1.cast() * 180.0 / PI),
+        series.size,
+        0.0..10.0,
     );
 }
 
@@ -297,5 +306,23 @@ fn vec3_f64_chart<DB: DrawingBackend>(
     chart.draw_series(LineSeries::new(x, &RED)).unwrap();
     chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
     chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
+fn position_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Position Uncertainty",
+        ats_cv::telemetry::eskf_position_uncertainty(),
+        0.0..1.0,
+    );
+}
+
+fn position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Position Uncertainty",
+        ats_cv::telemetry::eskf_position(),
+        0.0..5.0,
+    );
 }
 
