@@ -209,6 +209,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         ui_ctx,
         nf_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
+        wfnf_realign: true,
     }));
 
     // Create a main_window into which controls can be placed

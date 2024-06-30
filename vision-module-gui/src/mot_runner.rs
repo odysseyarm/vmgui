@@ -1,5 +1,7 @@
 use std::sync::Arc;
 use ahrs::Ahrs;
+use ats_cv::calculate_rotational_offset;
+use ats_cv::foveated::{identify_markers2, match3};
 use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
@@ -107,6 +109,7 @@ pub struct MotRunner {
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
     pub nf_offset: Vector2<f64>,
+    pub wfnf_realign: bool,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -211,6 +214,27 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 Point2::new((p.x/4095.*98. - cx) / fx, (p.y/4095.*98. - cy) / fy)
             }).collect();
 
+            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
+            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
+            if runner.wfnf_realign {
+                // Try to match widefield using brute force p3p, and then
+                // using that to match nearfield
+                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast()) {
+                    let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
+                    let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
+                    if nf_match_ix.iter().all(Option::is_some) {
+                        dbg!(error);
+                        let nf_ordered = nf_match_ix.map(|i| nf_normalized[i.unwrap()].coords.push(1.0));
+                        let wf_ordered = wf_match_ix.map(|i| wf_normalized[i].coords.push(1.0));
+                        eprintln!("nf_ordered = {nf_ordered:?}");
+                        eprintln!("wf_ordered = {wf_ordered:?}");
+                        let q = calculate_rotational_offset(&wf_ordered, &nf_ordered);
+                        runner.general_config.stereo_iso.rotation *= q.cast();
+                        runner.wfnf_realign = false;
+                    }
+                }
+            }
+
             // let nf_point_tuples_transformed = filtered_nf_point_tuples.iter().map(|(id, _)| *id).zip(&mut nf_points_transformed).collect::<Vec<_>>();
             // let wf_point_tuples_transformed = filtered_wf_point_tuples.iter().map(|(id, _)| *id).zip(&mut wf_points_transformed).collect::<Vec<_>>();
 
@@ -228,9 +252,6 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             // step at marker hz
             runner.state.fv_aimpoint_pva2d.step();
-
-            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
-            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
 
             runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec.cast());
 
