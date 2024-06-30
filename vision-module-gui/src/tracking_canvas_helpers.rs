@@ -179,7 +179,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
             let up = mot_data.boundary_up as f64 / 98.;
 
             custom_shapes::draw_rectangle(ctx, &nf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
-            custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({}, {}) id={}", mot_data.cx, mot_data.cy, i));
+            custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({:.3}, {:.3}) id={}", mot_data.cx, mot_data.cy, i));
         }
 
         if nf_points.len() >= 4 {
@@ -302,7 +302,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = gravity_rot * p;
         let p = draw_tf * p;
         let nf_marker_path = Path::new(ctx, FillMode::Winding);
-        custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({}, {}) id={}", point.x, point.y, i));
+        custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({:.3}, {:.3}) id={}", point.x, point.y, i));
         nf_marker_path.end(&ctx);
         match i {
             0 | 3 => ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
