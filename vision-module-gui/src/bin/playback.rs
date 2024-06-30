@@ -1,5 +1,6 @@
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, sync::{Arc, Mutex}, time::Duration};
+use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, ops::Not, sync::{Arc, Mutex}, time::Duration};
 
+use crossbeam::channel::{Receiver, TryRecvError};
 use iui::{
     controls::{
         Window,
@@ -7,6 +8,7 @@ use iui::{
     },
     UI,
 };
+use leptos_reactive::{Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
 use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketData, ReadRegisterResponse}};
@@ -32,17 +34,25 @@ fn main() {
         WindowType::NoMenubar,
     );
     let state = Arc::new(Mutex::new(State::new()));
+    let stream_ctrl = crossbeam::channel::bounded(2);
+    let stream_state = RwSignal::new(StreamState::Pause);
+    Effect::new(move |_| { let _ = stream_ctrl.0.send(stream_state.get()); });
+
+
     vision_module_gui::layout! { &ui,
-        let vbox = VerticalBox(padded: false) {
+        let vbox = VerticalBox(padded: true) {
             Compact : let upload_btn = Button("Upload")
+            Compact : let play_btn = Button(move || (!stream_state.get()).as_str())
         }
     }
+    play_btn.hide(&ui);
 
     upload_btn.on_clicked(&ui, {
         let state = state.clone();
         let main_win = main_win.clone();
         let ui = ui.clone();
-        move |_| {
+        let mut play_btn = play_btn.clone();
+        move |btn| {
             let mut state = state.lock().unwrap();
             state.packets.lock().unwrap().clear();
 
@@ -51,16 +61,24 @@ fn main() {
                 state.general_config = general_config;
                 state.packets.lock().unwrap().clear();
                 state.packets.lock().unwrap().extend(packets);
+                btn.hide(&ui);
+                play_btn.show(&ui);
             }
         }
+    });
+
+    play_btn.on_clicked(&ui, move |_| {
+        stream_state.set(!stream_state.get_untracked());
     });
 
     main_win.set_child(&ui, vbox);
     main_win.show(&ui);
 
+    let ui_ctx = ui.async_context();
+
     std::thread::Builder::new()
         .name("listener".into())
-        .spawn(move || listener_thread(port, state))
+        .spawn(move || listener_thread(port, state, ui_ctx, stream_state, stream_ctrl.1))
         .unwrap();
 
     ui.main();
@@ -68,7 +86,7 @@ fn main() {
     leptos_rt.dispose();
 }
 
-fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
+fn listener_thread(port: u16, state: Arc<Mutex<State>>, ui_ctx: iui::concurrent::Context, stream_state: RwSignal<StreamState>, stream_ctrl: Receiver<StreamState>) {
     let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
     loop {
         match listener.accept() {
@@ -79,16 +97,17 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
                 std::thread::Builder::new()
                     .name("serve".into())
                     .spawn(move || {
-                        socket_serve_thread(sock, state_clone);
+                        socket_serve_thread(sock, state_clone, ui_ctx, stream_state);
                     })
                     .unwrap();
                 let state_clone = state.clone();
                 std::thread::Builder::new()
                     .name("stream".into())
                     .spawn(move || {
-                        socket_stream_thread(sock2, state_clone);
+                        socket_stream_thread(sock2, state_clone, stream_ctrl);
                     })
                     .unwrap();
+                break;
             }
             Err(e) => error!("couldn't get client: {e:?}"),
         }
@@ -96,8 +115,9 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
 }
 
 // Services the requests
-fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
+fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iui::concurrent::Context, stream_state: RwSignal<StreamState>) {
     let mut buf = vec![0; 1024];
+    let mut first_stream_enable = true;
     loop {
         buf.resize(1024, 0);
         sock.read_exact(&mut buf[..3]).unwrap();
@@ -126,6 +146,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 if s.mask & 0b0001 != 0 {
                     state.stream_object_report = if s.active { Some(pkt.id) } else { None };
                 }
+                if state.stream_combined_markers.is_some() && first_stream_enable {
+                    ui_ctx.queue_main(move || stream_state.set(StreamState::Play));
+                    first_stream_enable = false;
+                }
                 None
             }
             PacketData::FlashSettings() => None,
@@ -147,23 +171,40 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
 }
 
 // Services the streams
-fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
+fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Receiver<StreamState>) {
     let mut prev_timestamp = None;
     let mut buf = vec![0; 1024];
     let mut packet_index = 0;
     loop {
+        match ctrl.try_recv() {
+            Ok(StreamState::Pause) => {
+                eprintln!("pause");
+                loop {
+                    match ctrl.recv() {
+                        Ok(StreamState::Pause) => (),
+                        Ok(StreamState::Play) => {
+                            eprintln!("play");
+                            break;
+                        }
+                        Err(_) => return,
+                    }
+                }
+            },
+            Ok(StreamState::Play) => (),
+            Err(TryRecvError::Empty) => (),
+            Err(TryRecvError::Disconnected) => return,
+        }
         if state.lock().unwrap().packets.lock().unwrap().len() == 0 {
             std::thread::sleep(Duration::from_millis(100));
             continue;
         }
 
         let (timestamp, mut pkt) = state.lock().unwrap().packets.lock().unwrap()[packet_index].clone();
-        println!("{}", timestamp);
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
             if elapsed > 0 {
-                std::thread::sleep(Duration::from_millis(elapsed as u64*2));
+                std::thread::sleep(Duration::from_millis(elapsed as u64));
             }
         }
 
@@ -190,6 +231,32 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
 
         prev_timestamp = Some(timestamp);
         packet_index = (packet_index + 1) % state.packets.lock().unwrap().len();
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum StreamState {
+    Play,
+    Pause,
+}
+
+impl StreamState {
+    fn as_str(self) -> &'static str {
+        match self {
+            StreamState::Play => "Play",
+            StreamState::Pause => "Pause",
+        }
+    }
+}
+
+impl Not for StreamState {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            StreamState::Play => StreamState::Pause,
+            StreamState::Pause => StreamState::Play,
+        }
     }
 }
 
