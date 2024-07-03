@@ -235,30 +235,13 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
 }
 
 fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
-    let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
-    let wf_points = state.wf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
-
-    for (i, point) in nf_points.iter().enumerate() {
-        // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095. - Vector2::new(0.5, 0.5);
-        let p = gravity_rot * p;
-        let p = draw_tf * p;
-
-        custom_shapes::draw_marker(ctx, &ch_path, p, &format!("nf: sid={}, id={}", state.nf_points[i].0, state.nf_points[i].1));
-    }
     nf_path.end(ctx);
-
-    let wf_to_nf_points = ats_cv::wf_to_nf_points(&wf_points, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
-    for (i, point) in wf_to_nf_points.iter().enumerate() {
-        // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095. - Vector2::new(0.5, 0.5);
-        let p = gravity_rot * p;
-        let p = draw_tf * p;
-
-        custom_shapes::draw_marker_rotated(ctx, &ch_path, p, &format!("wf: sid={}", state.wf_points[i].0));
-    }
     wf_path.end(ctx);
+    let fx = config.camera_model_nf.p.m11 as f64;
+    let fy = config.camera_model_nf.p.m22 as f64;
+    let normalized_scale = Scale2::new(fx / 98.0, fy / 98.0);
 
+    let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
     let thin = StrokeParams {
         cap: 0, // Bevel
         join: 0, // Flat
@@ -279,36 +262,38 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         thickness: 3.,
         ..thick2.clone()
     };
-    let wf_to_nf_markers = ats_cv::wf_to_nf_points(&state.wf_markers, &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_nf), &ats_cv::ros_opencv_intrinsics_type_convert(&config.camera_model_wf), config.stereo_iso.cast());
-    for (i, point) in wf_to_nf_markers.iter().enumerate() {
-        let wf_marker_path = Path::new(ctx, FillMode::Winding);
-        // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095. - Vector2::new(0.5, 0.5);
+
+    for marker in state.nf_markers2.iter() {
+        let p = normalized_scale * marker.normalized;
         let p = gravity_rot * p;
         let p = draw_tf * p;
-        draw_crosshair_rotated(&ctx, &wf_marker_path, p.x, p.y, 50.);
-        wf_marker_path.end(&ctx);
-        match i {
-            0 | 3 => ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
-            1 | 4 => ctx.stroke(&wf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
-            2 | 5 => ctx.stroke(&wf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
-            _ => ctx.stroke(&wf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
+
+        let marker_path = Path::new(ctx, FillMode::Winding);
+        custom_shapes::draw_marker(ctx, &marker_path, p, &format!("nf: sid={}, id={}", marker.screen_id, marker.mot_id));
+        marker_path.end(ctx);
+        match marker.pattern_id {
+            Some(0 | 3) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
+            Some(1 | 4) => ctx.stroke(&marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
+            Some(2 | 5) => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
+            Some(_) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
+            None => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 0.0), &thin),
         }
     }
 
-    for (i, point) in state.nf_markers.iter().enumerate() {
-        // todo don't use hardcoded 4095x4095 res assumption
-        let p = point / 4095. - Vector2::new(0.5, 0.5);
+    for marker in state.wf_markers2.iter() {
+        let p = normalized_scale * marker.normalized;
         let p = gravity_rot * p;
         let p = draw_tf * p;
-        let nf_marker_path = Path::new(ctx, FillMode::Winding);
-        custom_shapes::draw_marker(ctx, &nf_marker_path, p, &format!("({:.3}, {:.3}) id={}", point.x, point.y, i));
-        nf_marker_path.end(&ctx);
-        match i {
-            0 | 3 => ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
-            1 | 4 => ctx.stroke(&nf_marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
-            2 | 5 => ctx.stroke(&nf_marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
-            _ => ctx.stroke(&nf_marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
+
+        let marker_path = Path::new(ctx, FillMode::Winding);
+        custom_shapes::draw_marker_rotated(ctx, &marker_path, p, &format!("wf: sid={}, id={}", marker.screen_id, marker.mot_id));
+        marker_path.end(ctx);
+        match marker.pattern_id {
+            Some(0 | 3) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
+            Some(1 | 4) => ctx.stroke(&marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
+            Some(2 | 5) => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
+            Some(_) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
+            None => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
         }
     }
 
@@ -340,10 +325,6 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     nf_grid_path.end(ctx);
 
 
-    let fx = config.camera_model_nf.p.m11 as f64;
-    let fy = config.camera_model_nf.p.m22 as f64;
-    let cx = config.camera_model_nf.p.m13 as f64;
-    let cy = config.camera_model_nf.p.m23 as f64;
     for p in marker_pattern::<f64>() { // eskf reprojections
         let position = state.fv_state.filter.position;
         let orientation = state.fv_state.filter.orientation;
@@ -352,8 +333,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = reproj_tf.cast().inverse_transform_point(&p.into());
         let p = p / p.z;
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
-        let p = p / 4095. - Vector2::new(0.5, 0.5);
+        let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+        let p = p / 4095.;
         let p = gravity_rot * p;
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &fv_reproj_path, p.x, p.y, 20.);
@@ -368,8 +349,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
             let p = reproj_tf.cast().inverse_transform_point(&p.into());
             let p = p / p.z;
             // todo don't use hardcoded 4095x4095 res assumption
-            let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
-            let p = p / 4095. - Vector2::new(0.5, 0.5);
+            let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+            let p = p / 4095.;
             let p = gravity_rot * p;
             let p = draw_tf * p;
             draw_crosshair_rotated(&ctx, &pnp_reproj_path, p.x, p.y, 20.);
@@ -380,8 +361,8 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x*fx + cx, p.y*fy + cy) / 98.0 * 4095.0;
-        let p = p / 4095. - Vector2::new(0.5, 0.5);
+        let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+        let p = p / 4095.;
         let p = gravity_rot * p;
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 20.);

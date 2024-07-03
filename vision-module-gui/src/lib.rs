@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
+use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3, Vector2};
 use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
 use serde::Serialize;
 use ats_usb::packet::MotData;
@@ -44,6 +44,8 @@ pub struct MotState {
     pub nf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_reproj: ArrayVec<Point2<f64>, 16>,
+    pub nf_markers2: ArrayVec<Marker, 16>,
+    pub wf_markers2: ArrayVec<Marker, 16>,
 
     pub fv_aimpoint_pva2d: Pva2d<f64>,
 
@@ -78,6 +80,8 @@ impl Default for MotState {
             nf_markers: Default::default(),
             wf_markers: Default::default(),
             wf_reproj: Default::default(),
+            nf_markers2: Default::default(),
+            wf_markers2: Default::default(),
             fv_aimpoint_pva2d: Pva2d::new(0.2, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
@@ -85,4 +89,11 @@ impl Default for MotState {
             fv_aimpoint_history_index: 0,
         }
     }
+}
+
+pub struct Marker {
+    pub mot_id: u8,
+    pub screen_id: u8,
+    pub pattern_id: Option<u8>,
+    pub normalized: Point2<f64>,
 }
