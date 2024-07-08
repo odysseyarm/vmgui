@@ -269,7 +269,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = draw_tf * p;
 
         let marker_path = Path::new(ctx, FillMode::Winding);
-        custom_shapes::draw_marker(ctx, &marker_path, p, &format!("nf: sid={}, id={}", marker.screen_id, marker.mot_id));
+        custom_shapes::draw_marker(ctx, &marker_path, p, &format!("nf: sid={}", marker.screen_id));
         marker_path.end(ctx);
         match marker.pattern_id {
             Some(0 | 3) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
@@ -286,7 +286,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = draw_tf * p;
 
         let marker_path = Path::new(ctx, FillMode::Winding);
-        custom_shapes::draw_marker_rotated(ctx, &marker_path, p, &format!("wf: sid={}, id={}", marker.screen_id, marker.mot_id));
+        custom_shapes::draw_marker_rotated(ctx, &marker_path, p, &format!("wf: sid={}", marker.screen_id));
         marker_path.end(ctx);
         match marker.pattern_id {
             Some(0 | 3) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
