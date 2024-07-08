@@ -123,6 +123,6 @@ pub fn draw_text(ctx: &draw::DrawContext, x: f64, y: f64, s: &str) {
         stretch: StretchStyle::Normal,
     };
     let attr_str = text::AttributedString::new(s);
-    let mut layout = attr_str.layout(&font_descriptor, 200.0, text::TextAlign::Left);
+    let mut layout = attr_str.layout(&font_descriptor, 400.0, text::TextAlign::Left);
     ctx.draw_text(&mut layout, x, y);
 }

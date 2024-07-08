@@ -97,3 +97,16 @@ pub struct Marker {
     pub pattern_id: Option<u8>,
     pub normalized: Point2<f64>,
 }
+
+impl Marker {
+    pub fn ats_cv_marker(&self) -> ats_cv::foveated::Marker {
+        ats_cv::foveated::Marker {
+            position: self.normalized,
+            screen_id: if self.screen_id < 7 {
+                Some(self.screen_id)
+            } else {
+                None
+            },
+        }
+    }
+}

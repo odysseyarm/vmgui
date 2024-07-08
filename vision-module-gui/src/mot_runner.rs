@@ -248,7 +248,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             // step at marker hz
             runner.state.fv_aimpoint_pva2d.step();
 
-            runner.state.fv_state.observe_markers(&nf_normalized, &wf_normalized, gravity_vec.cast());
+            let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
+            let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
+            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast());
 
             let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
 
