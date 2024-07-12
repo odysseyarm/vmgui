@@ -318,7 +318,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.wf_reproj = wf_reproj;
 
             let index = runner.state.fv_aimpoint_history_index;
-            runner.state.fv_aimpoint_history[index] = runner.state.nf_aimpoint;
+            runner.state.fv_aimpoint_history[index] = runner.state.fv_aimpoint;
             runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
 
             if runner.record_packets {
@@ -500,6 +500,9 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.ui_ctx.queue_main(move || {
                     leptos_reactive::SignalSet::set(&ui_update, ());
                 });
+            }
+            if runner.record_packets {
+                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::ImpactReport(_impact)));
             }
         }
     }
