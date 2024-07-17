@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use ahrs::Ahrs;
-use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates};
+use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
 use ats_cv::foveated::{identify_markers2, match3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
@@ -12,7 +12,7 @@ use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Tra
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, Marker, MotState, ScreenInfo, ScreenCalibration, TestFrame};
+use crate::{CloneButShorter, Marker, MotState, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
@@ -103,7 +103,7 @@ pub struct MotRunner {
     pub ui_ctx: Context,
     pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
-    pub screen_calibration: Option<ScreenCalibration>,
+    pub screen_calibration: ScreenCalibration<f64>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -140,45 +140,29 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn get_raycast_aimpoint(
-    nearfield: &[ats_cv::foveated::Marker],
-    widefield: &[ats_cv::foveated::Marker],
-    fv_state: &ats_cv::foveated::FoveatedAimpointState,
-    gravity: UnitVector3<f64>,
-    screen_info: ScreenInfo,
-) -> (Matrix3<f64>, nalgebra::Point3<f64>, Option<Point2<f64>>) {
-    let match_ixs = fv_state.match_markers_from_eskf(nearfield, widefield, &screen_info.marker_points);
-    let iso = Isometry3::from_parts(fv_state.filter.position.into(), fv_state.filter.orientation).cast();
+// 3840x2160 (16:9) SVT
+pub const SCREEN_HEIGHT_METERS: f32 = 2.05105;
 
-    // using the eskf as a fallback might make the aimpoint seem unstable in some scenarios when it
-    // flips back and forth ¯\_(ツ)_/¯
-    // let iso = iso.unwrap_or(Isometry3::from_parts(fv_state.filter.position.into(), fv_state.filter.orientation).cast());
-    let orientation = iso.rotation;
-    let position = iso.translation.vector;
+// 1920x1080 abe's wall
+// pub const SCREEN_HEIGHT_METERS: f32 = 1.2838;
+
+fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_calibration: &ScreenCalibration<f64>) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
+    let orientation = fv_state.filter.orientation.cast();
+    let position = fv_state.filter.position.cast();
 
     let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
-    let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
-    let transmat = flip_yz * position;
+    let rot = Rotation3::from_matrix_unchecked(flip_yz * orientation.to_rotation_matrix() * flip_yz);
+    let trans = Translation3::from(flip_yz * position);
 
-    let screen_ratio =
-        screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
-    let screen_3dpoints =
-        ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
+    let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
 
-    let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
-        &rotmat,
-        &transmat,
-        &screen_3dpoints,
+    let fv_aimpoint = ats_cv::calculate_aimpoint(
+        &isometry,
+        screen_calibration,
     );
 
-    let orientation = fv_state.filter.orientation;
-    let position = fv_state.filter.position;
-
-    let rotmat = flip_yz * orientation.to_rotation_matrix().cast() * flip_yz;
-    let transmat = flip_yz * position.cast();
-
-    (rotmat, transmat.into(), fv_aimpoint)
+    (rot, trans, fv_aimpoint)
 }
 
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
@@ -237,7 +221,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _, _)) = identify_markers2(&wf_normalized, None, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points) {
+                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast(), &runner.screen_calibration) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
@@ -255,20 +239,26 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
             let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
-            let screen_info = runner.screen_info;
-            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), screen_info.screen_dimensions_meters, screen_info.marker_points);
+            let screen_calibration = runner.screen_calibration.clone();
+            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), &screen_calibration);
 
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(nf, wf, &runner.state.fv_state, gravity_vec.cast(), runner.screen_info);
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, &runner.screen_calibration);
 
-            runner.state.rotation_mat = rotmat.cast();
-            runner.state.translation_mat = transmat.coords.cast();
+            runner.state.rotation_mat = rotmat.matrix().cast();
+            runner.state.translation_mat = transmat.vector.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[100., 100.]);
+                runner.state.fv_aimpoint = fv_aimpoint.cast();
             }
 
-            runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
+            if let Some(x) = calculate_individual_aimpoint(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf, &runner.screen_calibration) {
+                runner.state.nf_aimpoint = x;
+            }
 
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, None, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points);
+            if let Some(x) = calculate_individual_aimpoint(&wf_points_transformed, runner.state.orientation, Some(&runner.general_config.stereo_iso.cast()), &runner.general_config.camera_model_wf, &runner.screen_calibration) {
+                runner.state.wf_aimpoint = x;
+            }
+
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), &runner.screen_calibration);
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
                 .map(|(markers, reproj, _)| (
                     markers.into_iter().collect(),
@@ -326,6 +316,69 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             }
         }
     }
+}
+
+fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f32>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>, screen_calibration: &ScreenCalibration<f64>) -> Option<Point2<f64>> {
+    let fx = intrinsics.p.m11 * (4095./98.);
+    let fy = intrinsics.p.m22 * (4095./98.);
+
+    let gravity_vec = orientation.inverse_transform_vector(&Vector3::z());
+	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.;
+
+    if points.len() > 3 {
+        let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
+        sort_points(&mut rotated_points);
+        // todo rotating back is bad, select with slice instead
+        let points = ats_cv::mot_rotate(&rotated_points, gravity_angle);
+
+        let projections = ats_cv::calculate_projections(
+            &points,
+            // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+            Vector2::new(fx as f64, fy as f64),
+            Vector2::new(4095., 4095.),
+        );
+        let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
+            projections.as_slice(),
+            &[
+                Point2::new(0.35, 0.),
+                Point2::new(0.65, 0.),
+                Point2::new(0.65, 1.),
+                Point2::new(0.35, 1.),
+            ],
+            16./9.,
+            1.,
+        );
+        if let Some(sol) = solution {
+            let r_hat = Rotation3::from_matrix_unchecked(sol.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+            let t = Translation3::from(sol.t);
+            let tf = t * r_hat;
+            let ctf = tf.inverse();
+
+            let flip_yz = Matrix3::new(
+                1.0, 0.0, 0.0,
+                0.0, -1.0, 0.0,
+                0.0, 0.0, -1.0,
+            );
+
+            if let Some(iso) = iso {
+                let iso = iso.cast();
+                let rotation = Rotation3::from_matrix_unchecked(flip_yz * (iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz);
+                let translation = Translation3::from(flip_yz * ctf.translation.vector);
+
+                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
+
+                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
+            } else {
+                let rotation = Rotation3::from_matrix_unchecked(flip_yz * ctf.rotation.matrix() * flip_yz);
+                let translation = Translation3::from(flip_yz * ctf.translation.vector);
+
+                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
+
+                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
+            }
+        }
+    }
+    None
 }
 
 fn filter_and_create_point_tuples(
