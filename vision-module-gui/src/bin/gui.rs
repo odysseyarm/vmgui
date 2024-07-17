@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, plots_window, ScreenInfo, TestFrame};
+use vision_module_gui::{config_window, plots_window, ScreenInfo, ScreenCalibration, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -195,10 +195,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
-    let screen_info: Option<ScreenInfo> = get_app_root(AppDataType::UserConfig, &APP_INFO)
+    let screen_calibration: Option<ScreenCalibration> = get_app_root(AppDataType::UserConfig, &APP_INFO)
     .ok()
     .and_then(|config_dir| {
-        let screen_0_path = config_dir.join("ats-vision-tool").join("screen-info.json");
+        let screen_0_path = config_dir.join("screens").join("screen_0.json");
         if screen_0_path.exists() {
             File::open(screen_0_path).ok().and_then(|file| {
                 match serde_json::from_reader(file) {
@@ -210,20 +210,18 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
         } else {
-            error!("{} does not exist", screen_0_path.display());
             None
         }
     });
 
-    let screen_info = match screen_info {
-        Some(x) => {
-            info!("Screen info loaded");
-            x
+    match screen_calibration {
+        Some(_) => {
+            info!("Screen calibration loaded");
         },
         None => {
-            panic!("Screen info not loaded");
+            error!("Screen calibration not loaded");
         }
-    };
+    }
 
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
@@ -242,7 +240,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fv_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
         wfnf_realign: true,
-        screen_info,
+        screen_calibration,
     }));
 
     // Create a main_window into which controls can be placed

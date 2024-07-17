@@ -37,6 +37,42 @@ pub struct ScreenInfo {
     pub marker_points: [nalgebra::Point3<f64>; 6],
 }
 
+#[derive(serde::Deserialize)]
+pub struct Plane {
+    pub origin: nalgebra::Point3<f32>,
+    pub normal: nalgebra::Vector3<f32>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ScreenCalibration {
+    plane: Plane,
+    homography: nalgebra::Matrix3<f32>,
+    object_points: [nalgebra::Point3<f32>; 6],
+}
+
+impl ScreenCalibration {
+    fn xy_transform(&self) -> nalgebra::Transform3<f32> {
+        let z_axis = self.plane.normal.normalize();
+        let x_axis = nalgebra::Vector3::new(0.0, 1.0, 0.0).cross(&z_axis);
+        let x_axis = if x_axis.norm() == 0.0 {
+            nalgebra::Vector3::new(1.0, 0.0, 0.0).cross(&z_axis)
+        } else {
+            x_axis
+        };
+        let x_axis = x_axis.normalize();
+        let y_axis = z_axis.cross(&x_axis);
+
+        let rotation_matrix = Matrix3::from_columns(&[x_axis, y_axis, z_axis]);
+        let translation = -rotation_matrix * (self.plane.normal * self.plane.origin.coords.dot(&self.plane.normal) / self.plane.normal.norm_squared());
+
+        let mut transformation_matrix = nalgebra::Matrix4::identity();
+        transformation_matrix.fixed_view_mut::<3, 3>(0, 0).copy_from(&rotation_matrix);
+        transformation_matrix.fixed_view_mut::<3, 1>(0, 3).copy_from(&translation);
+
+        nalgebra::Transform3::from_matrix_unchecked(transformation_matrix)
+    }
+}
+
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f64>,

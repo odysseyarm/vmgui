@@ -12,7 +12,7 @@ use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Tra
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, Marker, MotState, ScreenInfo, TestFrame};
+use crate::{CloneButShorter, Marker, MotState, ScreenInfo, ScreenCalibration, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
@@ -103,7 +103,7 @@ pub struct MotRunner {
     pub ui_ctx: Context,
     pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
-    pub screen_info: ScreenInfo,
+    pub screen_calibration: Option<ScreenCalibration>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
