@@ -13,7 +13,7 @@ use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 use crate::consts::MARKER_PATTERN_LEN;
-use crate::{CloneButShorter, Marker, MotState, ScreenInfo, TestFrame};
+use crate::{CloneButShorter, Marker, MotState, ScreenInfo, ScreenCalibration, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
