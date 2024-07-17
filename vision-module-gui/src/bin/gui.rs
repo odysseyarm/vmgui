@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, plots_window, ScreenInfo, ScreenCalibration, TestFrame};
+use vision_module_gui::{config_window, plots_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -226,7 +226,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             // todo figure out values for a default screen
             panic!("Screen calibration not loaded");
         }
-    }
+    };
 
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
