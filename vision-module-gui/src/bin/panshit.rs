@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr};
 use ats_usb::packet::{Packet, PacketData, Port, Register};
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 // use multicast_socket::MulticastSocket;
@@ -48,7 +48,7 @@ fn main() {
     let start_time = std::time::Instant::now();
     let mut total_combined_marker_samples = 0;
 
-    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: SocketAddr) {
+    fn process_one(start_time: std::time::Instant, data: &mut Vec<u8>, _total_accel_samples: &mut u64, total_combined_marker_samples: &mut u64, addr: SocketAddr) {
         match Packet::parse(&mut data.as_slice()) {
             Ok(pkt) => {
                 println!("Received {:?} from {addr}", pkt);

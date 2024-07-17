@@ -200,7 +200,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mot_runner = Arc::new(Mutex::new(MotRunner {
         state,
         device: None,
-        markers_settings: Default::default(),
         record_impact: false,
         record_packets: false,
         datapoints: datapoints.c(),

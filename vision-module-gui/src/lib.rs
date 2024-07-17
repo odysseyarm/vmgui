@@ -5,7 +5,6 @@ use serde::Serialize;
 use ats_usb::packet::MotData;
 
 pub mod config_window;
-pub mod marker_config_window;
 pub mod layout_macro;
 pub mod mot_runner;
 pub mod run_raw_canvas;
@@ -14,6 +13,7 @@ pub mod test_canvas;
 pub mod custom_shapes;
 pub mod tracking_canvas_helpers;
 pub mod plots_window;
+pub mod consts;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
@@ -58,7 +58,7 @@ pub struct MotState {
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
-    pub fv_aimpoint_history: [Point2<f64>; 40],
+    pub fv_aimpoint_history: [Point2<f64>; 80],
     pub fv_aimpoint_history_index: usize,
 }
 
@@ -85,7 +85,7 @@ impl Default for MotState {
             fv_aimpoint_pva2d: Pva2d::new(0.2, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
-            fv_aimpoint_history: [Point2::new(0.0, 0.0); 40],
+            fv_aimpoint_history: [Point2::new(0.0, 0.0); 80],
             fv_aimpoint_history_index: 0,
         }
     }
