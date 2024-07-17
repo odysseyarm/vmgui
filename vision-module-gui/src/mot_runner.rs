@@ -2,22 +2,19 @@ use std::sync::Arc;
 use ahrs::Ahrs;
 use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates};
 use ats_cv::foveated::{identify_markers2, match3};
-use ats_cv::kalman::Pva2d;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
 use arrayvec::ArrayVec;
 use iui::concurrent::Context;
-use leptos_reactive::{RwSignal, SignalGetUntracked};
+use leptos_reactive::RwSignal;
 use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
-use tokio::time::{sleep, Instant};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 use crate::{CloneButShorter, Marker, MotState, TestFrame};
-use crate::marker_config_window::MarkersSettings;
 use ats_usb::device::UsbDevice;
-use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MarkerPattern, MotData, Packet};
+use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
 pub fn transform_aimpoint_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
     ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
@@ -90,17 +87,13 @@ pub fn sort_rectangle<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
     if a[2].x < a[3].x { a.swap(2, 3); }
 }
 
-pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>], pattern: MarkerPattern) {
-    match pattern {
-        MarkerPattern::Diamond => sort_diamond(a),
-        MarkerPattern::Rectangle => sort_rectangle(a),
-    }
+pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
+    sort_rectangle(a);
 }
 
 pub struct MotRunner {
     pub state: MotState,
     pub device: Option<UsbDevice>,
-    pub markers_settings: MarkersSettings,
     pub general_config: GeneralConfig,
     pub record_impact: bool,
     pub record_packets: bool,
@@ -146,6 +139,12 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
+// 3840x2160 (16:9) SVT
+pub const SCREEN_HEIGHT_METERS: f32 = 2.05105;
+
+// 1920x1080 abe's wall
+// pub const SCREEN_HEIGHT_METERS: f32 = 1.2838;
+
 fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (Matrix3<f32>, nalgebra::Point3<f32>, Option<Point2<f32>>) {
     let orientation = fv_state.filter.orientation;
     let position = fv_state.filter.position;
@@ -159,13 +158,7 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (
     let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
     let transmat = flip_yz * position;
 
-    // 1920x1080 abe's wall
-    let screen_height_meters = 1.2838;
-
-    // 3840x2160 (16:9) SVT
-    // let screen_height_meters: f64 = ???;
-
-    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(screen_height_meters, 16./9.);
+    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(SCREEN_HEIGHT_METERS, 16./9.);
 
     let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
         &rotmat,
@@ -337,7 +330,7 @@ fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<
 
     if points.len() > 3 {
         let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
-        sort_points(&mut rotated_points, MarkerPattern::Rectangle);
+        sort_points(&mut rotated_points);
         // todo rotating back is bad, select with slice instead
         let points = ats_cv::mot_rotate(&rotated_points, gravity_angle);
 

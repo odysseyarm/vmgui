@@ -8,10 +8,8 @@ use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, draw_text, solid_brush};
-use crate::marker_config_window::MarkersSettings;
 use crate::mot_runner::{rescale, MotRunner};
 use crate::MotState;
-
 
 pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &AreaDrawParams, raw: bool) {
     let ctx = &draw_params.context;
@@ -86,9 +84,9 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
 
     let gravity_rot = Rotation2::new(-gravity_angle);
     if raw {
-        draw_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
+        draw_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path);
     } else {
-        draw_not_raw(ctx, state, &runner.general_config, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &runner.markers_settings, &ch_path);
+        draw_not_raw(ctx, state, &runner.general_config, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path);
     }
 
     ch_path.end(ctx);
@@ -159,7 +157,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     ctx.stroke(&center_point_path, &brush, &stroke2);
 }
 
-fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
+fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, ch_path: &Path) {
     if let Some(nf_data) = state.nf_data.as_ref() {
         let mut nf_points = ArrayVec::<Point2<f64>,16>::new();
         for (i, mot_data) in nf_data.iter().enumerate() {
@@ -180,31 +178,6 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
 
             custom_shapes::draw_rectangle(ctx, &nf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
             custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({:.3}, {:.3}) id={}", mot_data.cx, mot_data.cy, i));
-        }
-
-        if nf_points.len() >= 4 {
-            let mut chosen = ats_cv::choose_rectangle_markers(&mut nf_points, state.screen_id, 300.);
-            let points = match chosen.as_mut() {
-                // Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
-                _ => &mut nf_points[..4],
-            };
-            // sort_points(points, runner.general_config.marker_pattern);
-
-            let top = markers_settings.views[0].marker_top.position;
-            let left = markers_settings.views[0].marker_left.position;
-            let bottom = markers_settings.views[0].marker_bottom.position;
-            let right = markers_settings.views[0].marker_right.position;
-            let transform = ats_cv::get_perspective_transform(
-                Point2::new(rescale(bottom.x as f64), rescale(bottom.y as f64)), // bottom
-                Point2::new(rescale(left.x as f64), rescale(left.y as f64)), // left
-                Point2::new(rescale(top.x as f64), rescale(top.y as f64)), // top
-                Point2::new(rescale(right.x as f64), rescale(right.y as f64)), // right
-                points[0], points[1],
-                points[2], points[3],
-            );
-            if let Some(transform) = transform {
-                draw_grid(ctx, &nf_grid_path, 10, 10, draw_tf.to_homogeneous() * Scale2::new(1./4095., 1./4095.).to_homogeneous() * transform);
-            }
         }
     }
     nf_path.end(ctx);
@@ -234,7 +207,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
     wf_path.end(ctx);
 }
 
-fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, markers_settings: &MarkersSettings, ch_path: &Path) {
+fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, ch_path: &Path) {
     nf_path.end(ctx);
     wf_path.end(ctx);
     let fx = config.camera_model_nf.p.m11 as f64;
@@ -296,34 +269,6 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
             None => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
         }
     }
-
-    if nf_points.len() >= 4 {
-        let mut points = nf_points.clone();
-        let mut chosen = ats_cv::choose_rectangle_markers(&mut points, state.screen_id, 300.);
-        let points = match chosen.as_mut() {
-            // Some(p) if runner.general_config.marker_pattern == MarkerPattern::Rectangle => p,
-            _ => &mut points[..4],
-        };
-        // sort_points(points, runner.general_config.marker_pattern);
-
-        let top = markers_settings.views[0].marker_top.position;
-        let left = markers_settings.views[0].marker_left.position;
-        let bottom = markers_settings.views[0].marker_bottom.position;
-        let right = markers_settings.views[0].marker_right.position;
-        let transform = ats_cv::get_perspective_transform(
-            Point2::new(rescale(bottom.x as f64), rescale(bottom.y as f64)), // bottom
-            Point2::new(rescale(left.x as f64), rescale(left.y as f64)), // left
-            Point2::new(rescale(top.x as f64), rescale(top.y as f64)), // top
-            Point2::new(rescale(right.x as f64), rescale(right.y as f64)), // right
-            points[0], points[1],
-            points[2], points[3],
-        );
-        if let Some(transform) = transform {
-            draw_grid(ctx, &nf_grid_path, 10, 10, draw_tf.to_homogeneous() * Scale2::new(1./4095., 1./4095.).to_homogeneous() * transform);
-        }
-    }
-    nf_grid_path.end(ctx);
-
 
     for p in marker_pattern::<f64>() { // eskf reprojections
         let position = state.fv_state.filter.position;

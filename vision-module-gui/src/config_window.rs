@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use ats_usb::{device::UsbDevice, packet::{GeneralConfig, GeneralWriteConfig, MarkerPattern, Port}};
+use ats_usb::{device::UsbDevice, packet::{GeneralWriteConfig, Port}};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;

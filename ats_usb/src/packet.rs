@@ -61,33 +61,6 @@ pub struct ReadRegisterResponse {
     pub data: u8,
 }
 
-#[derive(Copy, Clone, Debug, enumn::N, Default, PartialEq, Eq)]
-pub enum MarkerPattern {
-    #[default]
-    Diamond,
-    Rectangle,
-}
-
-impl MarkerPattern {
-    // in the same order as the sort functions
-    pub fn marker_positions(self) -> [Point2<f64>; 4] {
-        match self {
-            Self::Diamond => [
-                [0.5, 1.0].into(), // bottom
-                [0.0, 0.5].into(), // left
-                [0.5, 0.0].into(), // top
-                [1.0, 0.5].into(), // right
-            ],
-            Self::Rectangle => [
-                [0.35, 0.0].into(), // top left
-                [0.65, 0.0].into(), // top right
-                [0.65, 1.0].into(), // bottom right
-                [0.35, 1.0].into(), // bottom left
-            ],
-        }
-    }
-}
-
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
 pub struct GeneralConfig {
