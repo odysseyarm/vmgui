@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, plots_window, ScreenInfo, ScreenCalibration, TestFrame};
+use vision_module_gui::{config_window, plots_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -35,6 +35,8 @@ use parking_lot::Mutex;
 use vision_module_gui::consts::*;
 
 use app_dirs2::*;
+
+use ats_cv::ScreenCalibration;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -195,7 +197,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
-    let screen_calibration: Option<ScreenCalibration> = get_app_root(AppDataType::UserConfig, &APP_INFO)
+    let screen_calibration: Option<ScreenCalibration<f64>> = get_app_root(AppDataType::UserConfig, &APP_INFO)
     .ok()
     .and_then(|config_dir| {
         let screen_0_path = config_dir.join("screens").join("screen_0.json");
@@ -214,14 +216,17 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    match screen_calibration {
-        Some(_) => {
+    let screen_calibration = match screen_calibration {
+        Some(x) => {
             info!("Screen calibration loaded");
+            x
         },
         None => {
             error!("Screen calibration not loaded");
+            // todo figure out values for a default screen
+            panic!("Screen calibration not loaded");
         }
-    }
+    };
 
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
