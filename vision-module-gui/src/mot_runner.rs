@@ -12,8 +12,7 @@ use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Tra
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::consts::MARKER_PATTERN_LEN;
-use crate::{CloneButShorter, Marker, MotState, ScreenInfo, ScreenCalibration, TestFrame};
+use crate::{CloneButShorter, Marker, MotState, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
@@ -329,6 +328,69 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             }
         }
     }
+}
+
+fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f32>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>, screen_calibration: &ScreenCalibration<f64>) -> Option<Point2<f64>> {
+    let fx = intrinsics.p.m11 * (4095./98.);
+    let fy = intrinsics.p.m22 * (4095./98.);
+
+    let gravity_vec = orientation.inverse_transform_vector(&Vector3::z());
+	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.;
+
+    if points.len() > 3 {
+        let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
+        sort_points(&mut rotated_points);
+        // todo rotating back is bad, select with slice instead
+        let points = ats_cv::mot_rotate(&rotated_points, gravity_angle);
+
+        let projections = ats_cv::calculate_projections(
+            &points,
+            // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
+            Vector2::new(fx as f64, fy as f64),
+            Vector2::new(4095., 4095.),
+        );
+        let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
+            projections.as_slice(),
+            &[
+                Point2::new(0.35, 0.),
+                Point2::new(0.65, 0.),
+                Point2::new(0.65, 1.),
+                Point2::new(0.35, 1.),
+            ],
+            16./9.,
+            1.,
+        );
+        if let Some(sol) = solution {
+            let r_hat = Rotation3::from_matrix_unchecked(sol.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
+            let t = Translation3::from(sol.t);
+            let tf = t * r_hat;
+            let ctf = tf.inverse();
+
+            let flip_yz = Matrix3::new(
+                1.0, 0.0, 0.0,
+                0.0, -1.0, 0.0,
+                0.0, 0.0, -1.0,
+            );
+
+            if let Some(iso) = iso {
+                let iso = iso.cast();
+                let rotation = Rotation3::from_matrix_unchecked(flip_yz * (iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz);
+                let translation = Translation3::from(flip_yz * ctf.translation.vector);
+
+                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
+
+                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
+            } else {
+                let rotation = Rotation3::from_matrix_unchecked(flip_yz * ctf.rotation.matrix() * flip_yz);
+                let translation = Translation3::from(flip_yz * ctf.translation.vector);
+
+                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
+
+                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
+            }
+        }
+    }
+    None
 }
 
 fn filter_and_create_point_tuples(
