@@ -12,7 +12,7 @@ use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, Marker, MotState, TestFrame};
+use crate::{CloneButShorter, Marker, MotState, ScreenInfo, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
@@ -103,6 +103,7 @@ pub struct MotRunner {
     pub ui_ctx: Context,
     pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
+    pub screen_info: ScreenInfo,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -139,17 +140,7 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-// 3840x2160 (16:9) SVT
-pub const SCREEN_WIDTH_METERS: f64 = 3.645;
-pub const SCREEN_HEIGHT_METERS: f64 = 2.05105;
-
-// 1920x1080 abe's wall
-// pub const SCREEN_WIDTH_METERS: f64 = 1.7272;
-// pub const SCREEN_HEIGHT_METERS: f64 = 1.2838;
-
-pub const SCREEN_RATIO: f64 = SCREEN_WIDTH_METERS / SCREEN_HEIGHT_METERS;
-
-fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (Matrix3<f64>, nalgebra::Point3<f64>, Option<Point2<f64>>) {
+fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_info: ScreenInfo) -> (Matrix3<f64>, nalgebra::Point3<f64>, Option<Point2<f64>>) {
     let orientation = fv_state.filter.orientation;
     let position = fv_state.filter.position;
 
@@ -162,7 +153,8 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState) -> (
     let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
     let transmat = flip_yz * position;
 
-    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(SCREEN_HEIGHT_METERS, SCREEN_RATIO);
+    let screen_ratio = screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
+    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
 
     let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
         &rotmat.cast(),
@@ -229,7 +221,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast(), [SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]) {
+                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
@@ -247,9 +239,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
             let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
-            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), [SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]);
+            let screen_info = runner.screen_info.clone();
+            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), screen_info.screen_dimensions_meters, screen_info.marker_points);
 
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
 
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
@@ -257,7 +250,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 runner.state.fv_aimpoint = fv_aimpoint.cast();
             }
 
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), [SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]);
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points);
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
                 .map(|(markers, reproj)| (
                     markers.into_iter().collect(),
@@ -363,15 +356,17 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
+            let screen_info = runner.screen_info.clone();
+
             if let Some(prev_timestamp) = prev_timestamp {
                 let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
                 // println!("elapsed: {}", elapsed);
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed), [SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]);
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed), screen_info.screen_dimensions_meters);
 
                 let sample_period = runner.state.madgwick.sample_period_mut();
                 *sample_period = elapsed as f32/1_000_000.;
             } else {
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32), [SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]);
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32), screen_info.screen_dimensions_meters);
             }
             prev_timestamp = Some(accel.timestamp);
 
@@ -380,7 +375,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state);
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
 
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();

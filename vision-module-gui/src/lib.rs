@@ -30,6 +30,13 @@ pub struct TestFrame {
     pub fv_aimpoint_y: Option<f64>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug)]
+pub struct ScreenInfo {
+    pub screen_dimensions_meters: [f64; 2],
+    pub marker_points: [nalgebra::Point3<f64>; 6],
+}
+
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f64>,

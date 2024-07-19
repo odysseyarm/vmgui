@@ -2963,6 +2963,7 @@ dependencies = [
  "num-complex 0.4.6",
  "num-rational 0.4.2",
  "num-traits",
+ "serde",
  "simba 0.8.1",
  "typenum",
 ]
@@ -3096,6 +3097,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -4540,13 +4542,13 @@ dependencies = [
  "pin-project",
  "plotters",
  "serde",
+ "serde_json",
  "serial2",
  "serialport",
  "socket2",
  "sqpnp",
  "tokio",
  "tokio-stream",
- "toml",
  "tracing",
  "tracing-subscriber",
  "ui-sys",
