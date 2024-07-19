@@ -33,8 +33,6 @@ pub struct TestFrame {
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f64>,
-    pub nf_aimpoint: Point2<f64>,
-    pub wf_aimpoint: Point2<f64>,
 
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
@@ -66,8 +64,6 @@ impl Default for MotState {
     fn default() -> Self {
         Self {
             fv_aimpoint: Point2::new(0.0, 0.0),
-            nf_aimpoint: Point2::new(0.0, 0.0),
-            wf_aimpoint: Point2::new(0.0, 0.0),
             nf_data: None,
             wf_data: None,
             screen_id: 0,
