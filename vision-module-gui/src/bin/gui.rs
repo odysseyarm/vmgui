@@ -518,7 +518,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             {
                 let fv_aimpoint = state.fv_aimpoint;
-                let fv_aimpoint = fv_aimpoint;
                 frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
             }
