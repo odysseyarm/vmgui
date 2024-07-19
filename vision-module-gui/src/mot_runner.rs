@@ -140,20 +140,35 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-// 3840x2160 (16:9) SVT
-pub const SCREEN_HEIGHT_METERS: f32 = 2.05105;
-
-// 1920x1080 abe's wall
-// pub const SCREEN_HEIGHT_METERS: f32 = 1.2838;
+// fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_calibration: &ScreenCalibration<f64>) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
+//     let orientation = fv_state.filter.orientation.cast();
+//     let position = fv_state.filter.position.cast();
+// 
+//     let flip_yz = Matrix3::new(
+//         1., 0., 0.,
+//         0., -1., 0.,
+//         0., 0., -1.,
+//     );
+// 
+//     let rot = Rotation3::from_matrix_unchecked(flip_yz * orientation.to_rotation_matrix() * flip_yz);
+//     let trans = Translation3::from(flip_yz * position);
+// 
+//     let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
+// 
+//     let fv_aimpoint = ats_cv::calculate_aimpoint(
+//         &isometry,
+//         screen_calibration,
+//     );
+// 
+//     (rot, trans, fv_aimpoint)
+// }
 
 fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_calibration: &ScreenCalibration<f64>) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
     let orientation = fv_state.filter.orientation.cast();
     let position = fv_state.filter.position.cast();
 
-    let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
-
-    let rot = Rotation3::from_matrix_unchecked(flip_yz * orientation.to_rotation_matrix() * flip_yz);
-    let trans = Translation3::from(flip_yz * position);
+    let rot = orientation.to_rotation_matrix();
+    let trans = Translation3::from(position);
 
     let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
 
@@ -161,6 +176,15 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, scre
         &isometry,
         screen_calibration,
     );
+
+    let flip_yz = Matrix3::new(
+        1., 0., 0.,
+        0., -1., 0.,
+        0., 0., -1.,
+    );
+ 
+    let rot = Rotation3::from_matrix_unchecked(flip_yz * rot * flip_yz);
+    let trans = Translation3::from(flip_yz * trans.vector);
 
     (rot, trans, fv_aimpoint)
 }
@@ -248,6 +272,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.translation_mat = transmat.vector.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
                 runner.state.fv_aimpoint = fv_aimpoint.cast();
+                println!("fv_aimpoint: {:?}", fv_aimpoint);
             }
 
             if let Some(x) = calculate_individual_aimpoint(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf, &runner.screen_calibration) {
