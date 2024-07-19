@@ -409,7 +409,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 };
 
                 {
-                    let fv_aimpoint = runner.state.fv_aimpoint_history[(runner.state.fv_aimpoint_history_index + 1) % runner.state.fv_aimpoint_history.len()];
+                    let fv_aimpoint = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
                     frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                     frame.fv_aimpoint_y = Some(fv_aimpoint.y);
                 }
