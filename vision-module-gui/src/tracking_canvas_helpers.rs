@@ -8,7 +8,7 @@ use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, draw_text, solid_brush};
-use crate::mot_runner::{rescale, MotRunner};
+use crate::mot_runner::{rescale, MotRunner, SCREEN_HEIGHT_METERS, SCREEN_WIDTH_METERS};
 use crate::MotState;
 
 pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &AreaDrawParams, raw: bool) {
@@ -270,7 +270,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         }
     }
 
-    for p in marker_pattern::<f64>() { // eskf reprojections
+    for p in marker_pattern::<f64>([SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]) { // eskf reprojections
         let position = state.fv_state.filter.position;
         let orientation = state.fv_state.filter.orientation;
         let reproj_tf = Isometry3::from_parts(position.into(), orientation);
@@ -288,7 +288,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     }
     let pnp_iso = ats_cv::telemetry::pnp_solutions().get_last();
     if let Some(pnp_iso) = pnp_iso {
-        for p in marker_pattern::<f64>() { // pnp reprojections
+        for p in marker_pattern::<f64>([SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]) { // pnp reprojections
             let reproj_tf = pnp_iso.inverse();
             let pnp_reproj_path = Path::new(ctx, FillMode::Winding);
             let p = reproj_tf.cast().inverse_transform_point(&p.into());

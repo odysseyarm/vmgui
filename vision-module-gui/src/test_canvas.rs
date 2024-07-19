@@ -5,7 +5,7 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, 
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
-use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
+use crate::custom_shapes::{draw_crosshair, draw_text};
 use crate::mot_runner::MotRunner;
 
 pub struct TestCanvas {
@@ -35,8 +35,6 @@ impl AreaHandler for TestCanvas {
         }));
 
         let fv_ch_path = Path::new(ctx, FillMode::Winding);
-        let nf_ch_path = Path::new(ctx, FillMode::Winding);
-        let wf_ch_path = Path::new(ctx, FillMode::Winding);
         let runner = self.runner.lock();
         let state = &runner.state;
         {
@@ -48,7 +46,7 @@ impl AreaHandler for TestCanvas {
             &ctx,
             20.0,
             20.0,
-            &format!("offset = ({:.4}, {:.4})", runner.nf_offset.x, runner.nf_offset.y),
+            &format!("offset = ({:.4}, {:.4})", runner.fv_offset.x, runner.fv_offset.y),
         );
         draw_text(
             &ctx,
@@ -56,36 +54,6 @@ impl AreaHandler for TestCanvas {
             60.0,
             &format!("screen_id = {}", runner.state.screen_id),
         );
-        {
-            let aimpoint = state.nf_aimpoint;
-            let p = Scale2::new(draw_params.area_width, draw_params.area_height) * (aimpoint + runner.nf_offset);
-            draw_crosshair(&ctx, &nf_ch_path, p.x, p.y, 15.);
-            draw_text(&ctx, p.x+20.0, p.y+20.0, format!("({:.4}, {:.4})", p.x, p.y).as_str());
-        }
-        nf_ch_path.end(ctx);
-        {
-            let aimpoint = state.wf_aimpoint;
-            draw_crosshair(&ctx, &wf_ch_path, aimpoint.x*draw_params.area_width, aimpoint.y*draw_params.area_height, 15.);
-        }
-        wf_ch_path.end(ctx);
-
-        let nf_grid_path = Path::new(ctx, FillMode::Winding);
-
-        // todo lol... i know
-        let transform = ats_cv::get_perspective_transform(
-            Point2::new(draw_params.area_width/2.0, draw_params.area_height as f64), // bottom
-            Point2::new(0.0, draw_params.area_height/2.0), // left
-            Point2::new(draw_params.area_width/2.0, 0.0), // top
-            Point2::new(draw_params.area_width as f64, draw_params.area_height/2.0), // right
-            Point2::new(0.5, 1.), // bottom
-            Point2::new(0., 0.5), // left
-            Point2::new(0.5, 0.), // top
-            Point2::new(1., 0.5), // right
-        );
-        if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
-            draw_grid(ctx, &nf_grid_path, 10, 10, transform);
-        }
-        nf_grid_path.end(ctx);
 
         let stroke = StrokeParams {
             cap: 0, // Bevel
@@ -113,41 +81,6 @@ impl AreaHandler for TestCanvas {
             dashes: vec![],
             dash_phase: 0.,
         };
-
-        let brush = Brush::Solid(SolidBrush {
-            r: 1.,
-            g: 0.,
-            b: 0.,
-            a: 1.,
-        });
-
-        ctx.stroke(&nf_ch_path, &brush, &stroke);
-
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.,
-            g: 0.,
-            b: 1.,
-            a: 1.,
-        });
-
-        ctx.stroke(&wf_ch_path, &brush, &stroke);
-
-        // Grid
-        let brush = Brush::Solid(SolidBrush {
-            r: 0.5,
-            g: 0.,
-            b: 0.,
-            a: 1.,
-        });
-        let stroke = StrokeParams {
-            cap: 0, // Bevel
-            join: 0, // Flat
-            thickness: 1.,
-            miter_limit: 0.,
-            dashes: vec![],
-            dash_phase: 0.,
-        };
-        ctx.stroke(&nf_grid_path, &brush, &stroke);
     }
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
@@ -160,19 +93,19 @@ impl AreaHandler for TestCanvas {
             slow_speed = 0.0001;
         }
         match area_key_event.ext_key as _ {
-            ui_sys::uiExtKeyUp => self.runner.lock().nf_offset.y -= slow_speed,
-            ui_sys::uiExtKeyDown => self.runner.lock().nf_offset.y += slow_speed,
-            ui_sys::uiExtKeyLeft => self.runner.lock().nf_offset.x -= slow_speed,
-            ui_sys::uiExtKeyRight => self.runner.lock().nf_offset.x += slow_speed,
+            ui_sys::uiExtKeyUp => self.runner.lock().fv_offset.y -= slow_speed,
+            ui_sys::uiExtKeyDown => self.runner.lock().fv_offset.y += slow_speed,
+            ui_sys::uiExtKeyLeft => self.runner.lock().fv_offset.x -= slow_speed,
+            ui_sys::uiExtKeyRight => self.runner.lock().fv_offset.x += slow_speed,
             ui_sys::uiExtKeyEscape => (self.on_closing)(&mut self.window),
             _ => match area_key_event.key {
-                b'w' => self.runner.lock().nf_offset.y -= 0.1,
-                b's' => self.runner.lock().nf_offset.y += 0.1,
-                b'a' => self.runner.lock().nf_offset.x -= 0.1,
-                b'd' => self.runner.lock().nf_offset.x += 0.1,
+                b'w' => self.runner.lock().fv_offset.y -= 0.1,
+                b's' => self.runner.lock().fv_offset.y += 0.1,
+                b'a' => self.runner.lock().fv_offset.x -= 0.1,
+                b'd' => self.runner.lock().fv_offset.x += 0.1,
                 b'q' => (self.on_closing)(&mut self.window),
                 // Backspace
-                8 => self.runner.lock().nf_offset = Default::default(),
+                8 => self.runner.lock().fv_offset = Default::default(),
                 _ => (),
             }
         }
@@ -184,9 +117,9 @@ impl AreaHandler for TestCanvas {
             let Some(w) = self.last_draw_width else { return };
             let Some(h) = self.last_draw_height else { return };
             let mut state = self.runner.lock();
-            let aimpoint = state.state.nf_aimpoint;
-            state.nf_offset.x = mouse_event.x / w - aimpoint.x;
-            state.nf_offset.y = mouse_event.y / h - aimpoint.y;
+            let aimpoint = state.state.fv_aimpoint;
+            state.fv_offset.x = mouse_event.x / w - aimpoint.x;
+            state.fv_offset.y = mouse_event.y / h - aimpoint.y;
         }
     }
 }

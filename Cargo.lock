@@ -1381,9 +1381,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "324c74f2155653c90b04f25b2a47a8a631360cb908f92a772695f430c7e31052"
+checksum = "2aba8f4e9906c7ce3c73463f62a7f0c65183ada1a2d47e397cc8810827f9694f"
 dependencies = [
  "jobserver",
  "libc",
@@ -1834,9 +1834,9 @@ checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 
 [[package]]
 name = "embed-resource"
-version = "2.4.2"
+version = "2.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6985554d0688b687c5cb73898a34fbe3ad6c24c58c238a4d91d5e840670ee9d"
+checksum = "4edcacde9351c33139a41e3c97eb2334351a81a2791bebb0b243df837128f602"
 dependencies = [
  "cc",
  "memchr",
@@ -3585,7 +3585,7 @@ checksum = "43d84d1d7a6ac92673717f9f6d1518374ef257669c24ebc5ac25d5033828be58"
 [[package]]
 name = "pyo3"
 version = "0.23.0-dev"
-source = "git+https://github.com/PyO3/pyo3.git#f635afcae511e3b25aa33f657731390996905ad9"
+source = "git+https://github.com/PyO3/pyo3.git#5ac5cef965ed50ba8e0a17e8cfed31dc5bd22072"
 dependencies = [
  "cfg-if",
  "indoc",
@@ -3602,7 +3602,7 @@ dependencies = [
 [[package]]
 name = "pyo3-build-config"
 version = "0.23.0-dev"
-source = "git+https://github.com/PyO3/pyo3.git#f635afcae511e3b25aa33f657731390996905ad9"
+source = "git+https://github.com/PyO3/pyo3.git#5ac5cef965ed50ba8e0a17e8cfed31dc5bd22072"
 dependencies = [
  "once_cell",
  "target-lexicon",
@@ -3611,7 +3611,7 @@ dependencies = [
 [[package]]
 name = "pyo3-ffi"
 version = "0.23.0-dev"
-source = "git+https://github.com/PyO3/pyo3.git#f635afcae511e3b25aa33f657731390996905ad9"
+source = "git+https://github.com/PyO3/pyo3.git#5ac5cef965ed50ba8e0a17e8cfed31dc5bd22072"
 dependencies = [
  "libc",
  "pyo3-build-config",
@@ -3620,7 +3620,7 @@ dependencies = [
 [[package]]
 name = "pyo3-macros"
 version = "0.23.0-dev"
-source = "git+https://github.com/PyO3/pyo3.git#f635afcae511e3b25aa33f657731390996905ad9"
+source = "git+https://github.com/PyO3/pyo3.git#5ac5cef965ed50ba8e0a17e8cfed31dc5bd22072"
 dependencies = [
  "proc-macro2",
  "pyo3-macros-backend",
@@ -3631,7 +3631,7 @@ dependencies = [
 [[package]]
 name = "pyo3-macros-backend"
 version = "0.23.0-dev"
-source = "git+https://github.com/PyO3/pyo3.git#f635afcae511e3b25aa33f657731390996905ad9"
+source = "git+https://github.com/PyO3/pyo3.git#5ac5cef965ed50ba8e0a17e8cfed31dc5bd22072"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -4197,18 +4197,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.62"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2675633b1499176c2dff06b0856a27976a8f9d436737b4cf4f312d4d91d8bbb"
+checksum = "c0342370b38b6a11b6cc11d6a805569958d54cfa061a29969c3b5ce2ea405724"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.62"
+version = "1.0.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d20468752b09f49e909e55a5d338caa8bedf615594e9d80bc4c565d30faf798c"
+checksum = "a4558b58466b9ad7ca0f102865eccc95938dca1a74a856f2b57b6629050da261"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4281,14 +4281,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.14"
+version = "0.8.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f49eb2ab21d2f26bd6db7bf383edc527a7ebaee412d17af4d40fdccd442f335"
+checksum = "ac2caab0bf757388c6c0ae23b3293fdb463fee59434529014f85e3263b995c28"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.15",
+ "toml_edit 0.22.16",
 ]
 
 [[package]]
@@ -4313,15 +4313,15 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.15"
+version = "0.22.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59a3a72298453f564e2b111fa896f8d07fabb36f51f06d7e875fc5e0b5a3ef1"
+checksum = "278f3d518e152219c994ce877758516bca5e118eaed6996192a774fb9fbf0788"
 dependencies = [
  "indexmap",
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.13",
+ "winnow 0.6.14",
 ]
 
 [[package]]
@@ -5242,9 +5242,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.13"
+version = "0.6.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59b5e5f6c299a3c7890b876a2a587f3115162487e704907d9b6cd29473052ba1"
+checksum = "374ec40a2d767a3c1b4972d9475ecd557356637be906f2cb3f7fe17a6eb5e22f"
 dependencies = [
  "memchr",
 ]
