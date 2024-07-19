@@ -5,7 +5,7 @@ use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, 
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
 use tracing::debug;
-use crate::custom_shapes::{draw_crosshair, draw_text};
+use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
 use crate::mot_runner::MotRunner;
 
 pub struct TestCanvas {
@@ -55,6 +55,24 @@ impl AreaHandler for TestCanvas {
             &format!("screen_id = {}", runner.state.screen_id),
         );
 
+        let grid_path = Path::new(ctx, FillMode::Winding);
+
+        // todo lol... i know
+        let transform = ats_cv::get_perspective_transform(
+            Point2::new(draw_params.area_width/2.0, draw_params.area_height as f64), // bottom
+            Point2::new(0.0, draw_params.area_height/2.0), // left
+            Point2::new(draw_params.area_width/2.0, 0.0), // top
+            Point2::new(draw_params.area_width as f64, draw_params.area_height/2.0), // right
+            Point2::new(0.5, 1.), // bottom
+            Point2::new(0., 0.5), // left
+            Point2::new(0.5, 0.), // top
+            Point2::new(1., 0.5), // right
+        );
+        if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
+            draw_grid(ctx, &grid_path, 10, 10, transform);
+        }
+        grid_path.end(ctx);
+
         let stroke = StrokeParams {
             cap: 0, // Bevel
             join: 0, // Flat
@@ -81,6 +99,23 @@ impl AreaHandler for TestCanvas {
             dashes: vec![],
             dash_phase: 0.,
         };
+
+        // Grid
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.5,
+            g: 0.,
+            b: 0.,
+            a: 1.,
+        });
+        let stroke = StrokeParams {
+            cap: 0, // Bevel
+            join: 0, // Flat
+            thickness: 1.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
+        ctx.stroke(&grid_path, &brush, &stroke);
     }
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {

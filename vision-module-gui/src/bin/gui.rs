@@ -23,7 +23,7 @@ use tracing::Level;
 use tracing_subscriber::EnvFilter;
 use ats_usb::packet::GeneralConfig;
 use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, plots_window, TestFrame};
+use vision_module_gui::{config_window, plots_window, ScreenInfo, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
 use tokio::task::AbortHandle;
 use iui::controls::{Area, HorizontalBox, FileTypeFilter};
@@ -31,6 +31,10 @@ use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_raw_canvas::RunRawCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
 use parking_lot::Mutex;
+
+use vision_module_gui::consts::*;
+
+use app_dirs2::*;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -191,11 +195,39 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
+    let screen_info: Option<ScreenInfo> = get_app_root(AppDataType::UserConfig, &APP_INFO)
+    .ok()
+    .and_then(|config_dir| {
+        let screen_0_path = config_dir.join("ats-vision-tool").join("screen-info.json");
+        if screen_0_path.exists() {
+            File::open(screen_0_path).ok().and_then(|file| {
+                match serde_json::from_reader(file) {
+                    Ok(calibration) => Some(calibration),
+                    Err(e) => {
+                        error!("Failed to deserialize screen calibration: {}", e);
+                        None
+                    }
+                }
+            })
+        } else {
+            None
+        }
+    });
+
+    let screen_info = match screen_info {
+        Some(x) => {
+            info!("Screen info loaded");
+            x
+        },
+        None => {
+            panic!("Screen info not loaded");
+        }
+    };
+
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
     let testing = RwSignal::new(false);
     let recording = RwSignal::new(false);
-    let marker_offset_calibrating = RwSignal::new(false);
 
     let mot_runner = Arc::new(Mutex::new(MotRunner {
         state,
@@ -209,6 +241,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fv_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
         wfnf_realign: true,
+        screen_info,
     }));
 
     // Create a main_window into which controls can be placed
@@ -221,13 +254,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio_handle,
     );
     let mut plots_window = plots_window::plots_window(&ui);
-    // let mut marker_config_win = marker_config_window::marker_config_window(
-    //     &ui,
-    //     marker_offset_calibrating,
-    //     // marker_pattern_memo,
-    //     mot_runner.c(),
-    // );
-
 
     let mut test_win = iui::prelude::Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
@@ -235,7 +261,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_win_on_closing = move |_: &mut _| {
         testing.set(false);
-        marker_offset_calibrating.set(false);
     };
     test_win.on_closing(&ui, test_win_on_closing.c());
     let test_area = Area::new(&ui, Box::new(TestCanvas {
@@ -404,7 +429,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     create_effect({
         let mot_runner = mot_runner.c();
         move |abort_handle: Option<Option<AbortHandle>>| {
-            if tracking_raw.get() || tracking.get() || testing.get() || marker_offset_calibrating.get() {
+            if tracking_raw.get() || tracking.get() || testing.get() {
                 if let Some(Some(abort_handle)) = abort_handle {
                     // The mot_runner task is already running
                     Some(abort_handle)
@@ -462,7 +487,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let form_vbox = form_vbox.c();
         let test_win = test_win.c();
         move |_| {
-            if testing.get() || marker_offset_calibrating.get() {
+            if testing.get() {
                 form_vbox.c().show(&ui);
                 test_win.c().show(&ui);
             } else {
@@ -665,7 +690,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             if tracking.get_untracked() {
                 run_area.queue_redraw_all(&ui);
             }
-            if testing.get_untracked() || marker_offset_calibrating.get_untracked() {
+            if testing.get_untracked() {
                 test_area.queue_redraw_all(&ui);
             }
             true

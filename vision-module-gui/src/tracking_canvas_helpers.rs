@@ -1,14 +1,13 @@
 use std::f64::consts::PI;
 use std::sync::Arc;
 use arrayvec::ArrayVec;
-use ats_cv::foveated::marker_pattern;
 use nalgebra::{Isometry3, Point2, Point3, Rotation2, Scale2, Transform2, Translation2, Vector2, Vector3};
 use parking_lot::Mutex;
 use iui::controls::{Area, AreaDrawParams};
 use iui::draw::{Brush, DrawContext, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_grid, draw_marker, draw_square, draw_text, solid_brush};
-use crate::mot_runner::{rescale, MotRunner, SCREEN_HEIGHT_METERS, SCREEN_WIDTH_METERS};
+use crate::custom_shapes::{self, draw_crosshair_rotated, draw_diamond, draw_square, draw_text, solid_brush};
+use crate::mot_runner::{MotRunner};
 use crate::MotState;
 
 pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &AreaDrawParams, raw: bool) {
@@ -86,7 +85,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     if raw {
         draw_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path);
     } else {
-        draw_not_raw(ctx, state, &runner.general_config, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path);
+        draw_not_raw(ctx, state, &runner.general_config, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path, &runner.screen_info.marker_points);
     }
 
     ch_path.end(ctx);
@@ -207,14 +206,14 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
     wf_path.end(ctx);
 }
 
-fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, ch_path: &Path) {
+fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::GeneralConfig, draw_tf: Transform2<f64>, gravity_rot: Rotation2<f64>, nf_path: &Path, wf_path: &Path, nf_grid_path: &Path, ch_path: &Path, marker_points: &[Point3<f64>]) {
     nf_path.end(ctx);
     wf_path.end(ctx);
     let fx = config.camera_model_nf.p.m11 as f64;
     let fy = config.camera_model_nf.p.m22 as f64;
     let normalized_scale = Scale2::new(fx / 98.0, fy / 98.0);
 
-    let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
+    // let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
     let thin = StrokeParams {
         cap: 0, // Bevel
         join: 0, // Flat
@@ -270,12 +269,12 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         }
     }
 
-    for p in marker_pattern::<f64>([SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]) { // eskf reprojections
+    for p in marker_points { // eskf reprojections
         let position = state.fv_state.filter.position;
         let orientation = state.fv_state.filter.orientation;
         let reproj_tf = Isometry3::from_parts(position.into(), orientation);
         let fv_reproj_path = Path::new(ctx, FillMode::Winding);
-        let p = reproj_tf.cast().inverse_transform_point(&p.into());
+        let p = reproj_tf.cast().inverse_transform_point(p);
         let p = p / p.z;
         // todo don't use hardcoded 4095x4095 res assumption
         let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
@@ -288,10 +287,10 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     }
     let pnp_iso = ats_cv::telemetry::pnp_solutions().get_last();
     if let Some(pnp_iso) = pnp_iso {
-        for p in marker_pattern::<f64>([SCREEN_WIDTH_METERS, SCREEN_HEIGHT_METERS]) { // pnp reprojections
+        for p in marker_points {
             let reproj_tf = pnp_iso.inverse();
             let pnp_reproj_path = Path::new(ctx, FillMode::Winding);
-            let p = reproj_tf.cast().inverse_transform_point(&p.into());
+            let p = reproj_tf.cast().inverse_transform_point(p);
             let p = p / p.z;
             // todo don't use hardcoded 4095x4095 res assumption
             let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
