@@ -66,10 +66,10 @@ impl AreaHandler for MainCanvas {
 
         gyro_chart(&subplots[0]);
         accel_chart(&subplots[1]);
-        gravity_chart(&subplots[2]);
-        local_gravity_chart(&subplots[5]);
+        eskf_mismatch_chart(&subplots[2]);
         apparent_accel_chart(&subplots[3]);
         accel_bias_chart(&subplots[4]);
+        local_gravity_chart(&subplots[5]);
         velocity_uncertainty_chart(&subplots[6]);
         velocity_chart(&subplots[7]);
         // pnp_position_chart(&subplots[8]);
@@ -225,6 +225,22 @@ fn orientation_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shif
     );
 }
 
+fn eskf_mismatch_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    let series = ats_cv::telemetry::eskf_mismatch_count();
+    scalar_f64_chart(
+        area,
+        "ESKF/P3P Mismatch Count",
+        series
+            .values
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|p| f64::from(p.1)),
+        series.size,
+        0.0..10.0,
+    );
+}
+
 fn vec3_f32_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>, caption: &str, series: &Series<Vector3<f32>>, default_range: Range<f32>) {
     let data = series.values.lock().unwrap();
     let min = data
@@ -306,6 +322,43 @@ fn vec3_f64_chart<DB: DrawingBackend>(
     chart.draw_series(LineSeries::new(x, &RED)).unwrap();
     chart.draw_series(LineSeries::new(y, &GREEN)).unwrap();
     chart.draw_series(LineSeries::new(z, &BLUE)).unwrap();
+}
+
+fn scalar_f64_chart<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    caption: &str,
+    data: impl IntoIterator<Item = f64> + Clone,
+    series_size: usize,
+    default_range: Range<f64>,
+) {
+    let min = data
+        .clone()
+        .into_iter()
+        .min_by(f64::total_cmp)
+        .unwrap_or(default_range.start)
+        .min(default_range.start);
+    let max = data
+        .clone()
+        .into_iter()
+        .max_by(f64::total_cmp)
+        .unwrap_or(default_range.end)
+        .max(default_range.end);
+
+    let mut chart = ChartBuilder::on(area)
+        .caption(caption, ("sans-serif", 12))
+        .margin(20)
+        // .set_left_and_bottom_label_area_size(30)
+        .set_label_area_size(LabelAreaPosition::Left, 30)
+        .build_cartesian_2d(0..series_size, min..max)
+        .unwrap();
+    chart
+        .configure_mesh()
+        .disable_x_mesh()
+        .max_light_lines(1)
+        .draw()
+        .unwrap();
+
+    chart.draw_series(LineSeries::new(data.into_iter().enumerate(), &RED)).unwrap();
 }
 
 fn position_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
