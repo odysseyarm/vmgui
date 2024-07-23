@@ -417,7 +417,7 @@ struct MainCanvas {
 const GRID_WIDTH: f64 = 140.0;
 const GRID_HEIGHT: f64 = 80.0;
 // const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 360.0);
-const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 240.0);
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 300.0);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {

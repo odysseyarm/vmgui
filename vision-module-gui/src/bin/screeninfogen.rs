@@ -34,12 +34,12 @@ where
 
     // for serious wall
     [
-        Point3::from([F::from_f64(-1.0922).unwrap(), F::from_f64(-0.7366).unwrap(), _d]),
-        Point3::from([F::from_f64(0.25 - 0.5).unwrap() * w, F::from_f64(0.7874).unwrap(), _d]),
-        Point3::from([F::from_f64(0.75 - 0.5).unwrap() * w, F::from_f64(0.6858).unwrap(), _d]),
-        Point3::from([F::from_f64(-0.1524).unwrap(), F::from_f64(-0.635).unwrap(), _d]),
-        Point3::from([F::from_f64(0.7366).unwrap(), F::from_f64(-0.8636).unwrap(), _d]),
-        Point3::from([F::from_f64(0.5  - 0.5).unwrap() * w, F::from_f64(0.6096).unwrap(), _d]),
+        Point3::from([F::from_f64(-0.31944444444).unwrap() * w, F::from_f64(-0.20238095238).unwrap() * h, _d]),
+        Point3::from([F::from_f64(-0.34722222222).unwrap() * w, F::from_f64(0.32142857142).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.27083333333).unwrap() * w, F::from_f64(0.28571428571).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.01041666666).unwrap() * w, F::from_f64(-0.15476190476).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.29861111111).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(-0.01041666666).unwrap() * w, F::from_f64(0.2619047619).unwrap() * h, _d]),
     ]
 }
 
