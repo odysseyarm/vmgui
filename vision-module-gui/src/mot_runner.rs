@@ -150,31 +150,50 @@ fn get_raycast_aimpoint(
     let match_ixs = fv_state.match_markers_from_eskf(nearfield, widefield, &screen_info.marker_points);
     let iso = ats_cv::foveated::do_pnp(match_ixs, nearfield, widefield, gravity, &screen_info.marker_points);
 
-    // using the eskf as a fallback might make the aimpoint seem unstable in some scenarios when it
-    // flips back and forth ¯\_(ツ)_/¯
-    let iso = iso.unwrap_or(Isometry3::from_parts(fv_state.filter.position.into(), fv_state.filter.orientation).cast());
-    let orientation = iso.rotation;
-    let position = iso.translation.vector;
-    // let orientation = fv_state.filter.orientation;
-    // let position = fv_state.filter.position;
-
     let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
-    let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
-    let transmat = flip_yz * position;
+    // using the eskf as a fallback might make the aimpoint seem unstable in some scenarios when it
+    // flips back and forth ¯\_(ツ)_/¯
+    // let iso = iso.unwrap_or(Isometry3::from_parts(fv_state.filter.position.into(), fv_state.filter.orientation).cast());
+    match iso {
+        Some(iso) => {
+            let orientation = iso.rotation;
+            let position = iso.translation.vector;
 
-    let screen_ratio =
-        screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
-    let screen_3dpoints =
-        ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
+            let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
-    let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
-        &rotmat,
-        &transmat,
-        &screen_3dpoints,
-    );
+            let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
+            let transmat = flip_yz * position;
 
-    (rotmat, transmat.into(), fv_aimpoint)
+            let screen_ratio =
+                screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
+            let screen_3dpoints =
+                ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
+
+            let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
+                &rotmat,
+                &transmat,
+                &screen_3dpoints,
+            );
+
+            let orientation = fv_state.filter.orientation;
+            let position = fv_state.filter.position;
+
+            let rotmat = flip_yz * orientation.to_rotation_matrix().cast() * flip_yz;
+            let transmat = flip_yz * position.cast();
+
+            (rotmat, transmat.into(), fv_aimpoint)
+        }
+        None => {
+            let orientation = fv_state.filter.orientation;
+            let position = fv_state.filter.position;
+
+            let rotmat = flip_yz * orientation.to_rotation_matrix().cast() * flip_yz;
+            let transmat = flip_yz * position.cast();
+
+            (rotmat, transmat, None)
+        }
+    }
 }
 
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
@@ -259,8 +278,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint = fv_aimpoint.cast();
+                runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[100., 100.]);
             }
+
+            runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
 
             let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points);
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
