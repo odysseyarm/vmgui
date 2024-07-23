@@ -8,7 +8,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use arrayvec::ArrayVec;
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Const, Isometry3, Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
+use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
@@ -140,29 +140,41 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_info: ScreenInfo) -> (Matrix3<f64>, nalgebra::Point3<f64>, Option<Point2<f64>>) {
-    let orientation = fv_state.filter.orientation;
-    let position = fv_state.filter.position;
+fn get_raycast_aimpoint(
+    nearfield: &[ats_cv::foveated::Marker],
+    widefield: &[ats_cv::foveated::Marker],
+    fv_state: &ats_cv::foveated::FoveatedAimpointState,
+    gravity: UnitVector3<f64>,
+    screen_info: ScreenInfo,
+) -> (Matrix3<f64>, nalgebra::Point3<f64>, Option<Point2<f64>>) {
+    let match_ixs = fv_state.match_markers_from_eskf(nearfield, widefield, &screen_info.marker_points);
+    let iso = ats_cv::foveated::do_pnp(match_ixs, nearfield, widefield, gravity, &screen_info.marker_points);
 
-    let flip_yz = Matrix3::new(
-        1., 0., 0.,
-        0., -1., 0.,
-        0., 0., -1.,
-    );
+    // using the eskf as a fallback might make the aimpoint seem unstable in some scenarios when it
+    // flips back and forth ¯\_(ツ)_/¯
+    let iso = iso.unwrap_or(Isometry3::from_parts(fv_state.filter.position.into(), fv_state.filter.orientation).cast());
+    let orientation = iso.rotation;
+    let position = iso.translation.vector;
+    // let orientation = fv_state.filter.orientation;
+    // let position = fv_state.filter.position;
+
+    let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
     let rotmat = flip_yz * orientation.to_rotation_matrix() * flip_yz;
     let transmat = flip_yz * position;
 
-    let screen_ratio = screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
-    let screen_3dpoints = ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
+    let screen_ratio =
+        screen_info.screen_dimensions_meters[0] / screen_info.screen_dimensions_meters[1];
+    let screen_3dpoints =
+        ats_cv::calculate_screen_3dpoints(screen_info.screen_dimensions_meters[1], screen_ratio);
 
     let fv_aimpoint = ats_cv::calculate_aimpoint_from_pose_and_screen_3dpoints(
-        &rotmat.cast(),
-        &transmat.coords.cast(),
+        &rotmat,
+        &transmat,
         &screen_3dpoints,
     );
 
-    (rotmat.cast(), transmat.cast(), fv_aimpoint)
+    (rotmat, transmat.into(), fv_aimpoint)
 }
 
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
@@ -239,10 +251,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
             let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
-            let screen_info = runner.screen_info.clone();
+            let screen_info = runner.screen_info;
             runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), screen_info.screen_dimensions_meters, screen_info.marker_points);
 
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(nf, wf, &runner.state.fv_state, gravity_vec.cast(), runner.screen_info);
 
             runner.state.rotation_mat = rotmat.cast();
             runner.state.translation_mat = transmat.coords.cast();
@@ -375,13 +387,13 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
+            // let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
 
-            runner.state.rotation_mat = rotmat.cast();
-            runner.state.translation_mat = transmat.coords.cast();
-            if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint = fv_aimpoint.cast();
-            }
+            // runner.state.rotation_mat = rotmat.cast();
+            // runner.state.translation_mat = transmat.coords.cast();
+            // if let Some(fv_aimpoint) = fv_aimpoint {
+            //     runner.state.fv_aimpoint = fv_aimpoint.cast();
+            // }
 
             if runner.record_packets {
                 runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::AccelReport(accel)));
