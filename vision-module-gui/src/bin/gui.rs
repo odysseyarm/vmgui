@@ -210,6 +210,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             })
         } else {
+            error!("{} does not exist", screen_0_path.display());
             None
         }
     });
