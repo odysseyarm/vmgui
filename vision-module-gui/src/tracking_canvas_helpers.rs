@@ -18,7 +18,8 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     let draw_size = if raw {
         draw_size
     } else {
-        draw_size / 2.0
+        // draw_size / 2.0
+        draw_size
     };
     let stroke2 = StrokeParams {
         cap: 0, // Bevel
