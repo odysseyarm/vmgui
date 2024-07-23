@@ -241,6 +241,24 @@ fn eskf_mismatch_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
+fn position_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Position Uncertainty",
+        ats_cv::telemetry::eskf_position_uncertainty(),
+        0.0..1.0,
+    );
+}
+
+fn position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
+    vec3_f32_chart(
+        area,
+        "ESKF Position",
+        ats_cv::telemetry::eskf_position(),
+        0.0..5.0,
+    );
+}
+
 fn vec3_f32_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>, caption: &str, series: &Series<Vector3<f32>>, default_range: Range<f32>) {
     let data = series.values.lock().unwrap();
     let min = data
@@ -360,22 +378,3 @@ fn scalar_f64_chart<DB: DrawingBackend>(
 
     chart.draw_series(LineSeries::new(data.into_iter().enumerate(), &RED)).unwrap();
 }
-
-fn position_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
-    vec3_f32_chart(
-        area,
-        "ESKF Position Uncertainty",
-        ats_cv::telemetry::eskf_position_uncertainty(),
-        0.0..1.0,
-    );
-}
-
-fn position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
-    vec3_f32_chart(
-        area,
-        "ESKF Position Uncertainty",
-        ats_cv::telemetry::eskf_position(),
-        0.0..5.0,
-    );
-}
-

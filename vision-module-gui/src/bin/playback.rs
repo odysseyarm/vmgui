@@ -1,4 +1,4 @@
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, ops::Not, sync::{Arc, Mutex}, time::Duration};
+use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, ops::Not, path::PathBuf, sync::{Arc, Mutex}, time::Duration};
 
 use crossbeam::channel::{Receiver, TryRecvError};
 use iui::{
@@ -18,13 +18,11 @@ use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketD
 // Right hand rule (z is out from the screen)
 
 fn main() {
-    let mut port = 4444u16;
+    let port = 4444u16;
 
     let leptos_rt = leptos_reactive::create_runtime();
 
-    if let Some(port_arg) = std::env::args().nth(1) {
-        port = port_arg.parse().unwrap();
-    }
+    let replay_file = std::env::args_os().nth(1).map(PathBuf::from);
     let ui = UI::init().expect("Couldn't initialize UI library");
     let mut main_win = Window::new(
         &ui,
@@ -47,6 +45,14 @@ fn main() {
     }
     play_btn.hide(&ui);
 
+    let open_file = |ui: &UI, path, state: &mut State, upload_btn: &mut iui::controls::Button, play_btn: &mut iui::controls::Button| {
+        let (general_config, packets) = ats_playback::read_file(&path).unwrap();
+        state.general_config = general_config;
+        state.packets.lock().unwrap().clear();
+        state.packets.lock().unwrap().extend(packets);
+        upload_btn.hide(ui);
+        play_btn.show(ui);
+    };
     upload_btn.on_clicked(&ui, {
         let state = state.clone();
         let main_win = main_win.clone();
@@ -57,15 +63,13 @@ fn main() {
             state.packets.lock().unwrap().clear();
 
             if let Some(path) = main_win.open_file(&ui) {
-                let (general_config, packets) = ats_playback::read_file(&path).unwrap();
-                state.general_config = general_config;
-                state.packets.lock().unwrap().clear();
-                state.packets.lock().unwrap().extend(packets);
-                btn.hide(&ui);
-                play_btn.show(&ui);
+                open_file(&ui, path, &mut state, btn, &mut play_btn);
             }
         }
     });
+    if let Some(replay_file) = replay_file {
+        open_file(&ui, replay_file, &mut state.lock().unwrap(), &mut upload_btn, &mut play_btn);
+    }
 
     play_btn.on_clicked(&ui, move |_| {
         stream_state.set(!stream_state.get_untracked());
@@ -228,7 +232,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
             encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
-
+        println!("{timestamp}");
         prev_timestamp = Some(timestamp);
         packet_index = (packet_index + 1) % state.packets.lock().unwrap().len();
     }
