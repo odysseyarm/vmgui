@@ -1,3 +1,4 @@
+import pprint
 from sympy import Symbol, nsolve
 b_x, b_y, b_z, s_x, s_y, s_z, g = map(Symbol, "b_x b_y b_z s_x s_y s_z g".split())
 
@@ -21,4 +22,5 @@ eq5 = (s_x*c_x + b_x)**2 + (s_y*c_y + b_y)**2 + (s_z*c_z + b_z)**2 - g**2
 eq6 = (s_x*d_x + b_x)**2 + (s_y*d_y + b_y)**2 + (s_z*d_z + b_z)**2 - g**2
 
 s = nsolve([eq1, eq2, eq3, eq4, eq5, eq6], [b_x, b_y, b_z, s_x, s_y, s_z], [0, 0, 0, 1, 1, 1], dict=True)
-print(s)
+s = list(map(dict, s))
+pprint.pp(s)
