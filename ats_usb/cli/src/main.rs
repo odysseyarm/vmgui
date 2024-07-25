@@ -38,7 +38,20 @@ async fn main() {
             let mut odr_average = None;
             let mut prev_timestamp = None;
             loop {
-                let v = s.next().await.unwrap();
+                let mut v = s.next().await.unwrap();
+
+                // let bias = nalgebra::matrix![
+                //     -0.0265612400362450;
+                //     0.139760313286514;
+                //     -0.00784890045575691;
+                // ];
+                // let scale = nalgebra::matrix![
+                //     0.998286469439129;
+                //     0.998740566223973;
+                //     0.980932089902715;
+                // ];
+                // v.accel = v.accel.component_mul(&scale) + bias;
+
                 let dt = match prev {
                     None => {
                         prev = Some(Instant::now());

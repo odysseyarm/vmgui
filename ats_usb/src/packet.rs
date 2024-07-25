@@ -328,7 +328,7 @@ impl Packet {
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => x.serialize(buf),
-            PacketData::ImpactReport(x) => unimplemented!(),
+            PacketData::ImpactReport(x) => x.serialize(buf),
             PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
             PacketData::FlashSettings() => (),
         }
@@ -676,6 +676,9 @@ impl ImpactReport {
         let timestamp = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         *bytes = &bytes[4..];
         Ok(Self { timestamp })
+    }
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.timestamp.to_le_bytes());
     }
 }
 
