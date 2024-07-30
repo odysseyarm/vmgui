@@ -78,7 +78,7 @@ struct Args {
     n: usize,
 
     /// Gravity value to use for calculations
-    #[arg(long, default_value_t = 9.80665)]
+    #[arg(short, default_value_t = 9.80665)]
     g: f64,
 }
 
