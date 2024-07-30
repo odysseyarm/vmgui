@@ -355,6 +355,7 @@ impl GeneralSettingsForm {
             stereo_iso.c(),
             win,
         );
+        set_accel_upload_handler(&ui, &mut upload_accel_config, accel_config.c(), win);
         (
             form,
             Self {
@@ -518,6 +519,29 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
                 };
             } else {
                 win.modal_err(&ui, "Failed to upload calibration", "No file selected");
+            }
+        }
+    });
+}
+
+fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_signal: RwSignal<AccelConfig>, win: Window) {
+    upload_accel.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.open_file(&ui) {
+                let Ok(()) = (|| {
+                    let reader = std::fs::File::open(&path)?;
+                    let accel_config: AccelConfig = serde_json::from_reader(reader)?;
+                    accel_config_signal.set(accel_config);
+                    win.modal_msg(&ui, "Uploaded configuration", "Successfully uploaded configuration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to upload configuration", "Failed to read file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to upload configuration", "No file selected");
             }
         }
     });
