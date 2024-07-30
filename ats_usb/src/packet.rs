@@ -3,6 +3,7 @@ use std::{fmt::Display, error::Error as StdError};
 use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
 use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
+use serde::{Deserialize, Serialize};
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
@@ -64,6 +65,7 @@ pub struct ReadRegisterResponse {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[derive(Serialize, Deserialize)]
 #[derive(Clone, Copy, Debug)]
 pub struct AccelConfig {
     pub accel_odr: u16,
