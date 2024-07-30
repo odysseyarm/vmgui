@@ -16,9 +16,11 @@ pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
     ReadRegister(Register), // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
-    WriteConfig(GeneralWriteConfig),
+    WriteConfig(GeneralConfig),
     ReadConfig(),
     ReadConfigResponse(GeneralConfig),
+    ReadProps(),
+    ReadPropsResponse(Props),
     ObjectReportRequest(ObjectReportRequest),
     ObjectReport(ObjectReport),
     CombinedMarkersReport(CombinedMarkersReport),
@@ -62,35 +64,82 @@ pub struct ReadRegisterResponse {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Clone, Debug)]
-pub struct GeneralConfig {
-    pub impact_threshold: u8,
+#[derive(Clone, Copy, Debug)]
+pub struct AccelConfig {
     pub accel_odr: u16,
-    pub camera_model_nf: RosOpenCvIntrinsics<f32>,
-    pub camera_model_wf: RosOpenCvIntrinsics<f32>,
-    pub stereo_iso: Isometry3<f32>,
-    pub uuid: [u8; 6],
+    pub b_x: f32,
+    pub b_y: f32,
+    pub b_z: f32,
+    pub s_x: f32,
+    pub s_y: f32,
+    pub s_z: f32,
+}
+
+impl Default for AccelConfig {
+    fn default() -> Self {
+        Self {
+            accel_odr: 100,
+            b_x: 0.0,
+            b_y: 0.0,
+            b_z: 0.0,
+            s_x: 1.0,
+            s_y: 1.0,
+            s_z: 1.0,
+        }
+    }
+}
+
+impl AccelConfig {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let accel_odr = u16::from_le_bytes([bytes[0], bytes[1]]);
+        let b_x = f32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
+        let b_y = f32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]);
+        let b_z = f32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]);
+        let s_x = f32::from_le_bytes([bytes[14], bytes[15], bytes[16], bytes[17]]);
+        let s_y = f32::from_le_bytes([bytes[18], bytes[19], bytes[20], bytes[21]]);
+        let s_z = f32::from_le_bytes([bytes[22], bytes[23], bytes[24], bytes[25]]);
+        *bytes = &bytes[26..];
+        Ok(Self { accel_odr, b_x, b_y, b_z, s_x, s_y, s_z })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.accel_odr.to_le_bytes());
+        for &b in &[self.b_x, self.b_y, self.b_z, self.s_x, self.s_y, self.s_z] {
+            buf.extend_from_slice(&b.to_le_bytes());
+        }
+    }
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
-pub struct GeneralWriteConfig {
+pub struct GeneralConfig {
     pub impact_threshold: u8,
-    pub accel_odr: u16,
+    pub accel_config: AccelConfig,
     pub camera_model_nf: RosOpenCvIntrinsics<f32>,
     pub camera_model_wf: RosOpenCvIntrinsics<f32>,
     pub stereo_iso: Isometry3<f32>,
+}
+
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[derive(Clone, Debug)]
+pub struct Props {
+    pub uuid: [u8; 6],
+}
+
+impl Default for Props {
+    fn default() -> Self {
+        Self { uuid: [0; 6] }
+    }
 }
 
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
             impact_threshold: 2,
-            accel_odr: 100,
+            accel_config: Default::default(),
             camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
             camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
             stereo_iso: Isometry3::identity(),
-            uuid: [0; 6],
         }
     }
 }
@@ -206,6 +255,8 @@ pub enum PacketType {
     WriteConfig,
     ReadConfig,
     ReadConfigResponse,
+    ReadProps,
+    ReadPropsResponse,
     ObjectReportRequest,
     ObjectReport,
     CombinedMarkersReport,
@@ -248,6 +299,8 @@ impl Packet {
             PacketData::WriteConfig(_) => PacketType::WriteConfig,
             PacketData::ReadConfig() => PacketType::ReadConfig,
             PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse,
+            PacketData::ReadProps() => PacketType::ReadProps,
+            PacketData::ReadPropsResponse(_) => PacketType::ReadPropsResponse,
             PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
             PacketData::ObjectReport(_) => PacketType::ObjectReport,
             PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
@@ -278,6 +331,8 @@ impl Packet {
             PacketType::WriteConfig => unimplemented!(),
             PacketType::ReadConfig => PacketData::ReadConfig(),
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
+            PacketType::ReadProps => PacketData::ReadProps(),
+            PacketType::ReadPropsResponse => PacketData::ReadPropsResponse(Props::parse(bytes, ty)?),
             PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
@@ -304,7 +359,9 @@ impl Packet {
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
             PacketData::WriteConfig(_) => 164,
             PacketData::ReadConfig() => 0,
-            PacketData::ReadConfigResponse(_) => 170,
+            PacketData::ReadConfigResponse(_) => 164,
+            PacketData::ReadProps() => 0,
+            PacketData::ReadPropsResponse(_) => 6,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
             PacketData::ObjectReport(_) => 518,
             PacketData::CombinedMarkersReport(_) => 104,
@@ -324,6 +381,8 @@ impl Packet {
             PacketData::WriteConfig(x) => x.serialize(buf),
             PacketData::ReadConfig() => (),
             PacketData::ReadConfigResponse(x) => x.serialize(buf),
+            PacketData::ReadProps() => (),
+            PacketData::ReadPropsResponse(x) => x.serialize(buf),
             PacketData::ObjectReportRequest(_) => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
@@ -346,6 +405,13 @@ impl PacketData {
     pub fn read_config_response(self) -> Option<GeneralConfig> {
         match self {
             PacketData::ReadConfigResponse(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn read_props_response(self) -> Option<Props> {
+        match self {
+            PacketData::ReadPropsResponse(x) => Some(x),
             _ => None,
         }
     }
@@ -429,12 +495,14 @@ impl WriteRegister {
 impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
-        let [impact_threshold, accel_odr0, accel_odr1, ..] = **bytes else {
+        let [impact_threshold, ..] = **bytes else {
             return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
         };
-        let accel_odr: [u8; 2] = [accel_odr0, accel_odr1];
-        let accel_odr = u16::from_le_bytes(accel_odr);
-        *bytes = &bytes[3..];
+
+        let accel_config = match AccelConfig::parse(bytes) {
+            Ok(x) => x,
+            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+        };
 
         let camera_model_nf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
@@ -451,33 +519,30 @@ impl GeneralConfig {
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
 
-        let mut uuid = [0; 6];
-        uuid.clone_from_slice(&bytes[..6]);
+        *bytes = &bytes[..1];
 
-        *bytes = &bytes[..7];
-
-        Ok(Self { impact_threshold, accel_odr, camera_model_nf, camera_model_wf, stereo_iso, uuid })
+        Ok(Self { impact_threshold, accel_config, camera_model_nf, camera_model_wf, stereo_iso })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
+        self.accel_config.serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
-        buf.extend_from_slice(&self.uuid);
         buf.push(0); // padding
     }
 }
 
-impl GeneralWriteConfig {
+impl Props {
+    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
+        let mut uuid = [0; 6];
+        uuid.clone_from_slice(&bytes[..6]);
+        *bytes = &bytes[..6];
+        Ok(Self { uuid })
+    }
+
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        let accel_odr: [u8; 2] = u16::to_le_bytes(self.accel_odr);
-        buf.extend_from_slice(&[self.impact_threshold, accel_odr[0], accel_odr[1]]);
-        MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
-        MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
-        MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
-        buf.push(0);
+        buf.extend_from_slice(&self.uuid);
     }
 }
 

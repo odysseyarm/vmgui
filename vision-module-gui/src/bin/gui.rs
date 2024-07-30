@@ -247,7 +247,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a main_window into which controls can be placed
     let mut main_win = iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs, accel_odr_memo) = config_window::config_window(
+    let (mut config_win, device_rs, accel_config_signal) = config_window::config_window(
         &ui,
         simulator_addr,
         udp_addr,
@@ -478,7 +478,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             let madgwick = &mut view.lock().state.madgwick;
-            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_odr_memo.get() as f32, 0.1, madgwick.quat);
+            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.1, madgwick.quat);
         }
     });
 
