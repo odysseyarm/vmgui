@@ -149,11 +149,11 @@ async fn calculate_and_save_bias_scale(s: &mut (impl futures::Stream<Item = ats_
     // Initial parameter guess: [b_x, b_y, b_z, s_x, s_y, s_z]
     let init_param = nalgebra::Vector6::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 
-    // Print initial parameters
-    println!("Initial parameters: {:?}", init_param);
+    // add .2 to each parameter to avoid division by zero or whatever
+    let keklol = nalgebra::Vector6::new(init_param[0] + 0.2, init_param[1] + 0.2, init_param[2] + 0.2, init_param[3] + 0.2, init_param[4] + 0.2, init_param[5] + 0.2);
 
     // Perform optimization with constraints and detailed logging
-    let solver = NelderMead::new(vec![init_param.clone()]);
+    let solver = NelderMead::new(vec![init_param.clone(), keklol.clone()]);
     let result = Executor::new(cost_function, solver)
         .configure(|state| {
             state
