@@ -137,7 +137,7 @@ impl Default for Props {
 impl Default for GeneralConfig {
     fn default() -> Self {
         Self {
-            impact_threshold: 2,
+            impact_threshold: 5,
             accel_config: Default::default(),
             camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
             camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
@@ -279,14 +279,16 @@ impl TryFrom<u8> for PacketType {
             3 => Ok(Self::WriteConfig),
             4 => Ok(Self::ReadConfig),
             5 => Ok(Self::ReadConfigResponse),
-            6 => Ok(Self::ObjectReportRequest),
-            7 => Ok(Self::ObjectReport),
-            8 => Ok(Self::CombinedMarkersReport),
-            9 => Ok(Self::AccelReport),
-            10 => Ok(Self::ImpactReport),
-            11 => Ok(Self::StreamUpdate),
-            12 => Ok(Self::FlashSettings),
-            13 => Ok(Self::End),
+            6 => Ok(Self::ReadProps),
+            7 => Ok(Self::ReadPropsResponse),
+            8 => Ok(Self::ObjectReportRequest),
+            9 => Ok(Self::ObjectReport),
+            10 => Ok(Self::CombinedMarkersReport),
+            11 => Ok(Self::AccelReport),
+            12 => Ok(Self::ImpactReport),
+            13 => Ok(Self::StreamUpdate),
+            14 => Ok(Self::FlashSettings),
+            15 => Ok(Self::End),
             _ => Err(Error::UnrecognizedPacketId),
         }
     }
@@ -497,9 +499,9 @@ impl WriteRegister {
 impl GeneralConfig {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
-        let [impact_threshold, ..] = **bytes else {
-            return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
-        };
+        let impact_threshold = bytes[0];
+
+        *bytes = &bytes[1..];
 
         let accel_config = match AccelConfig::parse(bytes) {
             Ok(x) => x,
@@ -521,7 +523,7 @@ impl GeneralConfig {
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
 
-        *bytes = &bytes[..1];
+        *bytes = &bytes[1..];
 
         Ok(Self { impact_threshold, accel_config, camera_model_nf, camera_model_wf, stereo_iso })
     }

@@ -353,7 +353,7 @@ impl GeneralSettingsForm {
             nf_intrinsics.c(),
             wf_intrinsics.c(),
             stereo_iso.c(),
-            win,
+            win.c(),
         );
         set_accel_upload_handler(&ui, &mut upload_accel_config, accel_config.c(), win);
         (
