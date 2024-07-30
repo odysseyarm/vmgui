@@ -6,7 +6,7 @@ use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot},
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, GeneralWriteConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, Props, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -416,7 +416,7 @@ impl UsbDevice {
         Ok(r)
     }
 
-    pub async fn write_config(&self, config: GeneralWriteConfig) -> Result<()> {
+    pub async fn write_config(&self, config: GeneralConfig) -> Result<()> {
         let data = PacketData::WriteConfig(config);
         let pkt = Packet {
             id: 255,
@@ -424,6 +424,16 @@ impl UsbDevice {
         };
         self.to_thread.send(pkt).await?;
         Ok(())
+    }
+
+    pub async fn read_props(&self) -> Result<Props> {
+        let r = self
+            .request(PacketData::ReadProps())
+            .await?
+            .read_props_response()
+            .with_context(|| "unexpected response")?;
+        info!("props: {:?}", r);
+        Ok(r)
     }
 
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {

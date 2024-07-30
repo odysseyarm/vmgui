@@ -13,7 +13,7 @@ use nalgebra::{
 };
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, Props, ReadRegisterResponse}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
@@ -125,8 +125,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(GeneralConfig {
-                impact_threshold: 0,
+            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(
+            GeneralConfig {
+                impact_threshold: 5,
+                accel_config: Default::default(),
                 camera_model_nf: RosOpenCvIntrinsics::from_params(
                     49.0 * nf_focal_length() as f32,
                     0.,
@@ -142,10 +144,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     49.,
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
-                accel_odr: 100,
-                uuid: [42, 69, 3, 7, 9, 13],
             })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
+            PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(Default::default())),
+            PacketData::ReadPropsResponse(_) => unreachable!(),
         };
 
         if let Some(data) = response {

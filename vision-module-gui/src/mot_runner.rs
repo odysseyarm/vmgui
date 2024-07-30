@@ -375,7 +375,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     while runner.lock().device.is_some() {
         if let Some(accel) = accel_stream.next().await {
             let mut runner = runner.lock();
-            let accel_odr = runner.general_config.accel_odr;
+            let accel_odr = runner.general_config.accel_config.accel_odr;
             // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{:7.3?}", accel.accel.norm());
 

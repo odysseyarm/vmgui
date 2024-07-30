@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use ats_usb::{device::UsbDevice, packet::{GeneralWriteConfig, Port}};
+use ats_usb::{device::UsbDevice, packet::{AccelConfig, GeneralConfig, Port}};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
@@ -22,7 +22,7 @@ pub fn config_window(
     udp_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
-) -> (Window, ReadSignal<Option<UsbDevice>>, Memo<u16>) {
+) -> (Window, ReadSignal<Option<UsbDevice>>, ReadSignal<AccelConfig>) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -315,14 +315,13 @@ pub fn config_window(
         }
     });
 
-    let accel_odr_memo = create_memo(move |_| general_settings.accel_odr.get() as u16);
-    (config_win, device.read_only(), accel_odr_memo)
+    (config_win, device.read_only(), general_settings.accel_config.read_only())
 }
 
 #[derive(Clone)]
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
-    accel_odr: RwSignal<i32>,
+    accel_config: RwSignal<AccelConfig>,
     nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
     wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
     stereo_iso: RwSignal<nalgebra::Isometry3<f32>>,
@@ -333,14 +332,14 @@ impl GeneralSettingsForm {
     fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>, win: Window) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
-        let accel_odr = create_rw_signal(0);
+        let accel_config = create_rw_signal(AccelConfig::default());
         let nf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
         let wf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         let stereo_iso = create_rw_signal(nalgebra::Isometry3::identity());
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
-                (Compact, "Accelerometer ODR") : let x = Spinbox(enabled: connected, signal: accel_odr)
+                (Compact, "Upload Accelerometer Config") : let upload_accel_config = Button("Upload")
                 (Compact, "Upload Nearfield Calibration") : let upload_nf_json = Button("Upload")
                 (Compact, "Upload Widefield Calibration") : let upload_wf_json = Button("Upload")
                 (Compact, "Upload Stereo Calibration") : let upload_stereo_json = Button("Upload")
@@ -360,7 +359,7 @@ impl GeneralSettingsForm {
             form,
             Self {
                 impact_threshold,
-                accel_odr,
+                accel_config,
                 nf_intrinsics,
                 wf_intrinsics,
                 stereo_iso,
@@ -374,7 +373,7 @@ impl GeneralSettingsForm {
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
-        self.accel_odr.set(config.accel_odr as i32);
+        self.accel_config.set(config.accel_config);
         self.nf_intrinsics.set(config.camera_model_nf.clone());
         self.wf_intrinsics.set(config.camera_model_wf.clone());
         self.stereo_iso.set(config.stereo_iso.clone());
@@ -424,9 +423,9 @@ impl GeneralSettingsForm {
 
     /// Make sure to call `validate()` before calling this method.
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
-        let config = GeneralWriteConfig {
+        let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
-            accel_odr: self.accel_odr.get_untracked() as u16,
+            accel_config: self.accel_config.get_untracked(),
             camera_model_nf: self.nf_intrinsics.get_untracked(),
             camera_model_wf: self.wf_intrinsics.get_untracked(),
             stereo_iso: self.stereo_iso.get_untracked(),
@@ -435,7 +434,7 @@ impl GeneralSettingsForm {
         {
             let general_config = &mut self.mot_runner.lock().general_config;
             general_config.impact_threshold = config.impact_threshold;
-            general_config.accel_odr = config.accel_odr;
+            general_config.accel_config = config.accel_config;
             general_config.camera_model_nf = config.camera_model_nf;
             general_config.camera_model_wf = config.camera_model_wf;
             general_config.stereo_iso = config.stereo_iso;
@@ -444,12 +443,12 @@ impl GeneralSettingsForm {
     }
 
     fn clear(&self) {
-        self.accel_odr.set(0);
+        self.accel_config.set(AccelConfig::default());
     }
 
     fn load_defaults(&self) {
         self.impact_threshold.set(2);
-        self.accel_odr.set(100);
+        self.accel_config.set(AccelConfig::default());
         self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
         self.wf_intrinsics.set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         self.stereo_iso.set(nalgebra::Isometry3::identity());

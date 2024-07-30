@@ -11,7 +11,7 @@ use iui::{
 use leptos_reactive::{Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Props, Packet, PacketData, ReadRegisterResponse}};
 
 // Positive x is right
 // Positive y is up
@@ -163,6 +163,8 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
             PacketData::WriteConfig(_) => None,
             PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(state.general_config.clone())),
             PacketData::ReadConfigResponse(_) => unreachable!(),
+            PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(state.props.clone())),
+            PacketData::ReadPropsResponse(_) => unreachable!(),
         };
 
         if let Some(data) = response {
@@ -270,6 +272,7 @@ struct State {
     stream_object_report: Option<u8>,
     packets: Arc<Mutex<Vec<(i128, Packet)>>>,
     general_config: GeneralConfig,
+    props: Props,
 }
 
 impl State {
@@ -281,6 +284,7 @@ impl State {
             packets: Arc::new(Mutex::new(vec![])),
             general_config: GeneralConfig {
                 impact_threshold: 0,
+                accel_config: Default::default(),
                 camera_model_nf: RosOpenCvIntrinsics::from_params(
                     49.0 * nf_focal_length() as f32,
                     0.,
@@ -296,7 +300,8 @@ impl State {
                     49.,
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
-                accel_odr: 100,
+            },
+            props: Props {
                 uuid: [42, 69, 3, 7, 9, 13],
             },
         }
