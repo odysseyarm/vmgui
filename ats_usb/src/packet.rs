@@ -4,6 +4,7 @@ use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibration
 use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use serde::{Deserialize, Serialize};
+use serde_inline_default::serde_inline_default;
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
@@ -64,10 +65,12 @@ pub struct ReadRegisterResponse {
     pub data: u8,
 }
 
+#[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone, Copy, Debug)]
 pub struct AccelConfig {
+    #[serde_inline_default(100)]
     pub accel_odr: u16,
     pub b_x: f32,
     pub b_y: f32,
@@ -529,6 +532,7 @@ impl GeneralConfig {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&[self.impact_threshold]);
         self.accel_config.serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
