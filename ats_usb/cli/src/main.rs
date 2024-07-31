@@ -1,15 +1,15 @@
 use std::time::Instant;
-use nalgebra::Vector3;
+use nalgebra::{SVector, Vector3};
 use futures::StreamExt;
 use serialport::SerialPortType;
 use serde_json::json;
-use clap::{Arg, Parser};
+use clap::Parser;
 use serde::{Serialize, Deserialize};
-use argmin::solver::neldermead::NelderMead;
-use argmin::core::{Executor, CostFunction};
+use argmin::core::{CostFunction, Executor, Gradient};
 use argmin::core::observers::ObserverMode;
 use argmin_observer_slog::SlogLogger;
 use argmin::core::Error;
+use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 #[derive(Serialize, Deserialize)]
 struct Calibration {
@@ -27,10 +27,10 @@ struct CostFn {
 }
 
 impl CostFunction for CostFn {
-    type Param = nalgebra::SVector<f64, 6>;
+    type Param = SVector<f64, 6>;
     type Output = f64;
 
-    fn cost(&self, p: &Self::Param) -> Result<Self::Output, argmin::core::Error> {
+    fn cost(&self, p: &Self::Param) -> Result<Self::Output, Error> {
         let b_x = p[0];
         let b_y = p[1];
         let b_z = p[2];
@@ -45,20 +45,44 @@ impl CostFunction for CostFn {
             let ay = s_y * m.y + b_y;
             let az = s_z * m.z + b_z;
 
-            // Check for potential overflow
-            if ax.is_nan() || ay.is_nan() || az.is_nan() || ax.is_infinite() || ay.is_infinite() || az.is_infinite() {
-                return Err(argmin::core::Error::msg("NaN or infinite value encountered in cost calculation"));
-            }
-
             cost += (ax * ax + ay * ay + az * az - self.g * self.g).powi(2);
-
-            // Overflow check
-            if cost.is_nan() || cost.is_infinite() {
-                return Err(argmin::core::Error::msg("NaN or infinite cost encountered"));
-            }
         }
 
         Ok(cost)
+    }
+}
+
+impl Gradient for CostFn {
+    type Param = SVector<f64, 6>;
+    type Gradient = SVector<f64, 6>;
+
+    // Calculate the gradient of the cost function
+    fn gradient(&self, p: &Self::Param) -> Result<Self::Gradient, Error> {
+        let b_x = p[0];
+        let b_y = p[1];
+        let b_z = p[2];
+        let s_x = p[3];
+        let s_y = p[4];
+        let s_z = p[5];
+
+        let mut grad = SVector::<f64, 6>::zeros();
+
+        for m in &self.measurements {
+            let ax = s_x * m.x + b_x;
+            let ay = s_y * m.y + b_y;
+            let az = s_z * m.z + b_z;
+
+            let common_term = 4.0 * (ax * ax + ay * ay + az * az - self.g * self.g);
+
+            grad[0] += common_term * ax;
+            grad[1] += common_term * ay;
+            grad[2] += common_term * az;
+            grad[3] += common_term * ax * m.x;
+            grad[4] += common_term * ay * m.y;
+            grad[5] += common_term * az * m.z;
+        }
+
+        Ok(grad)
     }
 }
 
@@ -74,7 +98,7 @@ struct Args {
     a: Option<String>,
 
     /// Number of samples to use for accelerometer bias and scale calculation
-    #[arg(short, default_value_t = 100)]
+    #[arg(short, default_value_t = 400)]
     n: usize,
 
     /// Gravity value to use for calculations
@@ -113,31 +137,50 @@ async fn main() {
     let num_samples = args.n;
     let gravity = args.g;
 
-    let device = ats_usb::device::UsbDevice::connect_serial(path, false)
+    let mut device = ats_usb::device::UsbDevice::connect_serial(path, false)
         .await
         .unwrap();
 
     println!("Connected to device");
 
-    let mut s = device.stream_accel().await.unwrap();
-
     if let Some(ac_path) = ac_path {
         // Perform bias and scale calculation
-        calculate_and_save_bias_scale(&mut s, &ac_path, num_samples, gravity).await;
+        calculate_and_save_bias_scale(&mut device, &ac_path, num_samples, gravity).await;
     } else {
         // Normal streaming
+        let mut s = device.stream_accel().await.unwrap();
         normal_streaming(&mut s).await;
     }
 }
 
-async fn calculate_and_save_bias_scale(s: &mut (impl futures::Stream<Item = ats_usb::packet::AccelReport> + Unpin), ac_path: &str, num_samples: usize, g: f64) {
+async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, ac_path: &str, num_samples: usize, g: f64) {
+    let orientations = [
+        "Place the device with the top side facing up.",
+        "Place the device with the bottom side facing up.",
+        "Place the device with the front side facing up.",
+        "Place the device with the back side facing up.",
+        "Place the device with the left side facing up.",
+        "Place the device with the right side facing up.",
+    ];
+
     let mut measurements = Vec::new();
 
-    // Collect samples
-    for _ in 0..num_samples {
-        if let Some(v) = s.next().await {
-            measurements.push(v.accel.cast::<f64>());
+    for orientation in &orientations {
+        println!("{}", orientation);
+        println!("Press Enter when ready to start collecting samples for this orientation.");
+        let mut reader = BufReader::new(tokio::io::stdin());
+        let mut input = String::new();
+        reader.read_line(&mut input).await.unwrap();
+
+        let mut s = device.stream_accel().await.unwrap();
+
+        for _ in 0..num_samples {
+            if let Some(v) = s.next().await {
+                measurements.push(v.accel.cast::<f64>());
+            }
         }
+
+        println!("Collected samples for this orientation.");
     }
 
     // Validate measurements
@@ -149,11 +192,8 @@ async fn calculate_and_save_bias_scale(s: &mut (impl futures::Stream<Item = ats_
     // Initial parameter guess: [b_x, b_y, b_z, s_x, s_y, s_z]
     let init_param = nalgebra::Vector6::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 
-    // add .2 to each parameter to avoid division by zero or whatever
-    let keklol = nalgebra::Vector6::new(init_param[0] + 0.2, init_param[1] + 0.2, init_param[2] + 0.2, init_param[3] + 0.2, init_param[4] + 0.2, init_param[5] + 0.2);
-
     // Perform optimization with constraints and detailed logging
-    let solver = NelderMead::new(vec![init_param.clone(), keklol.clone()]);
+    let solver = argmin::solver::gradientdescent::SteepestDescent::new(argmin::solver::linesearch::MoreThuenteLineSearch::new());
     let result = Executor::new(cost_function, solver)
         .configure(|state| {
             state

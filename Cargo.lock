@@ -488,6 +488,7 @@ dependencies = [
  "pin-project",
  "pyo3",
  "serde",
+ "serde-inline-default",
  "serde_json",
  "serial2",
  "socket2",
@@ -4242,6 +4243,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-inline-default"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9980133dc534d02ab08df3b384295223a45090c40a4c46240e3eaa982b495910"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.71",
+]
+
+[[package]]
 name = "serde-wasm-bindgen"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4676,6 +4688,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb2caba9f80616f438e09748d5acda951967e1ea58508ef53d9c6402485a46df"
 dependencies = [
  "backtrace",
+ "bytes",
  "libc",
  "mio",
  "num_cpus",
