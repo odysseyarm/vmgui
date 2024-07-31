@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(i128, Packet)>), Error> {
     let mut file = std::fs::File::open(path).unwrap();
-    let mut buf = [0; 170];
+    let mut buf = [0; 188];
     file.read_exact(&mut buf).unwrap();
     let general_config = GeneralConfig::parse(&mut &buf[..], ats_usb::packet::PacketType::ReadConfigResponse).unwrap();
     let mut packets = Vec::new();
