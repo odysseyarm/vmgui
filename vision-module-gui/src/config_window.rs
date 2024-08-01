@@ -340,9 +340,13 @@ impl GeneralSettingsForm {
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
                 (Compact, "Upload Accelerometer Config") : let upload_accel_config = Button("Upload")
+                (Compact, "Download Accelerometer Config") : let download_accel_config = Button("Download")
                 (Compact, "Upload Nearfield Calibration") : let upload_nf_json = Button("Upload")
+                (Compact, "Download Nearfield Calibration") : let download_nf_json = Button("Download")
                 (Compact, "Upload Widefield Calibration") : let upload_wf_json = Button("Upload")
+                (Compact, "Download Widefield Calibration") : let download_wf_json = Button("Download")
                 (Compact, "Upload Stereo Calibration") : let upload_stereo_json = Button("Upload")
+                (Compact, "Download Stereo Calibration") : let download_stereo_json = Button("Download")
             }
         }
         set_calibration_upload_handlers(
@@ -355,7 +359,18 @@ impl GeneralSettingsForm {
             stereo_iso.c(),
             win.c(),
         );
-        set_accel_upload_handler(&ui, &mut upload_accel_config, accel_config.c(), win);
+        set_accel_upload_handler(&ui, &mut upload_accel_config, accel_config.c(), win.c());
+        set_calibration_download_handlers(
+            &ui,
+            &mut download_nf_json,
+            &mut download_wf_json,
+            &mut download_stereo_json,
+            nf_intrinsics.c(),
+            wf_intrinsics.c(),
+            stereo_iso.c(),
+            win.c(),
+        );
+        set_accel_download_handler(&ui, &mut download_accel_config, accel_config.c(), win.c());
         (
             form,
             Self {
@@ -524,6 +539,71 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
     });
 }
 
+fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download_wf: &mut Button, download_stereo: &mut Button,
+    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>, wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>, win: Window)
+{
+    download_nf.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.save_file(&ui) {
+                let Ok(()) = (|| {
+                    let writer = std::fs::File::create(&path)?;
+                    ats_cv::write_opencv_minimal_camera_calibration_json(&nf_intrinsics.get(), writer)?;
+                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to download calibration", "No file selected");
+            }
+        }
+    });
+
+    download_wf.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.save_file(&ui) {
+                let Ok(()) = (|| {
+                    let writer = std::fs::File::create(&path)?;
+                    ats_cv::write_opencv_minimal_camera_calibration_json(&wf_intrinsics.get(), writer)?;
+                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to download calibration", "No file selected");
+            }
+        }
+    });
+
+    download_stereo.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.save_file(&ui) {
+                let Ok(()) = (|| {
+                    let writer = std::fs::File::create(&path)?;
+                    ats_cv::write_opencv_minimal_stereo_calibration_json(&stereo_iso.get(), writer)?;
+                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to download calibration", "No file selected");
+            }
+        }
+    });
+}
+
 fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_signal: RwSignal<AccelConfig>, win: Window) {
     upload_accel.on_clicked(&ui, {
         let ui = ui.c();
@@ -542,6 +622,28 @@ fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_sig
                 };
             } else {
                 win.modal_err(&ui, "Failed to upload configuration", "No file selected");
+            }
+        }
+    });
+}
+
+fn set_accel_download_handler(ui: &UI, download_accel: &mut Button, accel_config_signal: RwSignal<AccelConfig>, win: Window) {
+    download_accel.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.save_file(&ui) {
+                let Ok(()) = (|| {
+                    let writer = std::fs::File::create(&path)?;
+                    serde_json::to_writer(writer, &accel_config_signal.get())?;
+                    win.modal_msg(&ui, "Downloaded configuration", "Successfully downloaded configuration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to download configuration", "Failed to write file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to download configuration", "No file selected");
             }
         }
     });
