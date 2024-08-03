@@ -1,10 +1,13 @@
 use std::{fmt::Display, error::Error as StdError};
 
 use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
-use nalgebra::{coordinates::XY, Isometry3, Point2, Rotation3, Vector3};
+use nalgebra::{Isometry3, Point2, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
+
+#[cfg(test)]
+mod tests;
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
@@ -154,7 +157,7 @@ impl Default for GeneralConfig {
 pub struct ObjectReportRequest {}
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MotData {
     pub area: u16,
     pub cx: u16,
@@ -173,7 +176,7 @@ pub struct MotData {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ObjectReport {
     pub timestamp: u32,
     pub mot_data_nf: [MotData; 16],
@@ -181,7 +184,7 @@ pub struct ObjectReport {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombinedMarkersReport {
     pub nf_points: [Point2<u16>; 16],
     pub wf_points: [Point2<u16>; 16],
@@ -252,7 +255,7 @@ impl TryFrom<u8> for Port {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, enumn::N)]
 pub enum PacketType {
     WriteRegister, // a.k.a. Poke
     ReadRegister,  // a.k.a. Peek
@@ -275,25 +278,7 @@ pub enum PacketType {
 impl TryFrom<u8> for PacketType {
     type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
-        match n {
-            0 => Ok(Self::WriteRegister),
-            1 => Ok(Self::ReadRegister),
-            2 => Ok(Self::ReadRegisterResponse),
-            3 => Ok(Self::WriteConfig),
-            4 => Ok(Self::ReadConfig),
-            5 => Ok(Self::ReadConfigResponse),
-            6 => Ok(Self::ReadProps),
-            7 => Ok(Self::ReadPropsResponse),
-            8 => Ok(Self::ObjectReportRequest),
-            9 => Ok(Self::ObjectReport),
-            10 => Ok(Self::CombinedMarkersReport),
-            11 => Ok(Self::AccelReport),
-            12 => Ok(Self::ImpactReport),
-            13 => Ok(Self::StreamUpdate),
-            14 => Ok(Self::FlashSettings),
-            15 => Ok(Self::End),
-            _ => Err(Error::UnrecognizedPacketId),
-        }
+        Self::n(n).ok_or(Error::UnrecognizedPacketId)
     }
 }
 
@@ -340,7 +325,7 @@ impl Packet {
             PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
             PacketType::ReadProps => PacketData::ReadProps(),
             PacketType::ReadPropsResponse => PacketData::ReadPropsResponse(Props::parse(bytes, ty)?),
-            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest{}),
+            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest {}),
             PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
             PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
@@ -364,14 +349,14 @@ impl Packet {
             PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
             PacketData::ReadRegister(_) => calculate_length!(Register)+1,
             PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
-            PacketData::WriteConfig(_) => 188,
+            PacketData::WriteConfig(_) => GeneralConfig::SIZE,
             PacketData::ReadConfig() => 0,
-            PacketData::ReadConfigResponse(_) => 188,
+            PacketData::ReadConfigResponse(_) => GeneralConfig::SIZE,
             PacketData::ReadProps() => 0,
             PacketData::ReadPropsResponse(_) => 6,
             PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
-            PacketData::ObjectReport(_) => 518,
-            PacketData::CombinedMarkersReport(_) => 104,
+            PacketData::ObjectReport(_) => ObjectReport::SIZE,
+            PacketData::CombinedMarkersReport(_) => CombinedMarkersReport::SIZE,
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
@@ -500,6 +485,7 @@ impl WriteRegister {
 }
 
 impl GeneralConfig {
+    const SIZE: u16 = 188;
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let impact_threshold = bytes[0];
@@ -599,6 +585,7 @@ impl MotData {
 }
 
 impl ObjectReport {
+    const SIZE: u16 = 518;
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let timestamp = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
@@ -629,14 +616,16 @@ impl ObjectReport {
 }
 
 impl CombinedMarkersReport {
+    const SIZE: u16 = 108;
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
-        if bytes.len() < 108 {
+        let size = Self::SIZE as usize;
+        if bytes.len() < size {
             return Err(E::UnexpectedEof { packet_type: Some(PacketType::CombinedMarkersReport) });
         }
 
-        let data = &mut &bytes[..108];
-        *bytes = &bytes[108..];
+        let data = &mut &bytes[..size];
+        *bytes = &bytes[size..];
 
         let mut positions = [Point2::new(0, 0); 16*2];
         for i in 0..positions.len() {
@@ -655,7 +644,7 @@ impl CombinedMarkersReport {
         for i in 0..32 {
             let byte_index = bit_offset / 8;
             let bit_index = bit_offset % 8;
-            
+
             screen_ids[i] = if bit_index <= 5 {
                 // The bits are within the same byte
                 (data[byte_index] >> bit_index) & 0x7
@@ -665,7 +654,7 @@ impl CombinedMarkersReport {
                 let second_part = data[byte_index + 1] << (8 - bit_index);
                 (first_part | second_part) & 0x7
             };
-        
+
             bit_offset += 3;
         }
 
@@ -679,7 +668,7 @@ impl CombinedMarkersReport {
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         for p in self.nf_points.iter().chain(&self.wf_points) {
-            let XY { x, y } = **p;
+            let (x, y) = (p.x, p.y);
             let byte0 = x & 0xff;
             let byte1 = ((x >> 8) & 0x0f) | ((y & 0x0f) << 4);
             let byte2 = y >> 4;
@@ -696,7 +685,7 @@ impl CombinedMarkersReport {
                 } else {
                     self.wf_screen_ids[i - 16]
                 } & 0x07; // Mask to 3 bits
-        
+
                 let mask = screen_id << bit_index;
                 buf[byte_index] |= mask;
                 if bit_index > 5 {
