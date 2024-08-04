@@ -216,7 +216,7 @@ pub struct StreamUpdate {
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
     UnexpectedEof { packet_type: Option<PacketType> },
-    UnrecognizedPacketId,
+    UnrecognizedPacketId(u8),
     UnrecognizedPort,
     UnrecognizedMarkerPattern,
 }
@@ -227,7 +227,7 @@ impl Display for Error {
         match self {
             S::UnexpectedEof { packet_type: None } => write!(f, "unexpected eof"),
             S::UnexpectedEof { packet_type: Some(p) } => write!(f, "unexpected eof, packet id {p:?}"),
-            S::UnrecognizedPacketId => write!(f, "unrecognized packet id"),
+            S::UnrecognizedPacketId(id) => write!(f, "unrecognized packet id {id}"),
             S::UnrecognizedPort => write!(f, "unrecognized port"),
             S::UnrecognizedMarkerPattern => write!(f, "unrecognized marker pattern"),
         }
@@ -278,7 +278,7 @@ pub enum PacketType {
 impl TryFrom<u8> for PacketType {
     type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
-        Self::n(n).ok_or(Error::UnrecognizedPacketId)
+        Self::n(n).ok_or(Error::UnrecognizedPacketId(n))
     }
 }
 
