@@ -485,7 +485,7 @@ impl WriteRegister {
 }
 
 impl GeneralConfig {
-    const SIZE: u16 = 188;
+    pub const SIZE: u16 = 188;
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let impact_threshold = bytes[0];
