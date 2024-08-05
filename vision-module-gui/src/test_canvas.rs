@@ -52,7 +52,7 @@ impl AreaHandler for TestCanvas {
             &ctx,
             20.0,
             60.0,
-            &format!("screen_id = {}", runner.state.screen_id),
+            &format!("screen_id = {}", runner.state.fv_state.screen_id),
         );
 
         let grid_path = Path::new(ctx, FillMode::Winding);

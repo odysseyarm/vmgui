@@ -234,9 +234,12 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
             encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
-        println!("{timestamp}");
         prev_timestamp = Some(timestamp);
-        packet_index = (packet_index + 1) % state.packets.lock().unwrap().len();
+        packet_index = packet_index + 1;
+        if packet_index >= state.packets.lock().unwrap().len() {
+            packet_index = 0;
+            println!("looping");
+        }
     }
 }
 

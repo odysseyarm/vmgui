@@ -79,7 +79,7 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
         &ctx,
         20.0,
         20.0,
-        &format!("screen_id = {}", state.screen_id),
+        &format!("screen_id = {}", state.fv_state.screen_id),
     );
 
     let gravity_rot = Rotation2::new(-gravity_angle);

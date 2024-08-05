@@ -252,7 +252,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points) {
+                if let Some((wf_match_ix, _, _)) = identify_markers2(&wf_normalized, None, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
@@ -283,9 +283,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
 
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points);
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, None, gravity_vec.cast(), runner.screen_info.screen_dimensions_meters, runner.screen_info.marker_points);
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
-                .map(|(markers, reproj)| (
+                .map(|(markers, reproj, _)| (
                     markers.into_iter().collect(),
                     reproj.map(|x| x.into()).into_iter().collect(),
                 ))
