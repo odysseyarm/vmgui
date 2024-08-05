@@ -270,7 +270,7 @@ struct State {
     stream_accel: Option<u8>,
     stream_combined_markers: Option<u8>,
     stream_object_report: Option<u8>,
-    packets: Arc<Mutex<Vec<(i128, Packet)>>>,
+    packets: Arc<Mutex<Vec<(u128, Packet)>>>,
     general_config: GeneralConfig,
     props: Props,
 }
