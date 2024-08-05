@@ -444,7 +444,6 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "ats_cv"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/ats_cv.git#b9cf32f6f861c6ea62cbe5976245da7c9067e040"
 dependencies = [
  "arrayvec 0.7.4",
  "cam-geom",
@@ -2121,7 +2120,6 @@ dependencies = [
 [[package]]
 name = "eskf"
 version = "0.3.0"
-source = "git+https://github.com/odysseyarm/ats_cv.git#b9cf32f6f861c6ea62cbe5976245da7c9067e040"
 dependencies = [
  "nalgebra 0.32.6",
 ]

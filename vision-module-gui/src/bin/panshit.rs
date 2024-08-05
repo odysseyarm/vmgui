@@ -65,7 +65,7 @@ fn main() {
             Err(e) => {
                 match e {
                     ats_usb::packet::Error::UnexpectedEof { .. } => {}
-                    ats_usb::packet::Error::UnrecognizedPacketId => {}
+                    ats_usb::packet::Error::UnrecognizedPacketId(_) => {}
                     ats_usb::packet::Error::UnrecognizedPort => {}
                     _ => {
                         println!("Error: {:?}", e);
