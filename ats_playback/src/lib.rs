@@ -5,7 +5,7 @@ use std::io::Seek;
 use std::io::Error;
 use std::path::PathBuf;
 
-pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(i128, Packet)>), Error> {
+pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>), Error> {
     let mut file = std::fs::File::open(path).unwrap();
     let mut buf = [0; GeneralConfig::SIZE as usize];
     file.read_exact(&mut buf).unwrap();
@@ -15,7 +15,7 @@ pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(i128, Packet)>),
         let mut buf = [0; 16];
         match file.read_exact(&mut buf) {
             Ok(()) => {
-                let timestamp = i128::from_le_bytes(buf);
+                let timestamp = u128::from_le_bytes(buf);
                 let mut chunk = Vec::new();
                 let mut buf = [0; 1024];
                 let read = file.read(&mut buf).unwrap();
