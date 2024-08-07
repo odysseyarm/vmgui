@@ -141,6 +141,9 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
             PacketData::ObjectReportRequest(_) => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
             PacketData::StreamUpdate(s) => {
+                if s.mask & 0b1000 != 0 {
+                    state.stream_impact = if s.active { Some(pkt.id) } else { None };
+                }
                 if s.mask & 0b0100 != 0 {
                     state.stream_accel = if s.active { Some(pkt.id) } else { None };
                 }
@@ -217,6 +220,9 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
         let state = state.lock().unwrap();
 
         if let Some(id) = match pkt.data {
+            PacketData::ImpactReport(_) => {
+                state.stream_impact
+            }
             PacketData::AccelReport(_) => {
                 state.stream_accel
             }
@@ -270,6 +276,7 @@ impl Not for StreamState {
 }
 
 struct State {
+    stream_impact: Option<u8>,
     stream_accel: Option<u8>,
     stream_combined_markers: Option<u8>,
     stream_object_report: Option<u8>,
@@ -281,6 +288,7 @@ struct State {
 impl State {
     fn new() -> Self {
         Self {
+            stream_impact: None,
             stream_accel: None,
             stream_combined_markers: None,
             stream_object_report: None,
