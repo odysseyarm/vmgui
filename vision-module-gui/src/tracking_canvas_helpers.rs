@@ -275,7 +275,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let orientation = state.fv_state.filter.orientation;
         let reproj_tf = Isometry3::from_parts(position.into(), orientation);
         let fv_reproj_path = Path::new(ctx, FillMode::Winding);
-        let p = reproj_tf.cast().inverse_transform_point(p);
+        let p = reproj_tf.cast().inverse_transform_point(&p);
         let p = p / p.z;
         // todo don't use hardcoded 4095x4095 res assumption
         let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
@@ -291,7 +291,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         for p in screen_calibration.object_points { // pnp reprojections
             let reproj_tf = pnp_iso.inverse();
             let pnp_reproj_path = Path::new(ctx, FillMode::Winding);
-            let p = reproj_tf.cast().inverse_transform_point(p);
+            let p = reproj_tf.cast().inverse_transform_point(&p);
             let p = p / p.z;
             // todo don't use hardcoded 4095x4095 res assumption
             let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;

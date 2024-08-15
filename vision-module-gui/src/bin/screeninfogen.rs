@@ -34,12 +34,12 @@ where
 
     // for serious wall
     [
-        Point3::from([F::from_f64(-0.31944444444).unwrap() * w, F::from_f64(-0.20238095238).unwrap() * h, _d]),
-        Point3::from([F::from_f64(-0.34722222222).unwrap() * w, F::from_f64(0.32142857142).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.27083333333).unwrap() * w, F::from_f64(0.28571428571).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.01041666666).unwrap() * w, F::from_f64(-0.15476190476).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.29861111111).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(-0.01041666666).unwrap() * w, F::from_f64(0.2619047619).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
+        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
     ]
 }
 
@@ -51,7 +51,7 @@ pub fn main() {
     // let screen_dimensions_meters = [2.28231, 1.2838];
 
     // serious wall
-    let screen_dimensions_meters = [3.6576, 2.1336];
+    let screen_dimensions_meters = [2.032*(16./9.), 2.032];
 
     let pattern = marker_pattern(screen_dimensions_meters);
 
