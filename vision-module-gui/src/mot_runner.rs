@@ -245,7 +245,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _)) = identify_markers2(&wf_normalized, gravity_vec.cast(), &runner.screen_calibration) {
+                if let Some((wf_match_ix, _, _)) = identify_markers2(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
@@ -271,19 +271,12 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.rotation_mat = rotmat.matrix().cast();
             runner.state.translation_mat = transmat.vector.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint = fv_aimpoint.cast();
-                println!("fv_aimpoint: {:?}", fv_aimpoint);
+                runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[10000., 10000.]);
             }
 
-            if let Some(x) = calculate_individual_aimpoint(&nf_points_transformed, runner.state.orientation, None, &runner.general_config.camera_model_nf, &runner.screen_calibration) {
-                runner.state.nf_aimpoint = x;
-            }
+            runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
 
-            if let Some(x) = calculate_individual_aimpoint(&wf_points_transformed, runner.state.orientation, Some(&runner.general_config.stereo_iso.cast()), &runner.general_config.camera_model_wf, &runner.screen_calibration) {
-                runner.state.wf_aimpoint = x;
-            }
-
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, gravity_vec.cast(), &runner.screen_calibration);
+            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
                 .map(|(markers, reproj, _)| (
                     markers.into_iter().collect(),
@@ -343,69 +336,6 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn calculate_individual_aimpoint(points: &[Point2<f64>], orientation: Rotation3<f32>, iso: Option<&Isometry3<f32>>, intrinsics: &RosOpenCvIntrinsics<f32>, screen_calibration: &ScreenCalibration<f64>) -> Option<Point2<f64>> {
-    let fx = intrinsics.p.m11 * (4095./98.);
-    let fy = intrinsics.p.m22 * (4095./98.);
-
-    let gravity_vec = orientation.inverse_transform_vector(&Vector3::z());
-	let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.;
-
-    if points.len() > 3 {
-        let mut rotated_points = ats_cv::mot_rotate(&points, -gravity_angle);
-        sort_points(&mut rotated_points);
-        // todo rotating back is bad, select with slice instead
-        let points = ats_cv::mot_rotate(&rotated_points, gravity_angle);
-
-        let projections = ats_cv::calculate_projections(
-            &points,
-            // 1/math.tan(38.3 / 180 * math.pi / 2) * 2047.5 (value used in the sim)
-            Vector2::new(fx as f64, fy as f64),
-            Vector2::new(4095., 4095.),
-        );
-        let solution = ats_cv::solve_pnp_with_dynamic_screen_points(
-            projections.as_slice(),
-            &[
-                Point2::new(0.35, 0.),
-                Point2::new(0.65, 0.),
-                Point2::new(0.65, 1.),
-                Point2::new(0.35, 1.),
-            ],
-            16./9.,
-            1.,
-        );
-        if let Some(sol) = solution {
-            let r_hat = Rotation3::from_matrix_unchecked(sol.r_hat.reshape_generic(Const::<3>, Const::<3>).transpose());
-            let t = Translation3::from(sol.t);
-            let tf = t * r_hat;
-            let ctf = tf.inverse();
-
-            let flip_yz = Matrix3::new(
-                1.0, 0.0, 0.0,
-                0.0, -1.0, 0.0,
-                0.0, 0.0, -1.0,
-            );
-
-            if let Some(iso) = iso {
-                let iso = iso.cast();
-                let rotation = Rotation3::from_matrix_unchecked(flip_yz * (iso.rotation * ctf.rotation).to_rotation_matrix() * flip_yz);
-                let translation = Translation3::from(flip_yz * ctf.translation.vector);
-
-                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
-
-                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
-            } else {
-                let rotation = Rotation3::from_matrix_unchecked(flip_yz * ctf.rotation.matrix() * flip_yz);
-                let translation = Translation3::from(flip_yz * ctf.translation.vector);
-
-                let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(translation, rotation);
-
-                return ats_cv::calculate_aimpoint(&isometry, screen_calibration);
-            }
-        }
-    }
-    None
-}
-
 fn filter_and_create_point_tuples(
     points: &[Point2<u16>],
     screen_ids: &[u8],
@@ -416,7 +346,7 @@ fn filter_and_create_point_tuples(
         .enumerate()
         .filter_map(|(id, (pos, &screen_id))| {
             // screen id of 7 means there is no marker
-            if screen_id < 7 && (400..3696).contains(&pos.x) && (400..3696).contains(&pos.y) {
+            if screen_id < 7 && (200..3896).contains(&pos.x) && (200..3896).contains(&pos.y) {
                 Some((screen_id, id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
@@ -452,17 +382,15 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            let screen_info = runner.screen_info.clone();
-
             if let Some(prev_timestamp) = prev_timestamp {
                 let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
                 // println!("elapsed: {}", elapsed);
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed), screen_info.screen_dimensions_meters);
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed));
 
                 let sample_period = runner.state.madgwick.sample_period_mut();
                 *sample_period = elapsed as f32/1_000_000.;
             } else {
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32), screen_info.screen_dimensions_meters);
+                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
             }
             prev_timestamp = Some(accel.timestamp);
 

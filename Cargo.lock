@@ -112,7 +112,7 @@ dependencies = [
 [[package]]
 name = "ahrs"
 version = "0.6.0"
-source = "git+https://github.com/jmagnuson/ahrs-rs#bf7b41d09115b47ce8f6060624ed6a8a9bc445d4"
+source = "git+https://github.com/jmagnuson/ahrs-rs?rev=f833f8706ed5e21a2fe9e06922373bc50bc2a2c6#f833f8706ed5e21a2fe9e06922373bc50bc2a2c6"
 dependencies = [
  "nalgebra 0.32.6",
  "num-traits",
