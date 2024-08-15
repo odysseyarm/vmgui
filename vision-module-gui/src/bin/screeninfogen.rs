@@ -1,7 +1,8 @@
 use app_dirs2::{get_app_root, AppDataType};
 use nalgebra::{ComplexField, Point3, RealField, Scalar};
 use vision_module_gui::ScreenInfo;
-use vision_module_gui::consts::{APP_INFO, MARKER_PATTERN_LEN};
+use vision_module_gui::consts::APP_INFO;
+use ats_cv::foveated::MARKER_PATTERN_LEN;
 
 pub const MARKER_DEPTH_METERS: f64 = 0.0117;
 

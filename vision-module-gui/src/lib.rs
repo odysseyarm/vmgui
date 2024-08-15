@@ -1,9 +1,10 @@
 use arrayvec::ArrayVec;
-use consts::MARKER_PATTERN_LEN;
+use ats_cv::foveated::MARKER_PATTERN_LEN;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3, Vector2};
 use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
 use serde::Serialize;
 use ats_usb::packet::MotData;
+use sqpnp::types::SQPSolution;
 
 pub mod config_window;
 pub mod layout_macro;
@@ -38,42 +39,6 @@ pub struct ScreenInfo {
     pub marker_points: [nalgebra::Point3<f64>; MARKER_PATTERN_LEN],
 }
 
-#[derive(serde::Deserialize)]
-pub struct Plane {
-    pub origin: nalgebra::Point3<f32>,
-    pub normal: nalgebra::Vector3<f32>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct ScreenCalibration {
-    plane: Plane,
-    homography: nalgebra::Matrix3<f32>,
-    object_points: [nalgebra::Point3<f32>; 6],
-}
-
-impl ScreenCalibration {
-    fn xy_transform(&self) -> nalgebra::Transform3<f32> {
-        let z_axis = self.plane.normal.normalize();
-        let x_axis = nalgebra::Vector3::new(0.0, 1.0, 0.0).cross(&z_axis);
-        let x_axis = if x_axis.norm() == 0.0 {
-            nalgebra::Vector3::new(1.0, 0.0, 0.0).cross(&z_axis)
-        } else {
-            x_axis
-        };
-        let x_axis = x_axis.normalize();
-        let y_axis = z_axis.cross(&x_axis);
-
-        let rotation_matrix = Matrix3::from_columns(&[x_axis, y_axis, z_axis]);
-        let translation = -rotation_matrix * (self.plane.normal * self.plane.origin.coords.dot(&self.plane.normal) / self.plane.normal.norm_squared());
-
-        let mut transformation_matrix = nalgebra::Matrix4::identity();
-        transformation_matrix.fixed_view_mut::<3, 3>(0, 0).copy_from(&rotation_matrix);
-        transformation_matrix.fixed_view_mut::<3, 1>(0, 3).copy_from(&translation);
-
-        nalgebra::Transform3::from_matrix_unchecked(transformation_matrix)
-    }
-}
-
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f64>,
@@ -102,6 +67,8 @@ pub struct MotState {
 
     pub fv_aimpoint_history: [Point2<f64>; 100],
     pub fv_aimpoint_history_index: usize,
+
+    pub previous_sqp_solution: Option<SQPSolution>,
 }
 
 impl Default for MotState {
@@ -122,11 +89,12 @@ impl Default for MotState {
             wf_reproj: Default::default(),
             nf_markers2: Default::default(),
             wf_markers2: Default::default(),
-            fv_aimpoint_pva2d: Pva2d::new(0.00001, 1.0),
+            fv_aimpoint_pva2d: Pva2d::new(0.0001, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
             fv_aimpoint_history: [Point2::new(0.0, 0.0); 100],
             fv_aimpoint_history_index: 0,
+            previous_sqp_solution: None,
         }
     }
 }
