@@ -470,6 +470,7 @@ dependencies = [
 name = "ats_playback_pyo3"
 version = "0.2.0"
 dependencies = [
+ "ats_cv",
  "ats_playback",
  "ats_usb",
  "pyo3",
