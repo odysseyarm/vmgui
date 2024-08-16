@@ -697,7 +697,8 @@ impl CombinedMarkersReport {
     }
 }
 
-#[cfg_attr(feature = "pyo3", pyo3::pymethods)]
+#[cfg(feature = "pyo3")]
+#[pyo3::pymethods]
 impl CombinedMarkersReport {
     #[getter]
     fn nf_screen_ids(&self) -> [u8; 16] {
