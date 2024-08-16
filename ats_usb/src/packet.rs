@@ -697,6 +697,26 @@ impl CombinedMarkersReport {
     }
 }
 
+#[cfg_attr(feature = "pyo3", pyo3::pymethods)]
+impl CombinedMarkersReport {
+    #[getter]
+    fn nf_screen_ids(&self) -> [u8; 16] {
+        self.nf_screen_ids
+    }
+    #[getter]
+    fn wf_screen_ids(&self) -> [u8; 16] {
+        self.wf_screen_ids
+    }
+    #[getter]
+    fn nf_points(&self) -> [[u16; 2]; 16] {
+        self.nf_points.map(|p| [p.x, p.y])
+    }
+    #[getter]
+    fn wf_points(&self) -> [[u16; 2]; 16] {
+        self.wf_points.map(|p| [p.x, p.y])
+    }
+}
+
 impl AccelReport {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         // accel: x, y, z, 16384 = 1g
