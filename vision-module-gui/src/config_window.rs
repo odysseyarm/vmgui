@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use ats_usb::{device::UsbDevice, packet::{AccelConfig, GeneralConfig, Port}};
+use ats_usb::{device::UsbDevice, packet::{AccelConfig, GyroConfig, GeneralConfig, Port}};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
@@ -322,6 +322,7 @@ pub fn config_window(
 struct GeneralSettingsForm {
     impact_threshold: RwSignal<i32>,
     accel_config: RwSignal<AccelConfig>,
+    gyro_config: RwSignal<GyroConfig>,
     nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
     wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
     stereo_iso: RwSignal<nalgebra::Isometry3<f32>>,
@@ -333,6 +334,7 @@ impl GeneralSettingsForm {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let accel_config = create_rw_signal(AccelConfig::default());
+        let gyro_config = create_rw_signal(GyroConfig::default());
         let nf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
         let wf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         let stereo_iso = create_rw_signal(nalgebra::Isometry3::identity());
@@ -341,6 +343,8 @@ impl GeneralSettingsForm {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
                 (Compact, "Upload Accelerometer Config") : let upload_accel_config = Button("Upload")
                 (Compact, "Download Accelerometer Config") : let download_accel_config = Button("Download")
+                (Compact, "Upload Gyroscope Config") : let upload_gyro_config = Button("Upload")
+                (Compact, "Download Gyroscope Config") : let download_gyro_config = Button("Download")
                 (Compact, "Upload Nearfield Calibration") : let upload_nf_json = Button("Upload")
                 (Compact, "Download Nearfield Calibration") : let download_nf_json = Button("Download")
                 (Compact, "Upload Widefield Calibration") : let upload_wf_json = Button("Upload")
@@ -360,6 +364,7 @@ impl GeneralSettingsForm {
             win.c(),
         );
         set_accel_upload_handler(&ui, &mut upload_accel_config, accel_config.c(), win.c());
+        set_gyro_upload_handler(&ui, &mut upload_gyro_config, gyro_config.c(), win.c());
         set_calibration_download_handlers(
             &ui,
             &mut download_nf_json,
@@ -371,11 +376,13 @@ impl GeneralSettingsForm {
             win.c(),
         );
         set_accel_download_handler(&ui, &mut download_accel_config, accel_config.c(), win.c());
+        set_gyro_download_handler(&ui, &mut download_gyro_config, gyro_config.c(), win.c());
         (
             form,
             Self {
                 impact_threshold,
                 accel_config,
+                gyro_config,
                 nf_intrinsics,
                 wf_intrinsics,
                 stereo_iso,
@@ -442,6 +449,7 @@ impl GeneralSettingsForm {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             accel_config: self.accel_config.get_untracked(),
+            gyro_config: self.gyro_config.get_untracked(),
             camera_model_nf: self.nf_intrinsics.get_untracked(),
             camera_model_wf: self.wf_intrinsics.get_untracked(),
             stereo_iso: self.stereo_iso.get_untracked(),
@@ -451,6 +459,7 @@ impl GeneralSettingsForm {
             let general_config = &mut self.mot_runner.lock().general_config;
             general_config.impact_threshold = config.impact_threshold;
             general_config.accel_config = config.accel_config;
+            general_config.gyro_config = config.gyro_config;
             general_config.camera_model_nf = config.camera_model_nf;
             general_config.camera_model_wf = config.camera_model_wf;
             general_config.stereo_iso = config.stereo_iso;
@@ -460,11 +469,13 @@ impl GeneralSettingsForm {
 
     fn clear(&self) {
         self.accel_config.set(AccelConfig::default());
+        self.gyro_config.set(GyroConfig::default());
     }
 
     fn load_defaults(&self) {
         self.impact_threshold.set(2);
         self.accel_config.set(AccelConfig::default());
+        self.gyro_config.set(GyroConfig::default());
         self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
         self.wf_intrinsics.set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         self.stereo_iso.set(nalgebra::Isometry3::identity());
@@ -636,6 +647,51 @@ fn set_accel_download_handler(ui: &UI, download_accel: &mut Button, accel_config
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
                     serde_json::to_writer(writer, &accel_config_signal.get())?;
+                    win.modal_msg(&ui, "Downloaded configuration", "Successfully downloaded configuration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to download configuration", "Failed to write file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to download configuration", "No file selected");
+            }
+        }
+    });
+}
+
+fn set_gyro_upload_handler(ui: &UI, upload_gyro: &mut Button, gyro_config_signal: RwSignal<GyroConfig>, win: Window) {
+    upload_gyro.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.open_file(&ui) {
+                let Ok(()) = (|| {
+                    let reader = std::fs::File::open(&path)?;
+                    let gyro_config: GyroConfig = serde_json::from_reader(reader)?;
+                    gyro_config_signal.set(gyro_config);
+                    win.modal_msg(&ui, "Uploaded configuration", "Successfully uploaded configuration");
+                    Ok::<(), Box<dyn std::error::Error>>(())
+                })() else {
+                    win.modal_err(&ui, "Failed to upload configuration", "Failed to read file");
+                    return;
+                };
+            } else {
+                win.modal_err(&ui, "Failed to upload configuration", "No file selected");
+            }
+        }
+    });
+}
+
+fn set_gyro_download_handler(ui: &UI, download_gyro: &mut Button, gyro_config_signal: RwSignal<GyroConfig>, win: Window) {
+    download_gyro.on_clicked(&ui, {
+        let ui = ui.c();
+        let win = win.c();
+        move |_| {
+            if let Some(path) = win.save_file(&ui) {
+                let Ok(()) = (|| {
+                    let writer = std::fs::File::create(&path)?;
+                    serde_json::to_writer(writer, &gyro_config_signal.get())?;
                     win.modal_msg(&ui, "Downloaded configuration", "Successfully downloaded configuration");
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {

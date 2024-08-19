@@ -129,6 +129,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             GeneralConfig {
                 impact_threshold: 5,
                 accel_config: Default::default(),
+                gyro_config: Default::default(),
                 camera_model_nf: RosOpenCvIntrinsics::from_params(
                     49.0 * nf_focal_length() as f32,
                     0.,
