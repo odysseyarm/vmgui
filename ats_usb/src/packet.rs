@@ -118,11 +118,49 @@ impl AccelConfig {
     }
 }
 
+
+#[serde_inline_default]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[derive(Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug)]
+pub struct GyroConfig {
+    pub b_x: f32,
+    pub b_y: f32,
+    pub b_z: f32,
+}
+
+impl Default for GyroConfig {
+    fn default() -> Self {
+        Self {
+            b_x: 0.0,
+            b_y: 0.0,
+            b_z: 0.0,
+        }
+    }
+}
+
+impl GyroConfig {
+    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let b_x = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let b_y = f32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let b_z = f32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
+        *bytes = &bytes[12..];
+        Ok(Self { b_x, b_y, b_z })
+    }
+
+    pub fn serialize(&self, buf: &mut Vec<u8>) {
+        for &b in &[self.b_x, self.b_y, self.b_z] {
+            buf.extend_from_slice(&b.to_le_bytes());
+        }
+    }
+}
+
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
 pub struct GeneralConfig {
     pub impact_threshold: u8,
     pub accel_config: AccelConfig,
+    pub gyro_config: GyroConfig,
     pub camera_model_nf: RosOpenCvIntrinsics<f32>,
     pub camera_model_wf: RosOpenCvIntrinsics<f32>,
     pub stereo_iso: Isometry3<f32>,
@@ -145,6 +183,7 @@ impl Default for GeneralConfig {
         Self {
             impact_threshold: 5,
             accel_config: Default::default(),
+            gyro_config: Default::default(),
             camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
             camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
             stereo_iso: Isometry3::identity(),
@@ -485,7 +524,7 @@ impl WriteRegister {
 }
 
 impl GeneralConfig {
-    pub const SIZE: u16 = 188;
+    pub const SIZE: u16 = 204;
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let impact_threshold = bytes[0];
@@ -493,6 +532,11 @@ impl GeneralConfig {
         *bytes = &bytes[1..];
 
         let accel_config = match AccelConfig::parse(bytes) {
+            Ok(x) => x,
+            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+        };
+
+        let gyro_config = match GyroConfig::parse(bytes) {
             Ok(x) => x,
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
@@ -514,12 +558,13 @@ impl GeneralConfig {
 
         *bytes = &bytes[1..];
 
-        Ok(Self { impact_threshold, accel_config, camera_model_nf, camera_model_wf, stereo_iso })
+        Ok(Self { impact_threshold, accel_config, gyro_config, camera_model_nf, camera_model_wf, stereo_iso })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&[self.impact_threshold]);
         self.accel_config.serialize(buf);
+        self.gyro_config.serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
         MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
         MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
@@ -751,6 +796,22 @@ impl AccelReport {
             let g = (g.to_degrees() * 16.4) as i16;
             buf.extend_from_slice(&g.to_le_bytes());
         }
+    }
+
+    pub fn corrected_accel(&self, accel_config: &AccelConfig) -> Vector3<f32> {
+        Vector3::new(
+            (self.accel.x - accel_config.b_x) / accel_config.s_x,
+            (self.accel.y - accel_config.b_y) / accel_config.s_y,
+            (self.accel.z - accel_config.b_z) / accel_config.s_z,
+        )
+    }
+
+    pub fn corrected_gyro(&self, gyro_config: &GyroConfig) -> Vector3<f32> {
+        Vector3::new(
+            self.gyro.x - gyro_config.b_x,
+            self.gyro.y - gyro_config.b_y,
+            self.gyro.z - gyro_config.b_z,
+        )
     }
 }
 

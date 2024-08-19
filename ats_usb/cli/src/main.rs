@@ -9,16 +9,23 @@ use argmin::core::{CostFunction, Executor, Gradient};
 use argmin::core::observers::ObserverMode;
 use argmin_observer_slog::SlogLogger;
 use argmin::core::Error;
-use tokio::io::{self, AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[derive(Serialize, Deserialize)]
-struct Calibration {
+struct AccelCalibration {
     b_x: f64,
     b_y: f64,
     b_z: f64,
     s_x: f64,
     s_y: f64,
     s_z: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GyroCalibration {
+    b_x: f64,
+    b_y: f64,
+    b_z: f64,
 }
 
 struct CostFn {
@@ -94,10 +101,14 @@ struct Args {
     path: Option<String>,
 
     /// Output file for accelerometer bias and scale calculation
-    #[arg(short)]
-    a: Option<String>,
+    #[arg(long)]
+    accel: Option<String>,
 
-    /// Number of samples to use for accelerometer bias and scale calculation
+    /// Output file for gyroscope bias calculation
+    #[arg(long)]
+    gyro: Option<String>,
+
+    /// Number of samples to use for bias and scale calculation
     #[arg(short, default_value_t = 400)]
     n: usize,
 
@@ -132,8 +143,9 @@ async fn main() {
 
     println!("Connecting to device at {}", path);
 
-    // Get accelerometer bias and scale parameters
-    let ac_path = args.a;
+    // Get accelerometer and gyroscope calibration parameters
+    let accel_path = args.accel;
+    let gyro_path = args.gyro;
     let num_samples = args.n;
     let gravity = args.g;
 
@@ -143,9 +155,12 @@ async fn main() {
 
     println!("Connected to device");
 
-    if let Some(ac_path) = ac_path {
-        // Perform bias and scale calculation
-        calculate_and_save_bias_scale(&mut device, &ac_path, num_samples, gravity).await;
+    if let Some(gyro_path) = gyro_path {
+        // Perform gyroscope bias calculation
+        calculate_and_save_gyro_bias(&mut device, &gyro_path, num_samples).await;
+    } else if let Some(accel_path) = accel_path {
+        // Perform bias and scale calculation for accelerometer
+        calculate_and_save_bias_scale(&mut device, &accel_path, num_samples, gravity).await;
     } else {
         // Normal streaming
         let mut s = device.stream_accel().await.unwrap();
@@ -153,7 +168,7 @@ async fn main() {
     }
 }
 
-async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, ac_path: &str, num_samples: usize, g: f64) {
+async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, accel_path: &str, num_samples: usize, g: f64) {
     let orientations = [
         "Place the device with the top side facing up.",
         "Place the device with the bottom side facing up.",
@@ -208,7 +223,7 @@ async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, 
             let solution = result.state.best_param.unwrap();
 
             // Extract solution
-            let calibration = Calibration {
+            let calibration = AccelCalibration {
                 b_x: solution[0],
                 b_y: solution[1],
                 b_z: solution[2],
@@ -220,14 +235,47 @@ async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, 
             // Save to JSON
             let data = json!(calibration);
 
-            std::fs::write(ac_path, serde_json::to_string_pretty(&data).unwrap()).expect("Unable to write file");
+            std::fs::write(accel_path, serde_json::to_string_pretty(&data).unwrap()).expect("Unable to write file");
 
-            println!("Bias and scale saved to {}", ac_path);
+            println!("Bias and scale saved to {}", accel_path);
         }
         Err(e) => {
             eprintln!("Optimization failed: {}", e);
         }
     }
+}
+
+async fn calculate_and_save_gyro_bias(device: &mut ats_usb::device::UsbDevice, gyro_path: &str, num_samples: usize) {
+    let mut gyro_sum = Vector3::zeros();
+
+    println!("Please make sure the device is held firmly in place.");
+    println!("Press Enter when ready to start collecting samples for gyroscope calibration.");
+    let mut reader = BufReader::new(tokio::io::stdin());
+    let mut input = String::new();
+    reader.read_line(&mut input).await.unwrap();
+
+    let mut s = device.stream_accel().await.unwrap();
+
+    for _ in 0..num_samples {
+        if let Some(v) = s.next().await {
+            gyro_sum += v.gyro.cast::<f64>();
+        }
+    }
+
+    let gyro_bias = gyro_sum / (num_samples as f64);
+
+    // Save gyro bias to JSON
+    let calibration = GyroCalibration {
+        b_x: gyro_bias.x,
+        b_y: gyro_bias.y,
+        b_z: gyro_bias.z,
+    };
+
+    let gyro_data = json!(calibration);
+
+    std::fs::write(gyro_path, serde_json::to_string_pretty(&gyro_data).unwrap()).expect("Unable to write file");
+
+    println!("Gyroscope bias saved to {}", gyro_path);
 }
 
 async fn normal_streaming(s: &mut (impl futures::Stream<Item = ats_usb::packet::AccelReport> + Unpin)) {
