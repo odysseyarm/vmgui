@@ -41,18 +41,18 @@ print(f"{len(screen_ids) = }")
 mat = []
 peaks = []
 compressed_screen_ids = []
-for i in range(0, len(arr)//64*64, 64):
-    mat.append(abs(np.fft.rfft(arr[i:i+64])[1:]))
-    peaks.append(ats_playback.peak_detect_64(arr[i:i+64]))
-    compressed_screen_ids.append(min(screen_ids[i:i+64]))
+for i in range(0, len(arr)//128*128, 128):
+    mat.append(abs(np.fft.rfft(arr[i:i+128])[1:]))
+    peaks.append(ats_playback.peak_detect_128(arr[i:i+128]))
+    compressed_screen_ids.append(min(screen_ids[i:i+128]))
 
 print(f"{peaks = }")
 print(f"{compressed_screen_ids = }")
 
-freq = np.fft.rfftfreq(64, 1/200)[1:]
+freq = np.fft.rfftfreq(128, 1/200)[1:]
 
 if MODE == "heatmap":
-    pp.imshow(mat, vmax=100, extent=(200/64, 100, 0, 100))
+    pp.imshow(mat, vmax=100, extent=(200/128, 100, 0, 100))
     pp.title(f"{SENSOR.upper()} Object {OBJ_ID}")
     pp.show()
 elif MODE == "animation":
