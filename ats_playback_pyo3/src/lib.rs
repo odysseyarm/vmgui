@@ -14,13 +14,13 @@ pub fn read_file(path: &str) -> PyResult<(GeneralConfig, Vec<(u128, Packet)>)> {
 }
 
 #[pyfunction]
-pub fn peak_detect_64(mut a: [f32; 64]) -> f32 {
-    ats_cv::peak_detect_64(&mut a, 45.0, 85.0, 200.0)
+pub fn peak_detect_128(mut a: [f32; 128]) -> f32 {
+    ats_cv::peak_detect_128(&mut a, 45.0, 85.0, 200.0)
 }
 
 #[pymodule]
 fn ats_playback(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(read_file, m)?)?;
-    m.add_function(wrap_pyfunction!(peak_detect_64, m)?)?;
+    m.add_function(wrap_pyfunction!(peak_detect_128, m)?)?;
     Ok(())
 }
