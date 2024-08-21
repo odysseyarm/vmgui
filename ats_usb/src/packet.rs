@@ -71,7 +71,7 @@ pub struct ReadRegisterResponse {
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Serialize, Deserialize)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AccelConfig {
     #[serde_inline_default(100)]
     pub accel_odr: u16,
@@ -122,7 +122,7 @@ impl AccelConfig {
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Serialize, Deserialize)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GyroConfig {
     pub b_x: f32,
     pub b_y: f32,
@@ -156,7 +156,7 @@ impl GyroConfig {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GeneralConfig {
     pub impact_threshold: u8,
     pub accel_config: AccelConfig,
@@ -524,7 +524,7 @@ impl WriteRegister {
 }
 
 impl GeneralConfig {
-    pub const SIZE: u16 = 204;
+    pub const SIZE: u16 = 200;
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let impact_threshold = bytes[0];
