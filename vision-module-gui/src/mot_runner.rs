@@ -346,7 +346,7 @@ fn filter_and_create_point_tuples(
         .enumerate()
         .filter_map(|(id, (pos, &screen_id))| {
             // screen id of 7 means there is no marker
-            if screen_id < 7 && (200..3896).contains(&pos.x) && (200..3896).contains(&pos.y) {
+            if screen_id < 7 && (80..4016).contains(&pos.x) && (80..4016).contains(&pos.y) {
                 Some((screen_id, id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
