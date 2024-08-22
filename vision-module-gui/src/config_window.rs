@@ -397,6 +397,7 @@ impl GeneralSettingsForm {
 
         self.impact_threshold.set(i32::from(config.impact_threshold));
         self.accel_config.set(config.accel_config);
+        self.gyro_config.set(config.gyro_config);
         self.nf_intrinsics.set(config.camera_model_nf.clone());
         self.wf_intrinsics.set(config.camera_model_wf.clone());
         self.stereo_iso.set(config.stereo_iso.clone());
