@@ -283,18 +283,18 @@ impl State {
                 // tf * Point3::new(0.65, 0.9, 0.0),
                 // tf * Point3::new(1.0, 0.5, 0.0),
 
-                tf * Point3::new(0.2, 0.98, 0.0),
-                tf * Point3::new(0.46, 0.98, 0.0),
-                tf * Point3::new(0.8, 0.98, 0.0),
-                tf * Point3::new(0.2, 0.02, 0.0),
-                tf * Point3::new(0.54, 0.02, 0.0),
-                tf * Point3::new(0.8, 0.02, 0.0),
-                tf * Point3::new(1.2, 0.98, 0.0),
-                tf * Point3::new(1.46, 0.98, 0.0),
-                tf * Point3::new(1.8, 0.98, 0.0),
-                tf * Point3::new(1.2, 0.02, 0.0),
-                tf * Point3::new(1.54, 0.02, 0.0),
-                tf * Point3::new(1.8, 0.02, 0.0),
+                tf * Point3::new(0.18, 1.0 - 0.29, 0.),
+                tf * Point3::new(0.15, 1.0 - 0.82, 0.),
+                tf * Point3::new(0.77, 1.0 - 0.8, 0.),
+                tf * Point3::new(0.51, 1.0 - 0.35, 0.),
+                tf * Point3::new(0.79, 1.0 - 0.25, 0.),
+                tf * Point3::new(0.49, 1.0 - 0.76, 0.),
+                tf * Point3::new(1.18, 1.0 - 0.29, 0.),
+                tf * Point3::new(1.15, 1.0 - 0.82, 0.),
+                tf * Point3::new(1.77, 1.0 - 0.8, 0.),
+                tf * Point3::new(1.51, 1.0 - 0.35, 0.),
+                tf * Point3::new(1.79, 1.0 - 0.25, 0.),
+                tf * Point3::new(1.49, 1.0 - 0.76, 0.),
 
                 // tf * Point3::new(0.35, 1.0, 0.0),
                 // tf * Point3::new(0.65, 1.0, 0.0),
@@ -417,10 +417,10 @@ struct MainCanvas {
 
 // const GRID_WIDTH: f64 = 16.0 / 9.0;
 // const GRID_HEIGHT: f64 = 1.0;
-const GRID_WIDTH: f64 = 140.0;
-const GRID_HEIGHT: f64 = 80.0;
+const GRID_WIDTH: f64 = 3.64631*100.;
+const GRID_HEIGHT: f64 = 2.05105*100.;
 // const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 360.0);
-const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 216.0);
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 4.99872*100.);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
