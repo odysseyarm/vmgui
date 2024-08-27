@@ -271,7 +271,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.rotation_mat = rotmat.matrix().cast();
             runner.state.translation_mat = transmat.vector.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
-                runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[10000., 10000.]);
+                runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[20., 20.]);
             }
 
             runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
@@ -347,7 +347,7 @@ fn filter_and_create_point_tuples(
         .enumerate()
         .filter_map(|(id, (pos, &screen_id))| {
             // screen id of 7 means there is no marker
-            if screen_id < 7 && (80..4016).contains(&pos.x) && (80..4016).contains(&pos.y) {
+            if screen_id < 7 && (150..3946).contains(&pos.x) && (150..3946).contains(&pos.y) {
                 Some((screen_id, id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
