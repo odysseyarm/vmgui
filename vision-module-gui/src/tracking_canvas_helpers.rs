@@ -184,7 +184,7 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
     nf_grid_path.end(ctx);
 
     if let Some(wf_data) = state.wf_data.as_ref() {
-        for mot_data in wf_data {
+        for (i, mot_data) in wf_data.iter().enumerate() {
             if mot_data.area == 0 {
                 continue;
             }
@@ -201,7 +201,8 @@ fn draw_raw(ctx: &DrawContext, state: &MotState, draw_tf: Transform2<f64>, gravi
 
             custom_shapes::draw_rectangle(ctx, &wf_path, &[left, down, right, up], &gravity_rot, &draw_tf);
 
-            draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
+            custom_shapes::draw_marker(ctx, &ch_path, p, &format!("({:.3}, {:.3}) id={}", mot_data.cx, mot_data.cy, i));
+            // draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
         }
     }
     wf_path.end(ctx);
@@ -212,7 +213,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     wf_path.end(ctx);
     let fx = config.camera_model_nf.p.m11 as f64;
     let fy = config.camera_model_nf.p.m22 as f64;
-    let normalized_scale = Scale2::new(fx / 98.0, fy / 98.0);
+    let normalized_scale = Scale2::new(fx / 4095.0, fy / 4095.0);
 
     // let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
     let thin = StrokeParams {
@@ -278,7 +279,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         let p = reproj_tf.cast().inverse_transform_point(&p);
         let p = p / p.z;
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+        let p = Point2::new(p.x*fx, p.y*fy);
         let p = p / 4095.;
         let p = gravity_rot * p;
         let p = draw_tf * p;
@@ -294,7 +295,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
             let p = reproj_tf.cast().inverse_transform_point(&p);
             let p = p / p.z;
             // todo don't use hardcoded 4095x4095 res assumption
-            let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+            let p = Point2::new(p.x*fx, p.y*fy);
             let p = p / 4095.;
             let p = gravity_rot * p;
             let p = draw_tf * p;
@@ -306,7 +307,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
     for p in &state.wf_reproj {
         let wf_reproj_path = Path::new(ctx, FillMode::Winding);
         // todo don't use hardcoded 4095x4095 res assumption
-        let p = Point2::new(p.x*fx, p.y*fy) / 98.0 * 4095.0;
+        let p = Point2::new(p.x*fx, p.y*fy);
         let p = p / 4095.;
         let p = gravity_rot * p;
         let p = draw_tf * p;

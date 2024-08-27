@@ -541,12 +541,12 @@ impl GeneralConfig {
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
 
-        let camera_model_nf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+        let mut camera_model_nf: RosOpenCvIntrinsics<f32> = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
 
-        let camera_model_wf = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+        let mut camera_model_wf: RosOpenCvIntrinsics<f32> = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
@@ -557,6 +557,23 @@ impl GeneralConfig {
         };
 
         *bytes = &bytes[1..];
+
+        // HACK old configs use camera calibration based on 98x98.
+        // Check cx and rescale to 4095x4095
+        if camera_model_nf.p.m13 < 100.0 {
+            eprintln!("please recalibrate nearfield");
+            camera_model_nf.p.m11 *= 4095.0 / 98.0;
+            camera_model_nf.p.m22 *= 4095.0 / 98.0;
+            camera_model_nf.p.m13 *= 4095.0 / 98.0;
+            camera_model_nf.p.m23 *= 4095.0 / 98.0;
+        }
+        if camera_model_wf.p.m13 < 100.0 {
+            eprintln!("please recalibrate widefield");
+            camera_model_wf.p.m11 *= 4095.0 / 98.0;
+            camera_model_wf.p.m22 *= 4095.0 / 98.0;
+            camera_model_wf.p.m13 *= 4095.0 / 98.0;
+            camera_model_wf.p.m23 *= 4095.0 / 98.0;
+        }
 
         Ok(Self { impact_threshold, accel_config, gyro_config, camera_model_nf, camera_model_wf, stereo_iso })
     }
@@ -812,6 +829,15 @@ impl AccelReport {
             self.gyro.y - gyro_config.b_y,
             self.gyro.z - gyro_config.b_z,
         )
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyo3::pymethods]
+impl AccelReport {
+    #[getter]
+    fn timestamp(&self) -> u32 {
+        self.timestamp
     }
 }
 

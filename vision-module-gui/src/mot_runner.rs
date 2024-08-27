@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use ahrs::Ahrs;
 use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
-use ats_cv::foveated::{identify_markers2, match3};
+use ats_cv::foveated::{match3, MARKER_PATTERN_LEN};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
 use std::time::{Duration, UNIX_EPOCH};
@@ -245,7 +245,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _, _)) = identify_markers2(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration) {
+                if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
@@ -276,7 +276,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
 
-            let wf_markers = ats_cv::foveated::identify_markers2(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
+            // let wf_markers = ats_cv::foveated::identify_markers(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
+            let wf_markers: Option<([usize; MARKER_PATTERN_LEN], [Vector2<f64>; MARKER_PATTERN_LEN], Option<u8>)> = None;
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
                 .map(|(markers, reproj, _)| (
                     markers.into_iter().collect(),
@@ -356,9 +357,7 @@ fn filter_and_create_point_tuples(
 }
 
 fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f32>) -> Vec<Point2<f64>> {
-    let scaled_points = points.iter().map(|p| Point2::new(p.x / 4095. * 98., p.y / 4095. * 98.)).collect::<Vec<_>>();
-    let undistorted_points = ats_cv::undistort_points(&ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics), &scaled_points);
-    undistorted_points.iter().map(|p| Point2::new(p.x / 98. * 4095., p.y / 98. * 4095.)).collect()
+    ats_cv::undistort_points(&ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics), points)
 }
 
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {

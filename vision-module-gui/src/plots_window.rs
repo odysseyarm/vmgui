@@ -88,7 +88,7 @@ fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         "IMU Angular Velocity",
         series.values.lock().unwrap().iter().map(|p| p.1.1),
         series.size,
-        -5.0..5.0,
+        -0.1..0.1,
     );
 }
 

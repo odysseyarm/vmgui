@@ -13,7 +13,7 @@ use nalgebra::{
 };
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, Props, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
@@ -420,7 +420,7 @@ struct MainCanvas {
 const GRID_WIDTH: f64 = 140.0;
 const GRID_HEIGHT: f64 = 80.0;
 // const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 360.0);
-const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 300.0);
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 216.0);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
