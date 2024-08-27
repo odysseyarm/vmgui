@@ -341,16 +341,26 @@ impl GeneralSettingsForm {
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
-                (Compact, "Upload Accelerometer Config") : let upload_accel_config = Button("Upload")
-                (Compact, "Download Accelerometer Config") : let download_accel_config = Button("Download")
-                (Compact, "Upload Gyroscope Config") : let upload_gyro_config = Button("Upload")
-                (Compact, "Download Gyroscope Config") : let download_gyro_config = Button("Download")
-                (Compact, "Upload Nearfield Calibration") : let upload_nf_json = Button("Upload")
-                (Compact, "Download Nearfield Calibration") : let download_nf_json = Button("Download")
-                (Compact, "Upload Widefield Calibration") : let upload_wf_json = Button("Upload")
-                (Compact, "Download Widefield Calibration") : let download_wf_json = Button("Download")
-                (Compact, "Upload Stereo Calibration") : let upload_stereo_json = Button("Upload")
-                (Compact, "Download Stereo Calibration") : let download_stereo_json = Button("Download")
+                (Compact, "Accelerometer Config") : let x = HorizontalBox(padded: true) {
+                    Compact : let upload_accel_config = Button("Upload")
+                    Compact : let download_accel_config = Button("Download")
+                }
+                (Compact, "Gyroscope Config") : let x = HorizontalBox(padded: true) {
+                    Compact : let upload_gyro_config = Button("Upload")
+                    Compact : let download_gyro_config = Button("Download")
+                }
+                (Compact, "Nearfield Calibration") : let x = HorizontalBox(padded: true) {
+                    Compact : let upload_nf_json = Button("Upload")
+                    Compact : let download_nf_json = Button("Download")
+                }
+                (Compact, "Widefield Calibration") : let x = HorizontalBox(padded: true) {
+                    Compact : let upload_wf_json = Button("Upload")
+                    Compact : let download_wf_json = Button("Download")
+                }
+                (Compact, "Stereo Calibration") : let x = HorizontalBox(padded: true) {
+                    Compact : let upload_stereo_json = Button("Upload")
+                    Compact : let download_stereo_json = Button("Download")
+                }
             }
         }
         set_calibration_upload_handlers(
