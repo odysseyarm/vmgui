@@ -360,6 +360,7 @@ impl GeneralSettingsForm {
                 (Compact, "Stereo Calibration") : let x = HorizontalBox(padded: true) {
                     Compact : let upload_stereo_json = Button("Upload")
                     Compact : let download_stereo_json = Button("Download")
+                    Compact : let sync_stereo = Button("Sync")
                 }
             }
         }
@@ -387,6 +388,16 @@ impl GeneralSettingsForm {
         );
         set_accel_download_handler(&ui, &mut download_accel_config, accel_config.c(), win.c());
         set_gyro_download_handler(&ui, &mut download_gyro_config, gyro_config.c(), win.c());
+
+        sync_stereo.on_clicked(&ui, {
+            let stereo_iso = stereo_iso.c();
+            let mot_runner = mot_runner.c();
+            move |_| {
+                let iso = mot_runner.lock().general_config.stereo_iso;
+                stereo_iso.set(iso);
+            }
+        });
+
         (
             form,
             Self {
