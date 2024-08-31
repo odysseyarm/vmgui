@@ -1,7 +1,7 @@
 use app_dirs2::{get_app_root, AppDataType};
 use nalgebra::{ComplexField, Point3, RealField, Scalar};
 use vision_module_gui::ScreenInfo;
-use vision_module_gui::consts::APP_INFO;
+use vision_module_gui::consts::{APP_INFO, MARKER_PATTERN_LEN};
 
 pub const MARKER_DEPTH_METERS: f64 = 0.0117;
 
@@ -13,7 +13,7 @@ pub const MARKER_DEPTH_METERS: f64 = 0.0117;
 ///
 ///      1    5    2
 /// ```
-pub fn marker_pattern<F>(screen_dimensions_meters: [F; 2]) -> [Point3<F>; 6]
+pub fn marker_pattern<F>(screen_dimensions_meters: [F; 2]) -> [Point3<F>; MARKER_PATTERN_LEN]
 where
     F: Scalar + std::ops::SubAssign + ComplexField + RealField + Copy,
 {
@@ -22,25 +22,37 @@ where
     let w = screen_dimensions_meters[0];
     let h = screen_dimensions_meters[1];
 
-    // Define the points using ratios
-    // [
-    //     Point3::from([F::from_f64(0.2  - 0.5).unwrap() * w, F::from_f64(0.15 - 0.5).unwrap() * h, _d]),
-    //     Point3::from([F::from_f64(0.25 - 0.5).unwrap() * w, F::from_f64(0.87 - 0.5).unwrap() * h, _d]),
-    //     Point3::from([F::from_f64(0.75 - 0.5).unwrap() * w, F::from_f64(0.83 - 0.5).unwrap() * h, _d]),
-    //     Point3::from([F::from_f64(0.46 - 0.5).unwrap() * w, F::from_f64(0.2  - 0.5).unwrap() * h, _d]),
-    //     Point3::from([F::from_f64(0.7  - 0.5).unwrap() * w, F::from_f64(0.1  - 0.5).unwrap() * h, _d]),
-    //     Point3::from([F::from_f64(0.5  - 0.5).unwrap() * w, F::from_f64(0.8  - 0.5).unwrap() * h, _d]),
-    // ]
+    // if MARKER_PATTERN_LEN == 6
+        // Define the points using ratios
+        // [
+        //     Point3::from([F::from_f64(0.2  - 0.5).unwrap() * w, F::from_f64(0.15 - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.25 - 0.5).unwrap() * w, F::from_f64(0.87 - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.75 - 0.5).unwrap() * w, F::from_f64(0.83 - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.46 - 0.5).unwrap() * w, F::from_f64(0.2  - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.7  - 0.5).unwrap() * w, F::from_f64(0.1  - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.5  - 0.5).unwrap() * w, F::from_f64(0.8  - 0.5).unwrap() * h, _d]),
+        // ]
 
-    // for serious wall
-    [
-        Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
-        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
-    ]
+        // for serious wall
+        [
+            Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+        ]
+    // else if MARKER_PATTERN_LEN == 8
+    //    [
+    //        Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+    //    ]
 }
 
 pub fn main() {

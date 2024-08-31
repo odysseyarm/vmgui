@@ -1,4 +1,5 @@
 use arrayvec::ArrayVec;
+use consts::MARKER_PATTERN_LEN;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3, Vector2};
 use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
 use serde::Serialize;
@@ -34,7 +35,7 @@ pub struct TestFrame {
 #[derive(Clone, Copy, Debug)]
 pub struct ScreenInfo {
     pub screen_dimensions_meters: [f64; 2],
-    pub marker_points: [nalgebra::Point3<f64>; 6],
+    pub marker_points: [nalgebra::Point3<f64>; MARKER_PATTERN_LEN],
 }
 
 #[derive(serde::Deserialize)]
@@ -99,7 +100,7 @@ pub struct MotState {
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
-    pub fv_aimpoint_history: [Point2<f64>; 160],
+    pub fv_aimpoint_history: [Point2<f64>; 100],
     pub fv_aimpoint_history_index: usize,
 }
 
@@ -124,7 +125,7 @@ impl Default for MotState {
             fv_aimpoint_pva2d: Pva2d::new(0.00001, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
-            fv_aimpoint_history: [Point2::new(0.0, 0.0); 160],
+            fv_aimpoint_history: [Point2::new(0.0, 0.0); 100],
             fv_aimpoint_history_index: 0,
         }
     }
