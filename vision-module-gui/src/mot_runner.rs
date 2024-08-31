@@ -12,7 +12,8 @@ use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Tra
 use sqpnp::types::{SQPSolution, SolverParameters};
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-use crate::{CloneButShorter, Marker, MotState, TestFrame};
+use crate::consts::MARKER_PATTERN_LEN;
+use crate::{CloneButShorter, Marker, MotState, ScreenInfo, TestFrame};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 
@@ -287,17 +288,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let mut nf_markers = ArrayVec::<_, 16>::new();
 
-            if wf_marker_ix.len() >= 6 {
-                let chosen_wf_markers: [_; 6] = [
-                    wf_normalized[wf_marker_ix[0]].coords,
-                    wf_normalized[wf_marker_ix[1]].coords,
-                    wf_normalized[wf_marker_ix[2]].coords,
-                    wf_normalized[wf_marker_ix[3]].coords,
-                    wf_normalized[wf_marker_ix[4]].coords,
-                    wf_normalized[wf_marker_ix[5]].coords,
-                ];
+            if wf_marker_ix.len() >= MARKER_PATTERN_LEN {
+                let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_normalized.iter().enumerate().map(|(i, _)| wf_normalized[i].coords).collect::<ArrayVec<_, MARKER_PATTERN_LEN>>().into_inner().unwrap();
                 let match_result = ats_cv::foveated::match3(&nf_normalized, &chosen_wf_markers);
-                for i in 0..6 {
+                for i in 0..MARKER_PATTERN_LEN {
                     let j = match_result.0[i];
                     runner.state.wf_markers2[wf_marker_ix[i]].pattern_id = Some(i as u8);
                     if let Some(j) = j {
@@ -347,7 +341,7 @@ fn filter_and_create_point_tuples(
         .enumerate()
         .filter_map(|(id, (pos, &screen_id))| {
             // screen id of 7 means there is no marker
-            if screen_id < 7 && (150..3946).contains(&pos.x) && (150..3946).contains(&pos.y) {
+            if screen_id < 7 && (100..3996).contains(&pos.x) && (100..3996).contains(&pos.y) {
                 Some((screen_id, id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
                 None
@@ -370,11 +364,11 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             let accel_odr = runner.general_config.accel_config.accel_odr;
 
             // correct accel and gyro bias and scale
-            let accel = ats_usb::packet::AccelReport {
-                accel: accel.corrected_accel(&runner.general_config.accel_config),
-                gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
-                timestamp: accel.timestamp,
-            };
+            // let accel = ats_usb::packet::AccelReport {
+            //     accel: accel.corrected_accel(&runner.general_config.accel_config),
+            //     gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
+            //     timestamp: accel.timestamp,
+            // };
 
             // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{:7.3?}", accel.accel.norm());

@@ -246,9 +246,9 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         custom_shapes::draw_marker(ctx, &marker_path, p, &format!("nf: sid={}", marker.screen_id));
         marker_path.end(ctx);
         match marker.pattern_id {
-            Some(0 | 3) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
-            Some(1 | 4) => ctx.stroke(&marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
-            Some(2 | 5) => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
+            Some(0 | 3 | 6) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 0.0), &thin),
+            Some(1 | 4 | 7) => ctx.stroke(&marker_path, &solid_brush(0.0, 1.0, 0.0), &thin),
+            Some(2 | 5 | 8) => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 1.0), &thin),
             Some(_) => ctx.stroke(&marker_path, &solid_brush(1.0, 0.0, 1.0), &thin),
             None => ctx.stroke(&marker_path, &solid_brush(0.0, 0.0, 0.0), &thin),
         }
