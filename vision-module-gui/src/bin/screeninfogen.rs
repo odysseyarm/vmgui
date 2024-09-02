@@ -26,33 +26,33 @@ where
     // if MARKER_PATTERN_LEN == 6
         // Define the points using ratios
         // [
-        //     Point3::from([F::from_f64(0.2  - 0.5).unwrap() * w, F::from_f64(0.15 - 0.5).unwrap() * h, _d]),
-        //     Point3::from([F::from_f64(0.25 - 0.5).unwrap() * w, F::from_f64(0.87 - 0.5).unwrap() * h, _d]),
-        //     Point3::from([F::from_f64(0.75 - 0.5).unwrap() * w, F::from_f64(0.83 - 0.5).unwrap() * h, _d]),
-        //     Point3::from([F::from_f64(0.46 - 0.5).unwrap() * w, F::from_f64(0.2  - 0.5).unwrap() * h, _d]),
-        //     Point3::from([F::from_f64(0.7  - 0.5).unwrap() * w, F::from_f64(0.1  - 0.5).unwrap() * h, _d]),
-        //     Point3::from([F::from_f64(0.5  - 0.5).unwrap() * w, F::from_f64(0.8  - 0.5).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.2).unwrap() * w, F::from_f64(0.15).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.25).unwrap() * w, F::from_f64(0.87).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.75).unwrap() * w, F::from_f64(0.83).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.46).unwrap() * w, F::from_f64(0.2).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.7).unwrap() * w, F::from_f64(0.1).unwrap() * h, _d]),
+        //     Point3::from([F::from_f64(0.5).unwrap() * w, F::from_f64(0.8).unwrap() * h, _d]),
         // ]
 
         // for serious wall
         [
-            Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
-            Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
-            Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
-            Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
-            Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
-            Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.18).unwrap() * w, F::from_f64(0.29).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.15).unwrap() * w, F::from_f64(0.82).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.77).unwrap() * w, F::from_f64(0.8).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.51).unwrap() * w, F::from_f64(0.35).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.79).unwrap() * w, F::from_f64(0.25).unwrap() * h, _d]),
+            Point3::from([F::from_f64(0.49).unwrap() * w, F::from_f64(0.76).unwrap() * h, _d]),
         ]
     // else if MARKER_PATTERN_LEN == 8
     //    [
-    //        Point3::from([F::from_f64(0.18 - 0.5).unwrap() * w, F::from_f64(0.29 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.15 - 0.5).unwrap() * w, F::from_f64(0.82 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.77 - 0.5).unwrap() * w, F::from_f64(0.8 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.51 - 0.5).unwrap() * w, F::from_f64(0.35 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.79 - 0.5).unwrap() * w, F::from_f64(0.25  - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
-    //        Point3::from([F::from_f64(0.49 - 0.5).unwrap() * w, F::from_f64(0.76 - 0.5).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.18).unwrap() * w, F::from_f64(0.29).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.15).unwrap() * w, F::from_f64(0.82).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.77).unwrap() * w, F::from_f64(0.8).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.51).unwrap() * w, F::from_f64(0.35).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.79).unwrap() * w, F::from_f64(0.25).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49).unwrap() * w, F::from_f64(0.76).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49).unwrap() * w, F::from_f64(0.76).unwrap() * h, _d]),
+    //        Point3::from([F::from_f64(0.49).unwrap() * w, F::from_f64(0.76).unwrap() * h, _d]),
     //    ]
 }
 
@@ -77,10 +77,11 @@ pub fn main() {
         println!("Marker {} = ({:.4}, {:.4})", i, p.x/0.0254, p.y/0.0254);
     }
 
+    // ScreenInfo
     match get_app_root(AppDataType::UserConfig, &APP_INFO)
     .ok()
     .and_then(|config_dir| {
-        let screen_info_path = config_dir.join("ats-vision-tool").join("screen-info.json");
+        let screen_info_path = config_dir.join("ats-vision-tool").join("new-screen-info.json");
         std::fs::create_dir_all(screen_info_path.parent().unwrap()).ok()?;
         serde_json::to_writer_pretty(std::fs::File::create(screen_info_path).ok()?, &screen_info).ok()?;
         Some(screen_info)
@@ -90,6 +91,24 @@ pub fn main() {
         }
         None => {
             println!("Failed to save screen info");
+        }
+    }
+
+    // ScreenCalibration
+    let screen_calibration: ats_cv::ScreenCalibration<f64> = screen_info.into();
+    match get_app_root(AppDataType::UserConfig, &APP_INFO)
+    .ok()
+    .and_then(|config_dir| {
+        let screen_calibration_path = config_dir.join("ats-vision-tool").join("new-screen-calibration.json");
+        std::fs::create_dir_all(screen_calibration_path.parent().unwrap()).ok()?;
+        serde_json::to_writer_pretty(std::fs::File::create(screen_calibration_path).ok()?, &screen_calibration).ok()?;
+        Some(screen_calibration)
+    }) {
+        Some(screen_calibration) => {
+            println!("Screen calibration saved to {:?}", screen_calibration);
+        }
+        None => {
+            println!("Failed to save screen calibration");
         }
     }
 }
