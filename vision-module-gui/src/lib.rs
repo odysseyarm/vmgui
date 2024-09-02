@@ -39,6 +39,21 @@ pub struct ScreenInfo {
     pub marker_points: [nalgebra::Point3<f64>; MARKER_PATTERN_LEN],
 }
 
+impl From<ScreenInfo> for ats_cv::ScreenCalibration<f64> {
+    fn from(screen_info: ScreenInfo) -> Self {
+        ats_cv::ScreenCalibration {
+            homography: {
+                nalgebra::Matrix3::new(
+                    1./screen_info.screen_dimensions_meters[0], 0.0, 0.0,
+                    0.0, 1./screen_info.screen_dimensions_meters[1], 0.0,
+                    0.0, 0.0, 1.0,
+                )
+            },
+            object_points: screen_info.marker_points,
+        }
+    }
+}
+
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f64>,
