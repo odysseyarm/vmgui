@@ -233,7 +233,7 @@ fn draw_not_raw(ctx: &DrawContext, state: &MotState, config: &ats_usb::packet::G
         dash_phase: 0.,
     };
     let thick3 = StrokeParams {
-        thickness: 3.,
+        thickness: 1.,
         ..thick2.clone()
     };
 

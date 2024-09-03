@@ -24,10 +24,10 @@ pub fn transform_aimpoint_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, 
 
 pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
-        Vector3::new((0.35 - 0.5) * 16./9., -0.5, 0.),
-        Vector3::new((0.65 - 0.5) * 16./9., -0.5, 0.),
-        Vector3::new((0.65 - 0.5) * 16./9., 0.5, 0.),
-        Vector3::new((0.35 - 0.5) * 16./9., 0.5, 0.),
+        Vector3::new(0.35 * 16./9., 0., 0.),
+        Vector3::new(0.65 * 16./9., 0., 0.),
+        Vector3::new(0.65 * 16./9., 1., 0.),
+        Vector3::new(0.35 * 16./9., 1., 0.),
     ];
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &projections, None, SolverParameters::default());
     if let Some(mut solver) = solver {
@@ -363,11 +363,11 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             let accel_odr = runner.general_config.accel_config.accel_odr;
 
             // correct accel and gyro bias and scale
-            // let accel = ats_usb::packet::AccelReport {
-            //     accel: accel.corrected_accel(&runner.general_config.accel_config),
-            //     gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
-            //     timestamp: accel.timestamp,
-            // };
+            let accel = ats_usb::packet::AccelReport {
+                accel: accel.corrected_accel(&runner.general_config.accel_config),
+                gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
+                timestamp: accel.timestamp,
+            };
 
             // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{:7.3?}", accel.accel.norm());
