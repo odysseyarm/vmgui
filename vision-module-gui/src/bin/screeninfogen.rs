@@ -99,7 +99,7 @@ pub fn main() {
     match get_app_root(AppDataType::UserConfig, &APP_INFO)
     .ok()
     .and_then(|config_dir| {
-        let screen_calibration_path = config_dir.join("ats-vision-tool").join("new-screen-calibration.json");
+        let screen_calibration_path = config_dir.join("screens").join("new-screen-calibration.json");
         std::fs::create_dir_all(screen_calibration_path.parent().unwrap()).ok()?;
         serde_json::to_writer_pretty(std::fs::File::create(screen_calibration_path).ok()?, &screen_calibration).ok()?;
         Some(screen_calibration)
