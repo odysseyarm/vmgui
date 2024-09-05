@@ -320,7 +320,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.wf_reproj = wf_reproj;
 
             let index = runner.state.fv_aimpoint_history_index;
-            runner.state.fv_aimpoint_history[index] = runner.state.fv_aimpoint;
+
+            let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.).to_degrees();
+
+            runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle as f32);
             runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
 
             if runner.record_packets {
@@ -425,12 +428,15 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 let mut frame = TestFrame {
                     fv_aimpoint_x: None,
                     fv_aimpoint_y: None,
+                    opposite_cant: None,
                 };
 
                 {
-                    let fv_aimpoint = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
+                    let data = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
+                    let fv_aimpoint = data.0;
                     frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                     frame.fv_aimpoint_y = Some(fv_aimpoint.y);
+                    frame.opposite_cant = Some(data.1 as f64);
                 }
 
                 if runner.datapoints.is_locked() {

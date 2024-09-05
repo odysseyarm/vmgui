@@ -540,6 +540,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut frame = TestFrame {
                               fv_aimpoint_x: None,
                               fv_aimpoint_y: None,
+                              opposite_cant: None,
                               };
 
             let runner = state.lock();
@@ -549,6 +550,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let fv_aimpoint = state.fv_aimpoint;
                 frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
+
+                let gravity_vec = runner.state.orientation.inverse_transform_vector(&nalgebra::Vector3::z_axis());
+                let gravity_vec = nalgebra::UnitVector3::new_unchecked(gravity_vec.xzy());
+                let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.).to_degrees();
+                frame.opposite_cant = Some(gravity_angle);
             }
 
             datapoints.push(frame);
