@@ -30,6 +30,7 @@ impl<T: Clone> CloneButShorter for T {}
 pub struct TestFrame {
     pub fv_aimpoint_x: Option<f64>,
     pub fv_aimpoint_y: Option<f64>,
+    pub opposite_cant: Option<f64>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -80,7 +81,7 @@ pub struct MotState {
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
-    pub fv_aimpoint_history: [Point2<f64>; 100],
+    pub fv_aimpoint_history: [(Point2<f64>, f32); 80],
     pub fv_aimpoint_history_index: usize,
 
     pub previous_sqp_solution: Option<SQPSolution>,
@@ -107,7 +108,7 @@ impl Default for MotState {
             fv_aimpoint_pva2d: Pva2d::new(0.0001, 1.0),
             // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
-            fv_aimpoint_history: [Point2::new(0.0, 0.0); 100],
+            fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0.); 80],
             fv_aimpoint_history_index: 0,
             previous_sqp_solution: None,
         }
