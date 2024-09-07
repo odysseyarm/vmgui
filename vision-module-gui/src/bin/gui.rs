@@ -205,7 +205,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             if screen_path.exists() {
                 File::open(screen_path).ok().and_then(|file| {
                     match serde_json::from_reader(file) {
-                        Ok(calibration) => Some(calibration),
+                        Ok(calibration) => Some((i as u8, calibration)),
                         Err(e) => {
                             error!("Failed to deserialize screen calibration: {}", e);
                             None
