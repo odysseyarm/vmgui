@@ -197,36 +197,26 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
-    let screen_calibration: Option<ScreenCalibration<f64>> = get_app_root(AppDataType::UserConfig, &APP_INFO)
-    .ok()
-    .and_then(|config_dir| {
-        let screen_0_path = config_dir.join("screens").join("screen_0.json");
-        if screen_0_path.exists() {
-            File::open(screen_0_path).ok().and_then(|file| {
-                match serde_json::from_reader(file) {
-                    Ok(calibration) => Some(calibration),
-                    Err(e) => {
-                        error!("Failed to deserialize screen calibration: {}", e);
-                        None
+    let screen_calibrations: arrayvec::ArrayVec<(u8, ScreenCalibration<f64>), { (ats_cv::foveated::MAX_SCREEN_ID+1) as usize }> = (0..{(ats_cv::foveated::MAX_SCREEN_ID+1) as usize}).filter_map(|i| {
+        get_app_root(AppDataType::UserConfig, &APP_INFO)
+        .ok()
+        .and_then(|config_dir| {
+            let screen_path = config_dir.join("screens").join(std::format!("screen_{}.json", i));
+            if screen_path.exists() {
+                File::open(screen_path).ok().and_then(|file| {
+                    match serde_json::from_reader(file) {
+                        Ok(calibration) => Some(calibration),
+                        Err(e) => {
+                            error!("Failed to deserialize screen calibration: {}", e);
+                            None
+                        }
                     }
-                }
-            })
-        } else {
-            None
-        }
-    });
-
-    let screen_calibration = match screen_calibration {
-        Some(x) => {
-            info!("Screen calibration loaded");
-            x
-        },
-        None => {
-            error!("Screen calibration not loaded");
-            // todo figure out values for a default screen
-            panic!("Screen calibration not loaded");
-        }
-    };
+                })
+            } else {
+                None
+            }
+        })
+    }).collect();
 
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
@@ -245,7 +235,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         fv_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
         wfnf_realign: true,
-        screen_calibration,
+        screen_calibrations,
     }));
 
     // Create a main_window into which controls can be placed
