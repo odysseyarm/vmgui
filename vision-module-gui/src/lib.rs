@@ -62,8 +62,8 @@ pub struct MotState {
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
 
-    pub nf_points: ArrayVec<(u8, u8, Point2<f64>), 16>,
-    pub wf_points: ArrayVec<(u8, u8, Point2<f64>), 16>,
+    pub nf_points: ArrayVec<(u8, Point2<f64>), 16>,
+    pub wf_points: ArrayVec<(u8, Point2<f64>), 16>,
     pub nf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_markers: ArrayVec<Point2<f64>, 16>,
     pub wf_reproj: ArrayVec<Point2<f64>, 16>,
@@ -117,7 +117,6 @@ impl Default for MotState {
 
 pub struct Marker {
     pub mot_id: u8,
-    pub screen_id: u8,
     pub pattern_id: Option<u8>,
     pub normalized: Point2<f64>,
 }
@@ -126,11 +125,6 @@ impl Marker {
     pub fn ats_cv_marker(&self) -> ats_cv::foveated::Marker {
         ats_cv::foveated::Marker {
             position: self.normalized,
-            screen_id: if self.screen_id <= ats_cv::foveated::MAX_SCREEN_ID {
-                Some(self.screen_id)
-            } else {
-                None
-            },
         }
     }
 }

@@ -227,8 +227,6 @@ pub struct ObjectReport {
 pub struct CombinedMarkersReport {
     pub nf_points: [Point2<u16>; 16],
     pub wf_points: [Point2<u16>; 16],
-    pub nf_screen_ids: [u8; 16],
-    pub wf_screen_ids: [u8; 16],
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
@@ -678,7 +676,7 @@ impl ObjectReport {
 }
 
 impl CombinedMarkersReport {
-    const SIZE: u16 = 108;
+    const SIZE: u16 = 96;
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let size = Self::SIZE as usize;
@@ -700,32 +698,7 @@ impl CombinedMarkersReport {
         let nf_positions = positions[..16].try_into().unwrap();
         let wf_positions = positions[16..].try_into().unwrap();
 
-        let mut screen_ids = [0; 32];
-
-        let mut bit_offset = 0;
-        for i in 0..32 {
-            let byte_index = bit_offset / 8;
-            let bit_index = bit_offset % 8;
-
-            screen_ids[i] = if bit_index <= 5 {
-                // The bits are within the same byte
-                (data[byte_index] >> bit_index) & 0x7
-            } else {
-                // The bits span across two bytes
-                let first_part = data[byte_index] >> bit_index;
-                let second_part = data[byte_index + 1] << (8 - bit_index);
-                (first_part | second_part) & 0x7
-            };
-
-            bit_offset += 3;
-        }
-
-        *data = &data[12..];
-
-        let nf_screen_ids = screen_ids[..16].try_into().unwrap();
-        let wf_screen_ids = screen_ids[16..].try_into().unwrap();
-
-        Ok(Self { nf_points: nf_positions, wf_points: wf_positions, nf_screen_ids, wf_screen_ids })
+        Ok(Self { nf_points: nf_positions, wf_points: wf_positions })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -736,40 +709,12 @@ impl CombinedMarkersReport {
             let byte2 = y >> 4;
             buf.extend_from_slice(&[byte0 as u8, byte1 as u8, byte2 as u8]);
         }
-
-        buf.extend({
-            let mut buf = [0; 12];
-            for i in 0..32 {
-                let byte_index = (i * 3) / 8;
-                let bit_index = (i * 3) % 8;
-                let screen_id = if i < 16 {
-                    self.nf_screen_ids[i]
-                } else {
-                    self.wf_screen_ids[i - 16]
-                } & 0x07; // Mask to 3 bits
-
-                let mask = screen_id << bit_index;
-                buf[byte_index] |= mask;
-                if bit_index > 5 {
-                    buf[byte_index + 1] |= screen_id >> (8 - bit_index);
-                }
-            }
-            buf
-        });
     }
 }
 
 #[cfg(feature = "pyo3")]
 #[pyo3::pymethods]
 impl CombinedMarkersReport {
-    #[getter]
-    fn nf_screen_ids(&self) -> [u8; 16] {
-        self.nf_screen_ids
-    }
-    #[getter]
-    fn wf_screen_ids(&self) -> [u8; 16] {
-        self.wf_screen_ids
-    }
     #[getter]
     fn nf_points(&self) -> [[u16; 2]; 16] {
         self.nf_points.map(|p| [p.x, p.y])

@@ -216,29 +216,25 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             //     marker_pattern[3],
             // ).unwrap();
             let make_positions = |markers: &[Point2<i16>]| {
-                let mut radii = [0; 16];
                 let positions = std::array::from_fn(|i| {
                     let Some(XY { x, y }) = markers.get(i).map(|x| **x) else {
                         return Point2::default()
                     };
                     if (0..4096).contains(&x) && (0..4096).contains(&y) {
-                        radii[i] = 1;
                         Point2::new(x as u16, y as u16)
                     } else {
                         Point2::default()
                     }
                 });
-                (positions, radii)
+                positions
             };
-            let (nf_positions, nf_screen_ids) = make_positions(&nf_markers);
-            let (wf_positions, wf_screen_ids) = make_positions(&wf_markers);
+            let nf_positions = make_positions(&nf_markers);
+            let wf_positions = make_positions(&wf_markers);
             let pkt = Packet {
                 id,
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     nf_points: nf_positions,
                     wf_points: wf_positions,
-                    nf_screen_ids,
-                    wf_screen_ids,
                 })
             };
             buf.clear();
