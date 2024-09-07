@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use ats_cv::foveated::MARKER_PATTERN_LEN;
-use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3, Vector2};
-use ats_cv::{foveated::FoveatedAimpointState, kalman::Pva2d};
+use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
+use ats_cv::foveated::FoveatedAimpointState;
 use serde::Serialize;
 use ats_usb::packet::MotData;
 use sqpnp::types::SQPSolution;
@@ -70,8 +70,6 @@ pub struct MotState {
     pub nf_markers2: ArrayVec<Marker, 16>,
     pub wf_markers2: ArrayVec<Marker, 16>,
 
-    pub fv_aimpoint_pva2d: Pva2d<f64>,
-
     pub screen_id: u8,
     pub orientation: Rotation3<f32>,
     pub madgwick: ahrs::Madgwick<f32>,
@@ -105,8 +103,6 @@ impl Default for MotState {
             wf_reproj: Default::default(),
             nf_markers2: Default::default(),
             wf_markers2: Default::default(),
-            fv_aimpoint_pva2d: Pva2d::new(0.0001, 1.0),
-            // fv_aimpoint_pva2d: Default::default(),
             fv_state: FoveatedAimpointState::new(),
             fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0.); 80],
             fv_aimpoint_history_index: 0,

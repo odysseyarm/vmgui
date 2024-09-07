@@ -189,6 +189,21 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, scre
     (rot, trans, fv_aimpoint)
 }
 
+fn raycast_update(runner: &mut MotRunner) {
+    let screen_id = runner.state.fv_state.screen_id;
+    if screen_id <= ats_cv::foveated::MAX_SCREEN_ID {
+        if let Some(screen_calibration) = runner.screen_calibrations.iter().find_map(|(id, cal)| if *id == screen_id { Some(cal) } else { None }) {
+            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, screen_calibration);
+
+            runner.state.rotation_mat = rotmat.matrix().cast();
+            runner.state.translation_mat = transmat.vector.cast();
+            if let Some(fv_aimpoint) = fv_aimpoint {
+                runner.state.fv_aimpoint = fv_aimpoint;
+            }
+        }
+    }
+}
+
 async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
@@ -245,7 +260,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 // using that to match nearfield
                 if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(&wf_normalized, gravity_vec.cast(), &runner.screen_calibrations) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
-                    let (nf_match_ix, error) = match3(&nf_normalized, &wf_match);
+                    let (nf_match_ix, _) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
                         let nf_ordered = nf_match_ix.map(|i| nf_normalized[i.unwrap()].coords.push(1.0));
                         let wf_ordered = wf_match_ix.map(|i| wf_normalized[i].coords.push(1.0));
@@ -256,28 +271,12 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            // step at marker hz
-            runner.state.fv_aimpoint_pva2d.step();
-
             let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
             let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
             let screen_calibrations = runner.screen_calibrations.clone();
             runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), &screen_calibrations);
 
-            let screen_id = runner.state.fv_state.screen_id;
-            if screen_id <= ats_cv::foveated::MAX_SCREEN_ID {
-                if let Some(screen_calibration) = runner.screen_calibrations.iter().find_map(|(id, cal)| if *id == screen_id { Some(cal) } else { None }) {
-                    let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, screen_calibration);
-
-                    runner.state.rotation_mat = rotmat.matrix().cast();
-                    runner.state.translation_mat = transmat.vector.cast();
-                    if let Some(fv_aimpoint) = fv_aimpoint {
-                        runner.state.fv_aimpoint_pva2d.observe(&[fv_aimpoint.x, fv_aimpoint.y], &[20., 20.]);
-                    }
-
-                    runner.state.fv_aimpoint = Point2::from(runner.state.fv_aimpoint_pva2d.position());
-                }
-            }
+            raycast_update(&mut runner);
 
             // let wf_markers = ats_cv::foveated::identify_markers(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
             let wf_markers: Option<([usize; MARKER_PATTERN_LEN], [Vector2<f64>; MARKER_PATTERN_LEN], Option<u8>)> = None;
@@ -403,13 +402,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
             ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
 
-            // let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, runner.screen_info);
-
-            // runner.state.rotation_mat = rotmat.cast();
-            // runner.state.translation_mat = transmat.coords.cast();
-            // if let Some(fv_aimpoint) = fv_aimpoint {
-            //     runner.state.fv_aimpoint = fv_aimpoint.cast();
-            // }
+            raycast_update(&mut runner);
 
             if runner.record_packets {
                 runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::AccelReport(accel)));
