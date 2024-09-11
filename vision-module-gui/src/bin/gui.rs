@@ -471,7 +471,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             let madgwick = &mut view.lock().state.madgwick;
-            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.1, madgwick.quat);
+            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.04, madgwick.quat);
         }
     });
 
@@ -542,7 +542,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
 
                 let gravity_vec = runner.state.orientation.inverse_transform_vector(&nalgebra::Vector3::z_axis());
-                let gravity_vec = nalgebra::UnitVector3::new_unchecked(gravity_vec.xzy());
                 let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.).to_degrees();
                 frame.opposite_cant = Some(gravity_angle);
             }

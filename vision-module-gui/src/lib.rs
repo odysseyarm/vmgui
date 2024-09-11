@@ -93,7 +93,7 @@ impl Default for MotState {
             wf_data: None,
             screen_id: 0,
             orientation: Rotation3::identity(),
-            madgwick: ahrs::Madgwick::new(1./100., 0.1),
+            madgwick: ahrs::Madgwick::new(1./100., 0.04),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
             nf_points: Default::default(),
