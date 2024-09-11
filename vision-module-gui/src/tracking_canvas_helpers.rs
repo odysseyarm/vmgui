@@ -83,6 +83,14 @@ pub fn draw(ctx: UI, runner: Arc<Mutex<MotRunner>>, _area: &Area, draw_params: &
     );
 
     let gravity_rot = Rotation2::new(-gravity_angle);
+
+    draw_text(
+        &ctx,
+        20.0,
+        40.0,
+        &format!("gravity_angle = {:.3}", gravity_angle.to_degrees()),
+    );
+
     if raw {
         draw_raw(ctx, state, draw_tf, gravity_rot, &nf_path, &wf_path, &nf_grid_path, &ch_path);
     } else {
