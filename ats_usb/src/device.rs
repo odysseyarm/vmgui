@@ -164,7 +164,8 @@ impl UsbDevice {
             }
         }
 
-        let mut buf = vec![0xff];
+        // todo get rid of device 1 assumption
+        let mut buf = vec![1, 0, 0xff];
         Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
         sock.send(&buf).await?;
         sleep(Duration::from_millis(100)).await;
