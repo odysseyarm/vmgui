@@ -1,6 +1,5 @@
 use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, Weak}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
-use pin_project::{pin_project, pinned_drop};
 use serial2;
 use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}, time::sleep};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
@@ -549,12 +548,10 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
     Ok(())
 }
 
-#[pin_project(PinnedDrop)]
 pub struct PacketStream {
     stream_type: StreamType,
     slot: ResponseSlot,
     to_thread: mpsc::Sender<Packet>,
-    #[pin]
     receiver: ReceiverStream<PacketData>,
 }
 
@@ -562,7 +559,7 @@ impl Stream for PacketStream {
     type Item = PacketData;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
-        self.project().receiver.poll_next(cx)
+        Pin::new(&mut self.get_mut().receiver).poll_next(cx)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -570,9 +567,8 @@ impl Stream for PacketStream {
     }
 }
 
-#[pinned_drop]
-impl PinnedDrop for PacketStream {
-    fn drop(self: Pin<&mut Self>) {
+impl Drop for PacketStream {
+    fn drop(&mut self) {
         if let Some(thread_state) = self.slot.thread_state.upgrade() {
             thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
             let _ = self.to_thread.try_send(Packet {
