@@ -471,7 +471,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             let madgwick = &mut view.lock().state.madgwick;
-            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.04, madgwick.quat);
+            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.2, madgwick.quat);
         }
     });
 
