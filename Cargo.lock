@@ -493,7 +493,6 @@ dependencies = [
  "enumn",
  "nalgebra 0.32.6",
  "opencv-ros-camera",
- "pin-project",
  "pyo3",
  "serde",
  "serde-inline-default",
