@@ -9,26 +9,30 @@ use tracing_subscriber::EnvFilter;
 
 fn get_ports() -> Vec<serialport::SerialPortInfo> {
     let ports = serialport::available_ports().expect("Failed to list serial ports");
-    let ports = ports.into_iter().filter(|port| {
+    let ports = ports
+        .into_iter()
+        .filter(|port| {
             match &port.port_type {
-            SerialPortType::UsbPort(port_info) => {
-                if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210 {
-                    if let Some(i) = port_info.interface {
-                        // interface 0: cdc acm module
-                        // interface 1: cdc acm module functional subordinate interface
-                        // interface 2: cdc acm dfu
-                        // interface 3: cdc acm dfu subordinate interface
-                        i == 0
+                SerialPortType::UsbPort(port_info) => {
+                    if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210
+                    {
+                        if let Some(i) = port_info.interface {
+                            // interface 0: cdc acm module
+                            // interface 1: cdc acm module functional subordinate interface
+                            // interface 2: cdc acm dfu
+                            // interface 3: cdc acm dfu subordinate interface
+                            i == 0
+                        } else {
+                            true
+                        }
                     } else {
-                        true
+                        false
                     }
-                } else {
-                    false
                 }
-            },
-            _ => false,
-        }
-    }).collect();
+                _ => false,
+            }
+        })
+        .collect();
     ports
 }
 
@@ -82,9 +86,18 @@ async fn main() -> ExitCode {
     stdin_line.recv().await;
     eprintln!("Press enter to stop recording");
 
-    let accel_stream = device.stream(ats_usb::packet::PacketType::AccelReport).await.unwrap();
-    let mot_stream = device.stream(ats_usb::packet::PacketType::ObjectReport).await.unwrap();
-    let comb_stream = device.stream(ats_usb::packet::PacketType::CombinedMarkersReport).await.unwrap();
+    let accel_stream = device
+        .stream(ats_usb::packet::PacketType::AccelReport())
+        .await
+        .unwrap();
+    let mot_stream = device
+        .stream(ats_usb::packet::PacketType::ObjectReport())
+        .await
+        .unwrap();
+    let comb_stream = device
+        .stream(ats_usb::packet::PacketType::CombinedMarkersReport())
+        .await
+        .unwrap();
     let mut merged_stream = accel_stream.merge(mot_stream).merge(comb_stream);
 
     let mut packets = vec![];

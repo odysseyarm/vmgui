@@ -3,9 +3,10 @@ use std::io::Write;
 use std::sync::Arc;
 
 use anyhow::Result;
+use ats_usb::packet::GeneralConfig;
 use bevy::app::{App, Startup, Update};
 use bevy::ecs::system::{Commands, Query};
-use bevy::window::{WindowPlugin, WindowCloseRequested};
+use bevy::window::{WindowCloseRequested, WindowPlugin};
 use bevy::winit::WinitPlugin;
 use bevy::DefaultPlugins;
 use bevy::{
@@ -16,21 +17,22 @@ use bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin};
 use bevy_infinite_grid::{
     GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
 };
+use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
-use leptos_reactive::{create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith};
+use leptos_reactive::{
+    create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith,
+};
 use nalgebra::Vector2;
+use parking_lot::Mutex;
+use tokio::task::AbortHandle;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
-use ats_usb::packet::GeneralConfig;
-use vision_module_gui::run_canvas::RunCanvas;
-use vision_module_gui::{config_window, plots_window, TestFrame};
-use vision_module_gui::{CloneButShorter, MotState};
-use tokio::task::AbortHandle;
-use iui::controls::{Area, HorizontalBox, FileTypeFilter};
 use vision_module_gui::mot_runner::MotRunner;
+use vision_module_gui::run_canvas::RunCanvas;
 use vision_module_gui::run_raw_canvas::RunRawCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
-use parking_lot::Mutex;
+use vision_module_gui::{config_window, plots_window, TestFrame};
+use vision_module_gui::{CloneButShorter, MotState};
 
 use vision_module_gui::consts::*;
 
@@ -68,7 +70,11 @@ fn read_stream(receiver: Res<StreamReceiver>, mut events: EventWriter<StreamEven
     }
 }
 
-fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut window: Query<&mut bevy::window::Window>) {
+fn show_window(
+    mut commands: Commands,
+    mut reader: EventReader<StreamEvent>,
+    mut window: Query<&mut bevy::window::Window>,
+) {
     for (_, event) in reader.read().enumerate() {
         match event.0 {
             Event::OpenWindow => {
@@ -77,12 +83,15 @@ fn show_window(mut commands: Commands, mut reader: EventReader<StreamEvent>, mut
                 } else {
                     window.single_mut().visible = true;
                 }
-            },
+            }
         }
     }
 }
 
-pub fn hide_instead_of_close(mut closed: EventReader<WindowCloseRequested>, mut window: Query<&mut bevy::window::Window>) {
+pub fn hide_instead_of_close(
+    mut closed: EventReader<WindowCloseRequested>,
+    mut window: Query<&mut bevy::window::Window>,
+) {
     for event in closed.read() {
         if let Ok(mut window) = window.get_mut(event.window) {
             window.visible = false;
@@ -116,14 +125,12 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // Spawn a cube to rotate.
-    commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Cuboid::default()),
-            material: materials.add(Color::WHITE),
-            transform: Transform::from_translation(Vec3::ZERO),
-            ..default()
-        },
-    ));
+    commands.spawn((PbrBundle {
+        mesh: meshes.add(Cuboid::default()),
+        material: materials.add(Color::WHITE),
+        transform: Transform::from_translation(Vec3::ZERO),
+        ..default()
+    },));
 
     commands.spawn(InfiniteGridBundle {
         settings: InfiniteGridSettings {
@@ -159,7 +166,11 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
     let offset = Vec3::new(0.0, 1.6, 10.);
 
     let (_camera, mut camera_transform) = camera_query.single_mut();
-    camera_transform.translation = Vec3::new(translation.x as f32, translation.y as f32, translation.z as f32) + offset;
+    camera_transform.translation = Vec3::new(
+        translation.x as f32,
+        translation.y as f32,
+        translation.z as f32,
+    ) + offset;
     let rotation = Mat3::from_cols_slice(rotation.cast().as_slice());
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
@@ -197,26 +208,33 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = MotState::default();
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
-    let screen_calibrations: arrayvec::ArrayVec<(u8, ScreenCalibration<f64>), { (ats_cv::foveated::MAX_SCREEN_ID+1) as usize }> = (0..{(ats_cv::foveated::MAX_SCREEN_ID+1) as usize}).filter_map(|i| {
-        get_app_root(AppDataType::UserConfig, &APP_INFO)
-        .ok()
-        .and_then(|config_dir| {
-            let screen_path = config_dir.join("screens").join(std::format!("screen_{}.json", i));
-            if screen_path.exists() {
-                File::open(screen_path).ok().and_then(|file| {
-                    match serde_json::from_reader(file) {
-                        Ok(calibration) => Some((i as u8, calibration)),
-                        Err(e) => {
-                            error!("Failed to deserialize screen calibration: {}", e);
-                            None
-                        }
+    let screen_calibrations: arrayvec::ArrayVec<
+        (u8, ScreenCalibration<f64>),
+        { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize },
+    > = (0..{ (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize })
+        .filter_map(|i| {
+            get_app_root(AppDataType::UserConfig, &APP_INFO)
+                .ok()
+                .and_then(|config_dir| {
+                    let screen_path = config_dir
+                        .join("screens")
+                        .join(std::format!("screen_{}.json", i));
+                    if screen_path.exists() {
+                        File::open(screen_path)
+                            .ok()
+                            .and_then(|file| match serde_json::from_reader(file) {
+                                Ok(calibration) => Some((i as u8, calibration)),
+                                Err(e) => {
+                                    error!("Failed to deserialize screen calibration: {}", e);
+                                    None
+                                }
+                            })
+                    } else {
+                        None
                     }
                 })
-            } else {
-                None
-            }
         })
-    }).collect();
+        .collect();
 
     let tracking_raw = RwSignal::new(false);
     let tracking = RwSignal::new(false);
@@ -239,17 +257,14 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     // Create a main_window into which controls can be placed
-    let mut main_win = iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
-    let (mut config_win, device_rs, accel_config_signal) = config_window::config_window(
-        &ui,
-        simulator_addr,
-        udp_addr,
-        mot_runner.c(),
-        tokio_handle,
-    );
+    let mut main_win =
+        iui::prelude::Window::new(&ui, "ATS Vision Tool", 640, 480, WindowType::NoMenubar);
+    let (mut config_win, device_rs, accel_config_signal) =
+        config_window::config_window(&ui, simulator_addr, udp_addr, mot_runner.c(), tokio_handle);
     let mut plots_window = plots_window::plots_window(&ui);
 
-    let mut test_win = iui::prelude::Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
+    let mut test_win =
+        iui::prelude::Window::new(&ui, "Aimpoint Test", 640, 480, WindowType::NoMenubar);
     test_win.set_margined(&ui, false);
     test_win.set_borderless(&ui, true);
 
@@ -257,18 +272,20 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         testing.set(false);
     };
     test_win.on_closing(&ui, test_win_on_closing.c());
-    let test_area = Area::new(&ui, Box::new(TestCanvas {
-        ctx: ui.c(),
-        window: test_win.c(),
-        on_closing: Box::new(test_win_on_closing.c()),
-        runner: mot_runner.c(),
-        last_draw_width: None,
-        last_draw_height: None,
-    }));
+    let test_area = Area::new(
+        &ui,
+        Box::new(TestCanvas {
+            ctx: ui.c(),
+            window: test_win.c(),
+            on_closing: Box::new(test_win_on_closing.c()),
+            runner: mot_runner.c(),
+            last_draw_width: None,
+            last_draw_height: None,
+        }),
+    );
     let mut test_hbox = HorizontalBox::new(&ui);
     test_hbox.append(&ui, test_area.c(), LayoutStrategy::Stretchy);
     test_win.set_child(&ui, test_hbox);
-
 
     vision_module_gui::layout! { &ui,
         let vert_box = VerticalBox(padded: true) {
@@ -330,27 +347,33 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::thread::spawn({
         let mot_runner = mot_runner.c();
         move || {
-            App::new().add_plugins((
-                DefaultPlugins.set(WindowPlugin {
-                    primary_window: Some(create_bevy_window(false)),
-                    exit_condition: bevy::window::ExitCondition::DontExit,
-                    close_when_requested: false,
-                    ..default()
-                }).set(WinitPlugin {
-                    run_on_any_thread: true,
-                    ..default()
-                }),
-                // LogDiagnosticsPlugin::default(),
-                // FrameTimeDiagnosticsPlugin,
-                InfiniteGridPlugin,
-                AtmospherePlugin,
-            ))
-            .add_systems(Startup, setup)
-            .add_systems(Update, (read_stream, show_window, rotate_cube, hide_instead_of_close))
-            .add_event::<StreamEvent>()
-            .insert_resource(StreamReceiver(rx))
-            .insert_resource(MotRunnerResource(mot_runner))
-            .run();
+            App::new()
+                .add_plugins((
+                    DefaultPlugins
+                        .set(WindowPlugin {
+                            primary_window: Some(create_bevy_window(false)),
+                            exit_condition: bevy::window::ExitCondition::DontExit,
+                            close_when_requested: false,
+                            ..default()
+                        })
+                        .set(WinitPlugin {
+                            run_on_any_thread: true,
+                            ..default()
+                        }),
+                    // LogDiagnosticsPlugin::default(),
+                    // FrameTimeDiagnosticsPlugin,
+                    InfiniteGridPlugin,
+                    AtmospherePlugin,
+                ))
+                .add_systems(Startup, setup)
+                .add_systems(
+                    Update,
+                    (read_stream, show_window, rotate_cube, hide_instead_of_close),
+                )
+                .add_event::<StreamEvent>()
+                .insert_resource(StreamReceiver(rx))
+                .insert_resource(MotRunnerResource(mot_runner))
+                .run();
         }
     });
 
@@ -428,7 +451,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // The mot_runner task is already running
                     Some(abort_handle)
                 } else {
-                    Some(tokio::spawn(vision_module_gui::mot_runner::run(mot_runner.c())).abort_handle())
+                    Some(
+                        tokio::spawn(vision_module_gui::mot_runner::run(mot_runner.c()))
+                            .abort_handle(),
+                    )
                 }
             } else {
                 abort_handle??.abort();
@@ -446,7 +472,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // The mot_runner task is already running
                     Some(abort_handle)
                 } else {
-                    Some(tokio::spawn(vision_module_gui::mot_runner::frame_loop(mot_runner.c())).abort_handle())
+                    Some(
+                        tokio::spawn(vision_module_gui::mot_runner::frame_loop(mot_runner.c()))
+                            .abort_handle(),
+                    )
                 }
             } else {
                 if let Some(Some(abort_handle)) = abort_handle {
@@ -471,7 +500,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let view = view.c();
             let madgwick = &mut view.lock().state.madgwick;
-            *madgwick = ahrs::Madgwick::new_with_quat(1. / accel_config_signal.get().accel_odr as f32, 0.2, madgwick.quat);
+            *madgwick = ahrs::Madgwick::new_with_quat(
+                1. / accel_config_signal.get().accel_odr as f32,
+                0.2,
+                madgwick.quat,
+            );
         }
     });
 
@@ -528,10 +561,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut collected_text = collected_text.c();
 
             let mut frame = TestFrame {
-                              fv_aimpoint_x: None,
-                              fv_aimpoint_y: None,
-                              opposite_cant: None,
-                              };
+                fv_aimpoint_x: None,
+                fv_aimpoint_y: None,
+                opposite_cant: None,
+            };
 
             let runner = state.lock();
             let state = &runner.state;
@@ -541,8 +574,13 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
 
-                let gravity_vec = runner.state.orientation.inverse_transform_vector(&nalgebra::Vector3::z_axis());
-                let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.).to_degrees();
+                let gravity_vec = runner
+                    .state
+                    .orientation
+                    .inverse_transform_vector(&nalgebra::Vector3::z_axis());
+                let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64)
+                    + std::f64::consts::PI / 2.)
+                    .to_degrees();
                 frame.opposite_cant = Some(gravity_angle);
             }
 
@@ -588,7 +626,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         move |_| {
             let datapoints = datapoints.c();
             let datapoints = datapoints.lock();
-            let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("csv").extension("csv")]);
+            let path_buf =
+                main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("csv").extension("csv")]);
             if let Some(mut path_buf) = path_buf {
                 if path_buf.extension() != Some("csv".as_ref()) {
                     path_buf.as_mut_os_string().push(".csv");
@@ -625,7 +664,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     }
     // });
 
-    track_raw_button.on_clicked(&ui, move |_| tracking_raw.set(!tracking_raw.get_untracked()));
+    track_raw_button.on_clicked(&ui, move |_| {
+        tracking_raw.set(!tracking_raw.get_untracked())
+    });
     track_button.on_clicked(&ui, move |_| tracking.set(!tracking.get_untracked()));
     test_button.on_clicked(&ui, move |_| testing.set(true));
     record_button.on_clicked(&ui, {
@@ -651,7 +692,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mot_runner = mot_runner.c();
         move |_| {
             let packets = packets.lock();
-            let path_buf = main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("bin").extension("bin")]);
+            let path_buf =
+                main_win.save_file_with_filter(&ui, &[FileTypeFilter::new("bin").extension("bin")]);
             if let Some(mut path_buf) = path_buf {
                 if path_buf.extension() != Some("bin".as_ref()) {
                     path_buf.as_mut_os_string().push(".bin");

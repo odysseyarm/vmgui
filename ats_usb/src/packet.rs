@@ -1,4 +1,4 @@
-use std::{fmt::Display, error::Error as StdError};
+use std::{error::Error as StdError, fmt::Display};
 
 use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
 use nalgebra::{Isometry3, Point2, Vector3};
@@ -19,7 +19,7 @@ pub struct Packet {
 #[derive(Clone, Debug)]
 pub enum PacketData {
     WriteRegister(WriteRegister), // a.k.a. Poke
-    ReadRegister(Register), // a.k.a. Peek
+    ReadRegister(Register),       // a.k.a. Peek
     ReadRegisterResponse(ReadRegisterResponse),
     WriteConfig(GeneralConfig),
     ReadConfig(),
@@ -78,8 +78,7 @@ pub struct ReadRegisterResponse {
 
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct AccelConfig {
     #[serde_inline_default(100)]
     pub accel_odr: u16,
@@ -115,7 +114,15 @@ impl AccelConfig {
         let s_y = f32::from_le_bytes([bytes[18], bytes[19], bytes[20], bytes[21]]);
         let s_z = f32::from_le_bytes([bytes[22], bytes[23], bytes[24], bytes[25]]);
         *bytes = &bytes[26..];
-        Ok(Self { accel_odr, b_x, b_y, b_z, s_x, s_y, s_z })
+        Ok(Self {
+            accel_odr,
+            b_x,
+            b_y,
+            b_z,
+            s_x,
+            s_y,
+            s_z,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -126,11 +133,9 @@ impl AccelConfig {
     }
 }
 
-
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct GyroConfig {
     pub b_x: f32,
     pub b_y: f32,
@@ -271,10 +276,14 @@ impl Display for Error {
         use Error as S;
         match self {
             S::UnexpectedEof { packet_type: None } => write!(f, "unexpected eof"),
-            S::UnexpectedEof { packet_type: Some(p) } => write!(f, "unexpected eof, packet id {p:?}"),
+            S::UnexpectedEof {
+                packet_type: Some(p),
+            } => write!(f, "unexpected eof, packet id {p:?}"),
             S::UnrecognizedPacketId(id) => write!(f, "unrecognized packet id {id}"),
             S::UnrecognizedPort => write!(f, "unrecognized port"),
-            S::UnrecognizedStreamUpdateAction(n) => write!(f, "unrecognized stream update action {n}"),
+            S::UnrecognizedStreamUpdateAction(n) => {
+                write!(f, "unrecognized stream update action {n}")
+            }
         }
     }
 }
@@ -300,54 +309,100 @@ impl TryFrom<u8> for Port {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, enumn::N)]
+#[derive(Copy, Clone, Debug)]
 pub enum PacketType {
-    WriteRegister, // a.k.a. Poke
-    ReadRegister,  // a.k.a. Peek
-    ReadRegisterResponse,
-    WriteConfig,
-    ReadConfig,
-    ReadConfigResponse,
-    ReadProps,
-    ReadPropsResponse,
-    ObjectReportRequest,
-    ObjectReport,
-    CombinedMarkersReport,
-    AccelReport,
-    ImpactReport,
-    StreamUpdate,
-    FlashSettings,
-    End,
-    VendorStart = 0x80,
-    VendorEnd = 0xff,
+    WriteRegister(), // a.k.a. Poke
+    ReadRegister(),  // a.k.a. Peek
+    ReadRegisterResponse(),
+    WriteConfig(),
+    ReadConfig(),
+    ReadConfigResponse(),
+    ReadProps(),
+    ReadPropsResponse(),
+    ObjectReportRequest(),
+    ObjectReport(),
+    CombinedMarkersReport(),
+    AccelReport(),
+    ImpactReport(),
+    StreamUpdate(),
+    FlashSettings(),
+    End(),
+    VendorStart(),
+    Vendor(u8),
+    VendorEnd(),
 }
 
 impl TryFrom<u8> for PacketType {
     type Error = Error;
     fn try_from(n: u8) -> Result<Self, Self::Error> {
-        Self::n(n).ok_or(Error::UnrecognizedPacketId(n))
+        match n {
+            0x00 => Ok(Self::WriteRegister()),
+            0x01 => Ok(Self::ReadRegister()),
+            0x02 => Ok(Self::ReadRegisterResponse()),
+            0x03 => Ok(Self::WriteConfig()),
+            0x04 => Ok(Self::ReadConfig()),
+            0x05 => Ok(Self::ReadConfigResponse()),
+            0x06 => Ok(Self::ReadProps()),
+            0x07 => Ok(Self::ReadPropsResponse()),
+            0x08 => Ok(Self::ObjectReportRequest()),
+            0x09 => Ok(Self::ObjectReport()),
+            0x0a => Ok(Self::CombinedMarkersReport()),
+            0x0b => Ok(Self::AccelReport()),
+            0x0c => Ok(Self::ImpactReport()),
+            0x0d => Ok(Self::StreamUpdate()),
+            0x0e => Ok(Self::FlashSettings()),
+            0x0f => Ok(Self::End()),
+            0x80 => Ok(Self::VendorStart()),
+            0xff => Ok(Self::VendorEnd()),
+            n => Ok(Self::Vendor(n)),
+        }
+    }
+}
+
+impl From<PacketType> for u8 {
+    fn from(ty: PacketType) -> u8 {
+        match ty {
+            PacketType::WriteRegister() => 0x00,
+            PacketType::ReadRegister() => 0x01,
+            PacketType::ReadRegisterResponse() => 0x02,
+            PacketType::WriteConfig() => 0x03,
+            PacketType::ReadConfig() => 0x04,
+            PacketType::ReadConfigResponse() => 0x05,
+            PacketType::ReadProps() => 0x06,
+            PacketType::ReadPropsResponse() => 0x07,
+            PacketType::ObjectReportRequest() => 0x08,
+            PacketType::ObjectReport() => 0x09,
+            PacketType::CombinedMarkersReport() => 0x0a,
+            PacketType::AccelReport() => 0x0b,
+            PacketType::ImpactReport() => 0x0c,
+            PacketType::StreamUpdate() => 0x0d,
+            PacketType::FlashSettings() => 0x0e,
+            PacketType::End() => 0x0f,
+            PacketType::VendorStart() => 0x80,
+            PacketType::VendorEnd() => 0xff,
+            PacketType::Vendor(n) => n,
+        }
     }
 }
 
 impl Packet {
     pub fn ty(&self) -> PacketType {
         match self.data {
-            PacketData::WriteRegister(_) => PacketType::WriteRegister,
-            PacketData::ReadRegister(_) => PacketType::ReadRegister,
-            PacketData::ReadRegisterResponse(_) => PacketType::ReadRegisterResponse,
-            PacketData::WriteConfig(_) => PacketType::WriteConfig,
-            PacketData::ReadConfig() => PacketType::ReadConfig,
-            PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse,
-            PacketData::ReadProps() => PacketType::ReadProps,
-            PacketData::ReadPropsResponse(_) => PacketType::ReadPropsResponse,
-            PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest,
-            PacketData::ObjectReport(_) => PacketType::ObjectReport,
-            PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport,
-            PacketData::AccelReport(_) => PacketType::AccelReport,
-            PacketData::ImpactReport(_) => PacketType::ImpactReport,
-            PacketData::StreamUpdate(_) => PacketType::StreamUpdate,
-            PacketData::FlashSettings() => PacketType::FlashSettings,
+            PacketData::WriteRegister(_) => PacketType::WriteRegister(),
+            PacketData::ReadRegister(_) => PacketType::ReadRegister(),
+            PacketData::ReadRegisterResponse(_) => PacketType::ReadRegisterResponse(),
+            PacketData::WriteConfig(_) => PacketType::WriteConfig(),
+            PacketData::ReadConfig() => PacketType::ReadConfig(),
+            PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse(),
+            PacketData::ReadProps() => PacketType::ReadProps(),
+            PacketData::ReadPropsResponse(_) => PacketType::ReadPropsResponse(),
+            PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest(),
+            PacketData::ObjectReport(_) => PacketType::ObjectReport(),
+            PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport(),
+            PacketData::AccelReport(_) => PacketType::AccelReport(),
+            PacketData::ImpactReport(_) => PacketType::ImpactReport(),
+            PacketData::StreamUpdate(_) => PacketType::StreamUpdate(),
+            PacketData::FlashSettings() => PacketType::FlashSettings(),
         }
     }
 
@@ -359,27 +414,39 @@ impl Packet {
         let words = u16::from_le_bytes([words1, words2]);
         let ty = PacketType::try_from(ty)?;
 
-        let len = usize::from(words)*2;
+        let len = usize::from(words) * 2;
         if bytes.len() < len {
-            return Err(Error::UnexpectedEof { packet_type: Some(ty) });
+            return Err(Error::UnexpectedEof {
+                packet_type: Some(ty),
+            });
         }
         *bytes = &bytes[4..];
         let data = match ty {
-            PacketType::WriteRegister => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
-            PacketType::ReadRegister => PacketData::ReadRegister(Register::parse(bytes, ty)?),
-            PacketType::ReadRegisterResponse => PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?),
-            PacketType::WriteConfig => unimplemented!(),
-            PacketType::ReadConfig => PacketData::ReadConfig(),
-            PacketType::ReadConfigResponse => PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?),
-            PacketType::ReadProps => PacketData::ReadProps(),
-            PacketType::ReadPropsResponse => PacketData::ReadPropsResponse(Props::parse(bytes, ty)?),
-            PacketType::ObjectReportRequest => PacketData::ObjectReportRequest(ObjectReportRequest {}),
-            PacketType::ObjectReport => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
-            PacketType::CombinedMarkersReport => PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?),
-            PacketType::AccelReport => PacketData::AccelReport(AccelReport::parse(bytes)?),
-            PacketType::ImpactReport => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
-            PacketType::StreamUpdate => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
-            PacketType::FlashSettings => PacketData::FlashSettings(),
+            PacketType::WriteRegister() => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
+            PacketType::ReadRegister() => PacketData::ReadRegister(Register::parse(bytes, ty)?),
+            PacketType::ReadRegisterResponse() => {
+                PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?)
+            }
+            PacketType::WriteConfig() => unimplemented!(),
+            PacketType::ReadConfig() => PacketData::ReadConfig(),
+            PacketType::ReadConfigResponse() => {
+                PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?)
+            }
+            PacketType::ReadProps() => PacketData::ReadProps(),
+            PacketType::ReadPropsResponse() => {
+                PacketData::ReadPropsResponse(Props::parse(bytes, ty)?)
+            }
+            PacketType::ObjectReportRequest() => {
+                PacketData::ObjectReportRequest(ObjectReportRequest {})
+            }
+            PacketType::ObjectReport() => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
+            PacketType::CombinedMarkersReport() => {
+                PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?)
+            }
+            PacketType::AccelReport() => PacketData::AccelReport(AccelReport::parse(bytes)?),
+            PacketType::ImpactReport() => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
+            PacketType::StreamUpdate() => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
+            PacketType::FlashSettings() => PacketData::FlashSettings(),
             p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
@@ -395,8 +462,8 @@ impl Packet {
 
         let len = match &self.data {
             PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
-            PacketData::ReadRegister(_) => calculate_length!(Register)+1,
-            PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse)+1,
+            PacketData::ReadRegister(_) => calculate_length!(Register) + 1,
+            PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse) + 1,
             PacketData::WriteConfig(_) => GeneralConfig::SIZE,
             PacketData::ReadConfig() => 0,
             PacketData::ReadConfigResponse(_) => GeneralConfig::SIZE,
@@ -413,7 +480,7 @@ impl Packet {
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
         buf.reserve(4 + usize::from(len));
-        buf.extend_from_slice(&[words[0], words[1], ty as u8, self.id]);
+        buf.extend_from_slice(&[words[0], words[1], ty.into(), self.id]);
         match &self.data {
             PacketData::WriteRegister(x) => x.serialize(buf),
             PacketData::ReadRegister(x) => x.serialize(buf),
@@ -428,7 +495,9 @@ impl Packet {
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => x.serialize(buf),
             PacketData::ImpactReport(x) => x.serialize(buf),
-            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.packet_id as u8, x.action as u8]),
+            PacketData::StreamUpdate(x) => {
+                buf.extend_from_slice(&[x.packet_id.into(), x.action as u8])
+            }
             PacketData::FlashSettings() => (),
         }
     }
@@ -489,11 +558,17 @@ impl Register {
     pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let [port, bank, address, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof { packet_type: Some(pkt_ty) });
+            return Err(E::UnexpectedEof {
+                packet_type: Some(pkt_ty),
+            });
         };
         let port = port.try_into()?;
         *bytes = &bytes[4..];
-        Ok(Self { port, bank, address })
+        Ok(Self {
+            port,
+            bank,
+            address,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -505,10 +580,16 @@ impl ReadRegisterResponse {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let [bank, address, data, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof { packet_type: Some(PacketType::ReadRegisterResponse) });
+            return Err(E::UnexpectedEof {
+                packet_type: Some(PacketType::ReadRegisterResponse()),
+            });
         };
         *bytes = &bytes[4..];
-        Ok(Self { bank, address, data })
+        Ok(Self {
+            bank,
+            address,
+            data,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -520,11 +601,18 @@ impl WriteRegister {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         use Error as E;
         let [port, bank, address, data, ..] = **bytes else {
-            return Err(E::UnexpectedEof { packet_type: Some(PacketType::WriteRegister) });
+            return Err(E::UnexpectedEof {
+                packet_type: Some(PacketType::WriteRegister()),
+            });
         };
         let port = port.try_into()?;
         *bytes = &bytes[4..];
-        Ok(Self { port, bank, address, data })
+        Ok(Self {
+            port,
+            bank,
+            address,
+            data,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -534,7 +622,7 @@ impl WriteRegister {
 
 impl GeneralConfig {
     pub const SIZE: u16 = 200;
-    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
+    pub fn parse(bytes: &mut &[u8], _pkt_ty: PacketType) -> Result<Self, Error> {
         use Error as E;
         let impact_threshold = bytes[0];
 
@@ -550,15 +638,17 @@ impl GeneralConfig {
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };
 
-        let mut camera_model_nf: RosOpenCvIntrinsics<f32> = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
-            Ok(x) => x.into(),
-            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-        };
+        let mut camera_model_nf: RosOpenCvIntrinsics<f32> =
+            match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+                Ok(x) => x.into(),
+                Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+            };
 
-        let mut camera_model_wf: RosOpenCvIntrinsics<f32> = match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
-            Ok(x) => x.into(),
-            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-        };
+        let mut camera_model_wf: RosOpenCvIntrinsics<f32> =
+            match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+                Ok(x) => x.into(),
+                Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
+            };
 
         let stereo_iso = match ats_cv::ocv_types::MinimalStereoCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
@@ -584,7 +674,14 @@ impl GeneralConfig {
             camera_model_wf.p.m23 *= 4095.0 / 98.0;
         }
 
-        Ok(Self { impact_threshold, accel_config, gyro_config, camera_model_nf, camera_model_wf, stereo_iso })
+        Ok(Self {
+            impact_threshold,
+            accel_config,
+            gyro_config,
+            camera_model_nf,
+            camera_model_wf,
+            stereo_iso,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -599,7 +696,7 @@ impl GeneralConfig {
 }
 
 impl Props {
-    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
+    pub fn parse(bytes: &mut &[u8], _pkt_ty: PacketType) -> Result<Self, Error> {
         let mut uuid = [0; 6];
         uuid.clone_from_slice(&bytes[..6]);
         *bytes = &bytes[..6];
@@ -664,7 +761,9 @@ impl ObjectReport {
         let data = &mut &bytes[..512];
         *bytes = &bytes[512..];
         let [_format, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof { packet_type: Some(PacketType::ObjectReport) });
+            return Err(E::UnexpectedEof {
+                packet_type: Some(PacketType::ObjectReport()),
+            });
         };
         *bytes = &bytes[2..];
         Ok(Self {
@@ -692,13 +791,15 @@ impl CombinedMarkersReport {
         use Error as E;
         let size = Self::SIZE as usize;
         if bytes.len() < size {
-            return Err(E::UnexpectedEof { packet_type: Some(PacketType::CombinedMarkersReport) });
+            return Err(E::UnexpectedEof {
+                packet_type: Some(PacketType::CombinedMarkersReport()),
+            });
         }
 
         let data = &mut &bytes[..size];
         *bytes = &bytes[size..];
 
-        let mut positions = [Point2::new(0, 0); 16*2];
+        let mut positions = [Point2::new(0, 0); 16 * 2];
         for i in 0..positions.len() {
             // x, y is 12 bits each
             let x = u16::from_le_bytes([data[0], data[1] & 0x0f]);
@@ -709,7 +810,10 @@ impl CombinedMarkersReport {
         let nf_positions = positions[..16].try_into().unwrap();
         let wf_positions = positions[16..].try_into().unwrap();
 
-        Ok(Self { nf_points: nf_positions, wf_points: wf_positions })
+        Ok(Self {
+            nf_points: nf_positions,
+            wf_points: wf_positions,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
@@ -756,7 +860,11 @@ impl AccelReport {
             x
         });
         *bytes = &bytes[16..];
-        Ok(Self { accel: Vector3::from(accel), gyro: Vector3::from(gyro), timestamp })
+        Ok(Self {
+            accel: Vector3::from(accel),
+            gyro: Vector3::from(gyro),
+            timestamp,
+        })
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {

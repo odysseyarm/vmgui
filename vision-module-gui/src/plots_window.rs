@@ -86,7 +86,7 @@ fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "IMU Angular Velocity",
-        series.values.lock().unwrap().iter().map(|p| p.1.1),
+        series.values.lock().unwrap().iter().map(|p| p.1 .1),
         series.size,
         -0.03..0.03,
     );
@@ -97,7 +97,7 @@ fn accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "IMU Acceleration",
-        series.values.lock().unwrap().iter().map(|p| p.1.0),
+        series.values.lock().unwrap().iter().map(|p| p.1 .0),
         series.size,
         -10.0..10.0,
     );
@@ -108,7 +108,12 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "PnP Position",
-        series.values.lock().unwrap().iter().map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords),
+        series
+            .values
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords),
         series.size,
         -5.0..1.0,
     );
@@ -230,12 +235,7 @@ fn eskf_mismatch_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     scalar_f64_chart(
         area,
         "ESKF/P3P Mismatch Count",
-        series
-            .values
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|p| f64::from(p.1)),
+        series.values.lock().unwrap().iter().map(|p| f64::from(p.1)),
         series.size,
         0.0..10.0,
     );
@@ -259,7 +259,12 @@ fn position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
-fn vec3_f32_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>, caption: &str, series: &Series<Vector3<f32>>, default_range: Range<f32>) {
+fn vec3_f32_chart<DB: DrawingBackend>(
+    area: &DrawingArea<DB, Shift>,
+    caption: &str,
+    series: &Series<Vector3<f32>>,
+    default_range: Range<f32>,
+) {
     let data = series.values.lock().unwrap();
     let min = data
         .iter()
@@ -269,8 +274,8 @@ fn vec3_f32_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>, caption: &s
         .unwrap_or(default_range.start)
         .min(default_range.start);
     let max = data
-        .iter().
-        flat_map(|p| p.1.as_slice())
+        .iter()
+        .flat_map(|p| p.1.as_slice())
         .copied()
         .max_by(f32::total_cmp)
         .unwrap_or(default_range.end)
@@ -376,5 +381,7 @@ fn scalar_f64_chart<DB: DrawingBackend>(
         .draw()
         .unwrap();
 
-    chart.draw_series(LineSeries::new(data.into_iter().enumerate(), &RED)).unwrap();
+    chart
+        .draw_series(LineSeries::new(data.into_iter().enumerate(), &RED))
+        .unwrap();
 }

@@ -1,5 +1,19 @@
-use std::{f64::consts::{FRAC_1_SQRT_2, PI}, io::{Read, Write}, net::{TcpListener, TcpStream}, ops::{Bound, RangeBounds}, sync::{Arc, Mutex}, time::Duration};
+use std::{
+    f64::consts::{FRAC_1_SQRT_2, PI},
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    ops::{Bound, RangeBounds},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
+use ats_usb::{
+    device::encode_slip_frame,
+    packet::{
+        CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, PacketType,
+        ReadRegisterResponse, StreamUpdateAction,
+    },
+};
 use iui::{
     controls::{
         Area, AreaDrawParams, AreaHandler, AreaKeyEvent, AreaMouseEvent, Modifiers, Window,
@@ -9,12 +23,12 @@ use iui::{
     UI,
 };
 use nalgebra::{
-    Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3, Transform3, Translation2, Translation3, Vector3, Vector4, coordinates::XY
+    coordinates::XY, Matrix3, Matrix4, Point, Point2, Point3, Rotation3, SVector, Scale2, Scale3,
+    Transform3, Translation2, Translation3, Vector3, Vector4,
 };
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, PacketType, ReadRegisterResponse, StreamUpdateAction}};
-use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
+use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle};
 
 // Positive x is right
 // Positive y is up
@@ -106,8 +120,14 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         // stream thread from writing at the same time
         let mut state = state.lock().unwrap();
         let response = match pkt.data {
-            PacketData::WriteRegister(_) => None,  // lmao no thanks
-            PacketData::ReadRegister(r) => Some(PacketData::ReadRegisterResponse(ReadRegisterResponse { bank: r.bank, address: r.address, data: 0 })),
+            PacketData::WriteRegister(_) => None, // lmao no thanks
+            PacketData::ReadRegister(r) => {
+                Some(PacketData::ReadRegisterResponse(ReadRegisterResponse {
+                    bank: r.bank,
+                    address: r.address,
+                    data: 0,
+                }))
+            }
             PacketData::ReadRegisterResponse(_) => unreachable!(),
             PacketData::ObjectReportRequest(_) => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
@@ -117,17 +137,19 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     state.stream_combined_markers = None;
                 } else {
                     match s.packet_id {
-                        PacketType::ObjectReport => match s.action {
+                        PacketType::ObjectReport() => match s.action {
                             StreamUpdateAction::Enable => state.stream_mot = Some(pkt.id),
                             StreamUpdateAction::Disable => state.stream_mot = None,
                             _ => unreachable!(),
                         },
-                        PacketType::CombinedMarkersReport => match s.action {
-                            StreamUpdateAction::Enable => state.stream_combined_markers = Some(pkt.id),
+                        PacketType::CombinedMarkersReport() => match s.action {
+                            StreamUpdateAction::Enable => {
+                                state.stream_combined_markers = Some(pkt.id)
+                            }
                             StreamUpdateAction::Disable => state.stream_combined_markers = None,
                             _ => unreachable!(),
                         },
-                        _ => {},
+                        _ => {}
                     }
                 }
                 None
@@ -137,8 +159,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(
-            GeneralConfig {
+            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(GeneralConfig {
                 impact_threshold: 5,
                 accel_config: Default::default(),
                 gyro_config: Default::default(),
@@ -191,9 +212,11 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     mot_data.area = 1;
                     mot_data.cx = marker.x as u16;
                     mot_data.cy = marker.y as u16;
-                    mot_data.boundary_left = ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_left =
+                        ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
                     mot_data.boundary_right = mot_data.boundary_left + 3;
-                    mot_data.boundary_up = ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_up =
+                        ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
                     mot_data.boundary_down = mot_data.boundary_up + 3;
                 }
             }
@@ -202,14 +225,20 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                     mot_data.area = 1;
                     mot_data.cx = marker.x as u16;
                     mot_data.cy = marker.y as u16;
-                    mot_data.boundary_left = ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_left =
+                        ((marker.x as f64 / 4094. * 98.0) as u8).saturating_sub(1);
                     mot_data.boundary_right = mot_data.boundary_left + 3;
-                    mot_data.boundary_up = ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
+                    mot_data.boundary_up =
+                        ((marker.y as f64 / 4094. * 98.0) as u8).saturating_sub(1);
                     mot_data.boundary_down = mot_data.boundary_up + 3;
                 }
             }
             buf.clear();
-            Packet { id, data: PacketData::ObjectReport(object_report) }.serialize(&mut buf);
+            Packet {
+                id,
+                data: PacketData::ObjectReport(object_report),
+            }
+            .serialize(&mut buf);
             encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
         }
@@ -230,7 +259,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             let make_positions = |markers: &[Point2<i16>]| {
                 let positions = std::array::from_fn(|i| {
                     let Some(XY { x, y }) = markers.get(i).map(|x| **x) else {
-                        return Point2::default()
+                        return Point2::default();
                     };
                     if (0..4096).contains(&x) && (0..4096).contains(&y) {
                         Point2::new(x as u16, y as u16)
@@ -247,7 +276,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::CombinedMarkersReport(CombinedMarkersReport {
                     nf_points: nf_positions,
                     wf_points: wf_positions,
-                })
+                }),
             };
             buf.clear();
             pkt.serialize(&mut buf);
@@ -290,7 +319,6 @@ impl State {
                 // tf * Point3::new(0.35, 0.9, 0.0),
                 // tf * Point3::new(0.65, 0.9, 0.0),
                 // tf * Point3::new(1.0, 0.5, 0.0),
-
                 tf * Point3::new(0.18, 1.0 - 0.29, 0.),
                 tf * Point3::new(0.15, 1.0 - 0.82, 0.),
                 tf * Point3::new(0.77, 1.0 - 0.8, 0.),
@@ -303,7 +331,6 @@ impl State {
                 tf * Point3::new(1.51, 1.0 - 0.35, 0.),
                 tf * Point3::new(1.79, 1.0 - 0.25, 0.),
                 tf * Point3::new(1.49, 1.0 - 0.76, 0.),
-
                 // tf * Point3::new(0.35, 1.0, 0.0),
                 // tf * Point3::new(0.65, 1.0, 0.0),
                 // tf * Point3::new(0.65, 0.0, 0.0),
@@ -395,27 +422,31 @@ impl State {
     }
 
     fn calculate_nf_positions(&self) -> Vec<Point2<i16>> {
-        let transform = self.nf_perspective_matrix()
-            * self.camera_matrix();
-        let device_transform =
-            Scale2::new(2047.5, -2047.5).to_homogeneous() * Translation2::new(1.0, -1.0).to_homogeneous();
-        self.markers.iter().map(|p| {
-            let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
-            let p = device_transform.transform_point(&(p.xy() / p.w).into());
-            Point2::new(p.x.round() as i16, p.y.round() as i16)
-        }).collect()
+        let transform = self.nf_perspective_matrix() * self.camera_matrix();
+        let device_transform = Scale2::new(2047.5, -2047.5).to_homogeneous()
+            * Translation2::new(1.0, -1.0).to_homogeneous();
+        self.markers
+            .iter()
+            .map(|p| {
+                let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
+                let p = device_transform.transform_point(&(p.xy() / p.w).into());
+                Point2::new(p.x.round() as i16, p.y.round() as i16)
+            })
+            .collect()
     }
 
     fn calculate_wf_positions(&self) -> Vec<Point2<i16>> {
-        let transform = self.wf_perspective_matrix()
-            * self.camera_matrix();
-        let device_transform =
-            Scale2::new(2047.5, -2047.5).to_homogeneous() * Translation2::new(1.0, -1.0).to_homogeneous();
-        self.markers.iter().map(|p| {
-            let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
-            let p = device_transform.transform_point(&(p.xy() / p.w).into());
-            Point2::new(p.x.round() as i16, p.y.round() as i16)
-        }).collect()
+        let transform = self.wf_perspective_matrix() * self.camera_matrix();
+        let device_transform = Scale2::new(2047.5, -2047.5).to_homogeneous()
+            * Translation2::new(1.0, -1.0).to_homogeneous();
+        self.markers
+            .iter()
+            .map(|p| {
+                let p = transform * Vector4::new(p.x, p.y, p.z, 1.0);
+                let p = device_transform.transform_point(&(p.xy() / p.w).into());
+                Point2::new(p.x.round() as i16, p.y.round() as i16)
+            })
+            .collect()
     }
 }
 
@@ -425,10 +456,10 @@ struct MainCanvas {
 
 // const GRID_WIDTH: f64 = 16.0 / 9.0;
 // const GRID_HEIGHT: f64 = 1.0;
-const GRID_WIDTH: f64 = 3.64631*100.;
-const GRID_HEIGHT: f64 = 2.05105*100.;
+const GRID_WIDTH: f64 = 3.64631 * 100.;
+const GRID_HEIGHT: f64 = 2.05105 * 100.;
 // const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 360.0);
-const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 4.99872*100.);
+const DEFAULT_CAMERA_POS: Point3<f64> = Point3::new(0.0, 0.0, 4.99872 * 100.);
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
@@ -464,24 +495,41 @@ impl AreaHandler for MainCanvas {
 
         // black square background
         let bg = Path::new(ctx, FillMode::Winding);
-        bg.new_figure(ctx, w/2. - size/2., h/2. - size/2.);
-        bg.line_to(ctx, w/2. + size/2., h/2. - size/2.);
-        bg.line_to(ctx, w/2. + size/2., h/2. + size/2.);
-        bg.line_to(ctx, w/2. - size/2., h/2. + size/2.);
+        bg.new_figure(ctx, w / 2. - size / 2., h / 2. - size / 2.);
+        bg.line_to(ctx, w / 2. + size / 2., h / 2. - size / 2.);
+        bg.line_to(ctx, w / 2. + size / 2., h / 2. + size / 2.);
+        bg.line_to(ctx, w / 2. - size / 2., h / 2. + size / 2.);
         bg.end(ctx);
-        ctx.fill(&bg, &Brush::Solid(SolidBrush { r: 0., g: 0., b: 0., a: 1. }));
+        ctx.fill(
+            &bg,
+            &Brush::Solid(SolidBrush {
+                r: 0.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            }),
+        );
 
         {
             // yellow square for nearfield
             let sq = Path::new(ctx, FillMode::Winding);
             let size = size * state.nf_wf_ratio();
-            sq.new_figure(ctx, w/2. - size/2., h/2. - size/2.);
-            sq.line_to(ctx, w/2. + size/2., h/2. - size/2.);
-            sq.line_to(ctx, w/2. + size/2., h/2. + size/2.);
-            sq.line_to(ctx, w/2. - size/2., h/2. + size/2.);
+            sq.new_figure(ctx, w / 2. - size / 2., h / 2. - size / 2.);
+            sq.line_to(ctx, w / 2. + size / 2., h / 2. - size / 2.);
+            sq.line_to(ctx, w / 2. + size / 2., h / 2. + size / 2.);
+            sq.line_to(ctx, w / 2. - size / 2., h / 2. + size / 2.);
             sq.close_figure(ctx);
             sq.end(ctx);
-            ctx.stroke(&sq, &Brush::Solid(SolidBrush { r: 1., g: 1., b: 0., a: 1. }), &thin_line);
+            ctx.stroke(
+                &sq,
+                &Brush::Solid(SolidBrush {
+                    r: 1.,
+                    g: 1.,
+                    b: 0.,
+                    a: 1.,
+                }),
+                &thin_line,
+            );
         }
 
         // map normalized coordinates into screen coordinates
@@ -504,23 +552,52 @@ impl AreaHandler for MainCanvas {
         grid_path.end(ctx);
         ctx.stroke(
             &grid_path,
-            &Brush::Solid(SolidBrush { r: 1., g: 0., b: 0., a: 1. }),
+            &Brush::Solid(SolidBrush {
+                r: 1.,
+                g: 0.,
+                b: 0.,
+                a: 1.,
+            }),
             &thin_line,
         );
 
         let markers_path = Path::new(ctx, FillMode::Winding);
         for &marker in &state.markers {
-            draw_marker(marker, 0.05, ctx, &markers_path, transform, device_transform);
+            draw_marker(
+                marker,
+                0.05,
+                ctx,
+                &markers_path,
+                transform,
+                device_transform,
+            );
         }
         markers_path.end(ctx);
         ctx.stroke(
             &markers_path,
-            &Brush::Solid(SolidBrush { r: 0., g: 1., b: 0., a: 1. }),
+            &Brush::Solid(SolidBrush {
+                r: 0.,
+                g: 1.,
+                b: 0.,
+                a: 1.,
+            }),
             &thin_line,
         );
-        let brush = Brush::Solid(SolidBrush { r: 1., g: 1., b: 1., a: 1. });
+        let brush = Brush::Solid(SolidBrush {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+            a: 1.,
+        });
         let center_point_path = Path::new(ctx, FillMode::Winding);
-        draw_diamond(ctx, &center_point_path, 0.5 * draw_params.area_width, 0.5 * draw_params.area_height, 8.0, 8.0);
+        draw_diamond(
+            ctx,
+            &center_point_path,
+            0.5 * draw_params.area_width,
+            0.5 * draw_params.area_height,
+            8.0,
+            8.0,
+        );
         center_point_path.end(ctx);
         ctx.stroke(&center_point_path, &brush, &thin_line);
     }
@@ -543,7 +620,7 @@ impl AreaHandler for MainCanvas {
     fn key_event(&mut self, _area: &Area, key_event: &AreaKeyEvent) -> bool {
         let mut state = self.state.lock().unwrap();
         state.moving_down = key_event.modifiers.contains(Modifiers::MODIFIER_SHIFT)
-        || key_event.modifiers.contains(Modifiers::MODIFIER_CTRL);
+            || key_event.modifiers.contains(Modifiers::MODIFIER_CTRL);
         let field = match key_event.key {
             b'w' => &mut state.moving_fwd,
             b'a' => &mut state.moving_left,
@@ -551,7 +628,8 @@ impl AreaHandler for MainCanvas {
             b'd' => &mut state.moving_right,
             b'e' | b' ' => &mut state.moving_up,
             b'q' => &mut state.moving_down,
-            b'\x08' => { // backspace
+            b'\x08' => {
+                // backspace
                 // reset the camera
                 state.camera_pos = DEFAULT_CAMERA_POS;
                 state.yaw = 0.0;
@@ -559,7 +637,10 @@ impl AreaHandler for MainCanvas {
                 return true;
             }
             _ if key_event.modifier.contains(Modifiers::MODIFIER_SHIFT)
-            || key_event.modifier.contains(Modifiers::MODIFIER_CTRL) => &mut state.moving_down,
+                || key_event.modifier.contains(Modifiers::MODIFIER_CTRL) =>
+            {
+                &mut state.moving_down
+            }
             _ => return true,
         };
         *field = !key_event.up;
@@ -580,7 +661,9 @@ fn draw_line(
     let p1 = transform * p1;
     let p2 = transform * p2;
 
-    let Some((p1, p2)) = clip_line(p1.into(), p2.into(), |p| p.z, ..-0.1) else { return };
+    let Some((p1, p2)) = clip_line(p1.into(), p2.into(), |p| p.z, ..-0.1) else {
+        return;
+    };
     let p1 = device_transform.transform_point(&(p1.xy() / p1.w));
     let p2 = device_transform.transform_point(&(p2.xy() / p2.w));
     path.new_figure(ctx, p1.x, p1.y);
@@ -597,7 +680,7 @@ fn draw_marker(
 ) {
     for i in 0..48 {
         let a1 = i as f64 / 24.0 * PI;
-        let a2 = (i+1) as f64 / 24.0 * PI;
+        let a2 = (i + 1) as f64 / 24.0 * PI;
         let p1 = p + Vector3::new(size * a1.cos(), size * a1.sin(), 0.0);
         let p2 = p + Vector3::new(size * a2.cos(), size * a2.sin(), 0.0);
         draw_line(ctx, path, p1, p2, transform, device_transform);

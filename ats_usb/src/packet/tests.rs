@@ -1,6 +1,6 @@
 use crate::packet::PacketType;
 
-use super::{CombinedMarkersReport, ObjectReport, GeneralConfig};
+use super::{CombinedMarkersReport, GeneralConfig, ObjectReport};
 
 #[test]
 fn test_combined_marker_report_parse_serialize() {
@@ -28,6 +28,7 @@ fn test_general_config_parse_serialize() {
     let mut serialized = vec![];
     general_config.serialize(&mut serialized);
     assert_eq!(serialized.len(), GeneralConfig::SIZE as usize);
-    let deserialized_general_config = GeneralConfig::parse(&mut &serialized[..], PacketType::ReadConfigResponse).unwrap();
+    let deserialized_general_config =
+        GeneralConfig::parse(&mut &serialized[..], PacketType::ReadConfigResponse()).unwrap();
     assert_eq!(deserialized_general_config, general_config);
 }

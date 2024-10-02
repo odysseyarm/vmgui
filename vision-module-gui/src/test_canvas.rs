@@ -1,12 +1,12 @@
-use std::sync::Arc;
-use nalgebra::{Point2, Scale2};
-use parking_lot::Mutex;
+use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
+use crate::mot_runner::MotRunner;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
+use nalgebra::Point2;
+use parking_lot::Mutex;
+use std::sync::Arc;
 use tracing::debug;
-use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
-use crate::mot_runner::MotRunner;
 
 pub struct TestCanvas {
     pub ctx: UI,
@@ -27,26 +27,38 @@ impl AreaHandler for TestCanvas {
         background.add_rectangle(ctx, 0., 0., draw_params.area_width, draw_params.area_height);
         background.end(ctx);
 
-        ctx.fill(&background, &Brush::Solid(SolidBrush {
-            r: 0.5,
-            g: 0.5,
-            b: 0.5,
-            a: 1.,
-        }));
+        ctx.fill(
+            &background,
+            &Brush::Solid(SolidBrush {
+                r: 0.5,
+                g: 0.5,
+                b: 0.5,
+                a: 1.,
+            }),
+        );
 
         let fv_ch_path = Path::new(ctx, FillMode::Winding);
         let runner = self.runner.lock();
         let state = &runner.state;
         {
             let aimpoint = state.fv_aimpoint;
-            draw_crosshair(&ctx, &fv_ch_path, aimpoint.x*draw_params.area_width, aimpoint.y*draw_params.area_height, 30.);
+            draw_crosshair(
+                &ctx,
+                &fv_ch_path,
+                aimpoint.x * draw_params.area_width,
+                aimpoint.y * draw_params.area_height,
+                30.,
+            );
         }
         fv_ch_path.end(ctx);
         draw_text(
             &ctx,
             20.0,
             20.0,
-            &format!("offset = ({:.4}, {:.4})", runner.fv_offset.x, runner.fv_offset.y),
+            &format!(
+                "offset = ({:.4}, {:.4})",
+                runner.fv_offset.x, runner.fv_offset.y
+            ),
         );
         draw_text(
             &ctx,
@@ -59,14 +71,14 @@ impl AreaHandler for TestCanvas {
 
         // todo lol... i know
         let transform = ats_cv::get_perspective_transform(
-            Point2::new(draw_params.area_width/2.0, draw_params.area_height as f64), // bottom
-            Point2::new(0.0, draw_params.area_height/2.0), // left
-            Point2::new(draw_params.area_width/2.0, 0.0), // top
-            Point2::new(draw_params.area_width as f64, draw_params.area_height/2.0), // right
-            Point2::new(0.5, 1.), // bottom
-            Point2::new(0., 0.5), // left
-            Point2::new(0.5, 0.), // top
-            Point2::new(1., 0.5), // right
+            Point2::new(draw_params.area_width / 2.0, draw_params.area_height as f64), // bottom
+            Point2::new(0.0, draw_params.area_height / 2.0),                           // left
+            Point2::new(draw_params.area_width / 2.0, 0.0),                            // top
+            Point2::new(draw_params.area_width as f64, draw_params.area_height / 2.0), // right
+            Point2::new(0.5, 1.),                                                      // bottom
+            Point2::new(0., 0.5),                                                      // left
+            Point2::new(0.5, 0.),                                                      // top
+            Point2::new(1., 0.5),                                                      // right
         );
         if let Some(transform) = transform.and_then(|t| t.try_inverse()) {
             draw_grid(ctx, &grid_path, 10, 10, transform);
@@ -74,7 +86,7 @@ impl AreaHandler for TestCanvas {
         grid_path.end(ctx);
 
         let stroke = StrokeParams {
-            cap: 0, // Bevel
+            cap: 0,  // Bevel
             join: 0, // Flat
             thickness: 10.,
             miter_limit: 0.,
@@ -91,8 +103,8 @@ impl AreaHandler for TestCanvas {
 
         ctx.stroke(&fv_ch_path, &brush, &stroke);
 
-        let stroke = StrokeParams {
-            cap: 0, // Bevel
+        let _stroke = StrokeParams {
+            cap: 0,  // Bevel
             join: 0, // Flat
             thickness: 5.,
             miter_limit: 0.,
@@ -108,7 +120,7 @@ impl AreaHandler for TestCanvas {
             a: 1.,
         });
         let stroke = StrokeParams {
-            cap: 0, // Bevel
+            cap: 0,  // Bevel
             join: 0, // Flat
             thickness: 1.,
             miter_limit: 0.,
@@ -142,15 +154,19 @@ impl AreaHandler for TestCanvas {
                 // Backspace
                 8 => self.runner.lock().fv_offset = Default::default(),
                 _ => (),
-            }
+            },
         }
         true
     }
 
     fn mouse_event(&mut self, _area: &Area, mouse_event: &iui::controls::AreaMouseEvent) {
         if mouse_event.down == 1 && mouse_event.modifiers.contains(Modifiers::MODIFIER_CTRL) {
-            let Some(w) = self.last_draw_width else { return };
-            let Some(h) = self.last_draw_height else { return };
+            let Some(w) = self.last_draw_width else {
+                return;
+            };
+            let Some(h) = self.last_draw_height else {
+                return;
+            };
             let mut state = self.runner.lock();
             let aimpoint = state.state.fv_aimpoint;
             state.fv_offset.x = mouse_event.x / w - aimpoint.x;
