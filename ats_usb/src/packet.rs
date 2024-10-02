@@ -36,11 +36,19 @@ pub enum PacketData {
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-pub enum StreamChoice {
-    Object,
-    CombinedMarkers,
-    Accel,
-    Impact,
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, enumn::N, PartialEq)]
+pub enum StreamUpdateAction {
+    Enable,
+    Disable,
+    DisableAll,
+}
+
+impl TryFrom<u8> for StreamUpdateAction {
+    type Error = Error;
+    fn try_from(n: u8) -> Result<Self, Self::Error> {
+        Self::n(n).ok_or(Error::UnrecognizedStreamUpdateAction(n))
+    }
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
@@ -246,8 +254,8 @@ pub struct ImpactReport {
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct StreamUpdate {
-    pub mask: u8,
-    pub active: bool,
+    pub packet_id: PacketType,
+    pub action: StreamUpdateAction,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -255,7 +263,7 @@ pub enum Error {
     UnexpectedEof { packet_type: Option<PacketType> },
     UnrecognizedPacketId(u8),
     UnrecognizedPort,
-    UnrecognizedMarkerPattern,
+    UnrecognizedStreamUpdateAction(u8),
 }
 
 impl Display for Error {
@@ -266,7 +274,7 @@ impl Display for Error {
             S::UnexpectedEof { packet_type: Some(p) } => write!(f, "unexpected eof, packet id {p:?}"),
             S::UnrecognizedPacketId(id) => write!(f, "unrecognized packet id {id}"),
             S::UnrecognizedPort => write!(f, "unrecognized port"),
-            S::UnrecognizedMarkerPattern => write!(f, "unrecognized marker pattern"),
+            S::UnrecognizedStreamUpdateAction(n) => write!(f, "unrecognized stream update action {n}"),
         }
     }
 }
@@ -291,25 +299,28 @@ impl TryFrom<u8> for Port {
     }
 }
 
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, enumn::N)]
-pub enum PacketType {
-    WriteRegister, // a.k.a. Poke
-    ReadRegister,  // a.k.a. Peek
-    ReadRegisterResponse,
-    WriteConfig,
-    ReadConfig,
-    ReadConfigResponse,
-    ReadProps,
-    ReadPropsResponse,
-    ObjectReportRequest,
-    ObjectReport,
-    CombinedMarkersReport,
-    AccelReport,
-    ImpactReport,
-    StreamUpdate,
-    FlashSettings,
-    End,
+num_variants! {
+    #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
+    #[repr(u8)]
+    #[derive(Copy, Clone, Debug, enumn::N)]
+    pub enum PacketType {
+        WriteRegister, // a.k.a. Poke
+        ReadRegister,  // a.k.a. Peek
+        ReadRegisterResponse,
+        WriteConfig,
+        ReadConfig,
+        ReadConfigResponse,
+        ReadProps,
+        ReadPropsResponse,
+        ObjectReportRequest,
+        ObjectReport,
+        CombinedMarkersReport,
+        AccelReport,
+        ImpactReport,
+        StreamUpdate,
+        FlashSettings,
+        End,
+    }
 }
 
 impl TryFrom<u8> for PacketType {
@@ -417,7 +428,7 @@ impl Packet {
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
             PacketData::AccelReport(x) => x.serialize(buf),
             PacketData::ImpactReport(x) => x.serialize(buf),
-            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.mask as u8, x.active as u8]),
+            PacketData::StreamUpdate(x) => buf.extend_from_slice(&[x.packet_id as u8, x.action as u8]),
             PacketData::FlashSettings() => (),
         }
     }
@@ -800,8 +811,8 @@ impl ImpactReport {
 impl StreamUpdate {
     pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
         let stream_update = StreamUpdate {
-            mask: bytes[0],
-            active: bytes[1] != 0,
+            packet_id: bytes[0].try_into()?,
+            action: bytes[1].try_into()?,
         };
         *bytes = &bytes[2..];
         Ok(stream_update)

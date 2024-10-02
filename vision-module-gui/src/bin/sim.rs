@@ -13,7 +13,7 @@ use nalgebra::{
 };
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, PacketType, ReadRegisterResponse, StreamUpdateAction}};
 use vision_module_gui::{custom_shapes::draw_diamond, mot_runner::sort_rectangle };
 
 // Positive x is right
@@ -112,11 +112,23 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ObjectReportRequest(_) => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
             PacketData::StreamUpdate(s) => {
-                if s.mask & 0b001 != 0 {
-                    state.stream_mot = if s.active { Some(pkt.id) } else { None };
-                }
-                if s.mask & 0b010 != 0 {
-                    state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
+                if s.action == StreamUpdateAction::DisableAll {
+                    state.stream_mot = None;
+                    state.stream_combined_markers = None;
+                } else {
+                    match s.packet_id {
+                        PacketType::ObjectReport => match s.action {
+                            StreamUpdateAction::Enable => state.stream_mot = Some(pkt.id),
+                            StreamUpdateAction::Disable => state.stream_mot = None,
+                            _ => unreachable!(),
+                        },
+                        PacketType::CombinedMarkersReport => match s.action {
+                            StreamUpdateAction::Enable => state.stream_combined_markers = Some(pkt.id),
+                            StreamUpdateAction::Disable => state.stream_combined_markers = None,
+                            _ => unreachable!(),
+                        },
+                        _ => {},
+                    }
                 }
                 None
             }
