@@ -320,6 +320,8 @@ num_variants! {
         StreamUpdate,
         FlashSettings,
         End,
+        VendorStart = 0x80,
+        VendorEnd = 0xff,
     }
 }
 
