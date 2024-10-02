@@ -33,6 +33,7 @@ pub enum PacketData {
     ImpactReport(ImpactReport),
     StreamUpdate(StreamUpdate),
     FlashSettings(),
+    Vendor(u8, (u8, [u8; 98])),
 }
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
@@ -354,7 +355,8 @@ impl TryFrom<u8> for PacketType {
             0x0f => Ok(Self::End()),
             0x80 => Ok(Self::VendorStart()),
             0xff => Ok(Self::VendorEnd()),
-            n => Ok(Self::Vendor(n)),
+            n if (PacketType::VendorStart().into()..PacketType::VendorEnd().into()).contains(&n) => Ok(Self::Vendor(n)),
+            _ => Err(Error::UnrecognizedPacketId(n)),
         }
     }
 }
@@ -403,6 +405,7 @@ impl Packet {
             PacketData::ImpactReport(_) => PacketType::ImpactReport(),
             PacketData::StreamUpdate(_) => PacketType::StreamUpdate(),
             PacketData::FlashSettings() => PacketType::FlashSettings(),
+            PacketData::Vendor(n, _) => PacketType::Vendor(n),
         }
     }
 
@@ -447,6 +450,13 @@ impl Packet {
             PacketType::ImpactReport() => PacketData::ImpactReport(ImpactReport::parse(bytes)?),
             PacketType::StreamUpdate() => PacketData::StreamUpdate(StreamUpdate::parse(bytes)?),
             PacketType::FlashSettings() => PacketData::FlashSettings(),
+            PacketType::Vendor(n) => {
+                let len = bytes[0];
+                let mut data = [0; 98];
+                data.clone_from_slice(&bytes[1..len as usize + 1]);
+                *bytes = &bytes[len as usize + 1..];
+                PacketData::Vendor(n, (len, data))
+            }
             p => unimplemented!("{:?}", p),
         };
         Ok(Self { id, data })
@@ -476,6 +486,7 @@ impl Packet {
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
             PacketData::FlashSettings() => 0,
+            PacketData::Vendor(_, (len, _)) => if *len % 2 == 1 { (*len + 1) as u16 } else { *len as u16 },
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
@@ -499,6 +510,12 @@ impl Packet {
                 buf.extend_from_slice(&[x.packet_id.into(), x.action as u8])
             }
             PacketData::FlashSettings() => (),
+            PacketData::Vendor(_, (len, data)) => {
+                buf.extend_from_slice(&data[..*len as usize]);
+                if len % 2 == 1 {
+                    buf.push(0);
+                }
+            }
         }
     }
 }
