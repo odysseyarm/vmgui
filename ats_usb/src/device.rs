@@ -5,7 +5,7 @@ use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot},
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, Props, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, Port, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -51,36 +51,19 @@ impl Drop for ResponseSlot {
     }
 }
 
-num_variants! {
-    // The order here is important because the discriminant is used to calculate the mask.
-    #[derive(Copy, Clone, Debug)]
-    pub enum StreamType {
-        MotData,
-        CombinedMarkers,
-        Accel,
-        Impact,
-    }
-}
-
-impl StreamType {
-    fn mask(self) -> u8 {
-        1 << (self as u8)
-    }
-}
-
 #[derive(Default, Debug)]
-struct StreamsActive([AtomicBool; StreamType::num_variants()]);
+struct StreamsActive([AtomicBool; PacketType::num_variants()]);
 
-impl std::ops::Index<StreamType> for StreamsActive {
+impl std::ops::Index<PacketType> for StreamsActive {
     type Output = AtomicBool;
 
-    fn index(&self, index: StreamType) -> &Self::Output {
+    fn index(&self, index: PacketType) -> &Self::Output {
         &self.0[index as usize]
     }
 }
 
-impl std::ops::IndexMut<StreamType> for StreamsActive {
-    fn index_mut(&mut self, index: StreamType) -> &mut Self::Output {
+impl std::ops::IndexMut<PacketType> for StreamsActive {
+    fn index_mut(&mut self, index: PacketType) -> &mut Self::Output {
         &mut self.0[index as usize]
     }
 }
@@ -111,7 +94,7 @@ impl UsbDevice {
                 }
             }
             let mut buf = vec![0xff];
-            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
+            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { packet_id: PacketType::End, action: crate::packet::StreamUpdateAction::DisableAll }) }.serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
             let mut drained = 0;
             loop {
@@ -165,7 +148,7 @@ impl UsbDevice {
 
         // todo get rid of device 1 assumption
         let mut buf = vec![1, 0, 0xff];
-        Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { mask: 0xff, active: false }) }.serialize(&mut buf);
+        Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { packet_id: PacketType::End, action: crate::packet::StreamUpdateAction::DisableAll }) }.serialize(&mut buf);
         sock.send(&buf).await?;
         sleep(Duration::from_millis(100)).await;
 
@@ -445,7 +428,7 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
-    pub async fn stream(&self, stream_type: StreamType) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
+    pub async fn stream(&self, stream_type: PacketType) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             if thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
                 return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
@@ -454,8 +437,8 @@ impl UsbDevice {
             self.to_thread.send(Packet {
                 id: slot.id,
                 data: PacketData::StreamUpdate(StreamUpdate {
-                    mask: stream_type.mask(),
-                    active: true
+                    packet_id: stream_type,
+                    action: crate::packet::StreamUpdateAction::Enable,
                 })
             }).await?;
             return Ok(PacketStream {
@@ -469,19 +452,19 @@ impl UsbDevice {
     }
 
     pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
-        Ok(self.stream(StreamType::MotData).await?.filter_map(|x| x.object_report()))
+        Ok(self.stream(PacketType::ObjectReport).await?.filter_map(|x| x.object_report()))
     }
 
     pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
-        Ok(self.stream(StreamType::CombinedMarkers).await?.filter_map(|x| x.combined_markers_report()))
+        Ok(self.stream(PacketType::CombinedMarkersReport).await?.filter_map(|x| x.combined_markers_report()))
     }
 
     pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Accel).await?.filter_map(|x| x.accel_report()))
+        Ok(self.stream(PacketType::AccelReport).await?.filter_map(|x| x.accel_report()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
-        Ok(self.stream(StreamType::Impact).await?.filter_map(|x| x.impact_report()))
+        Ok(self.stream(PacketType::ImpactReport).await?.filter_map(|x| x.impact_report()))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
@@ -549,7 +532,7 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
 }
 
 pub struct PacketStream {
-    stream_type: StreamType,
+    stream_type: PacketType,
     slot: ResponseSlot,
     to_thread: mpsc::Sender<Packet>,
     receiver: ReceiverStream<PacketData>,
@@ -573,7 +556,7 @@ impl Drop for PacketStream {
             thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
             let _ = self.to_thread.try_send(Packet {
                 id: 255,
-                data: PacketData::StreamUpdate(StreamUpdate { mask: self.stream_type.mask(), active: false }),
+                data: PacketData::StreamUpdate(StreamUpdate { packet_id: self.stream_type, action: crate::packet::StreamUpdateAction::Disable }),
             }).inspect_err(|e| warn!("Failed to stop stream: {e}"));
         }
     }

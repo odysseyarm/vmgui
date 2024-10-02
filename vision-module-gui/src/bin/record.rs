@@ -1,6 +1,6 @@
 use std::{process::ExitCode, time::UNIX_EPOCH};
 
-use ats_usb::device::{StreamType, UsbDevice};
+use ats_usb::device::UsbDevice;
 use serialport::SerialPortType;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
@@ -82,9 +82,9 @@ async fn main() -> ExitCode {
     stdin_line.recv().await;
     eprintln!("Press enter to stop recording");
 
-    let accel_stream = device.stream(StreamType::Accel).await.unwrap();
-    let mot_stream = device.stream(StreamType::MotData).await.unwrap();
-    let comb_stream = device.stream(StreamType::CombinedMarkers).await.unwrap();
+    let accel_stream = device.stream(ats_usb::packet::PacketType::AccelReport).await.unwrap();
+    let mot_stream = device.stream(ats_usb::packet::PacketType::ObjectReport).await.unwrap();
+    let comb_stream = device.stream(ats_usb::packet::PacketType::CombinedMarkersReport).await.unwrap();
     let mut merged_stream = accel_stream.merge(mot_stream).merge(comb_stream);
 
     let mut packets = vec![];

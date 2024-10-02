@@ -11,7 +11,7 @@ use iui::{
 use leptos_reactive::{Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Props, Packet, PacketData, ReadRegisterResponse}};
+use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketData, PacketType, Props, ReadRegisterResponse, StreamUpdateAction}};
 
 // Positive x is right
 // Positive y is up
@@ -141,17 +141,43 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
             PacketData::ObjectReportRequest(_) => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
             PacketData::StreamUpdate(s) => {
-                if s.mask & 0b1000 != 0 {
-                    state.stream_impact = if s.active { Some(pkt.id) } else { None };
-                }
-                if s.mask & 0b0100 != 0 {
-                    state.stream_accel = if s.active { Some(pkt.id) } else { None };
-                }
-                if s.mask & 0b0010 != 0 {
-                    state.stream_combined_markers = if s.active { Some(pkt.id) } else { None };
-                }
-                if s.mask & 0b0001 != 0 {
-                    state.stream_object_report = if s.active { Some(pkt.id) } else { None };
+                if s.action == StreamUpdateAction::DisableAll {
+                    state.stream_impact = None;
+                    state.stream_accel = None;
+                    state.stream_object_report = None;
+                    state.stream_combined_markers = None;
+                } else {
+                    match s.packet_id {
+                        PacketType::ImpactReport => {
+                            match s.action {
+                                StreamUpdateAction::Enable => state.stream_impact = Some(pkt.id),
+                                StreamUpdateAction::Disable => state.stream_impact = None,
+                                StreamUpdateAction::DisableAll => { unreachable!() },
+                            }
+                        },
+                        PacketType::AccelReport => {
+                            match s.action {
+                                StreamUpdateAction::Enable => state.stream_accel = Some(pkt.id),
+                                StreamUpdateAction::Disable => state.stream_accel = None,
+                                StreamUpdateAction::DisableAll => { unreachable!() },
+                            }
+                        },
+                        PacketType::ObjectReport => {
+                            match s.action {
+                                StreamUpdateAction::Enable => state.stream_object_report = Some(pkt.id),
+                                StreamUpdateAction::Disable => state.stream_object_report = None,
+                                StreamUpdateAction::DisableAll => { unreachable!() },
+                            }
+                        },
+                        PacketType::CombinedMarkersReport => {
+                            match s.action {
+                                StreamUpdateAction::Enable => state.stream_combined_markers = Some(pkt.id),
+                                StreamUpdateAction::Disable => state.stream_combined_markers = None,
+                                StreamUpdateAction::DisableAll => { unreachable!() },
+                            }
+                        },
+                        _ => {},
+                    }
                 }
                 if state.stream_combined_markers.is_some() && first_stream_enable {
                     ui_ctx.queue_main(move || stream_state.set(StreamState::Play));
