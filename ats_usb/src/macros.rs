@@ -1,11 +1,11 @@
 /// Creates a `const fn num_variants() -> usize` function for an enum.
 macro_rules! num_variants {
     ($( #[$attrs:meta] )* $vis:vis enum $name:ident {
-        $( $( #[$variant_attrs:meta] )* $variant:ident ),* $(,)?
+        $( $( #[$variant_attrs:meta] )* $variant:ident $(= $value:expr)? ),* $(,)?
     }) => {
         $(#[$attrs])* $vis enum $name {
             $(
-                $(#[$variant_attrs])* $variant
+                $(#[$variant_attrs])* $variant $(= $value)?
             ),*
         }
         impl $name {
