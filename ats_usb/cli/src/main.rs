@@ -1,14 +1,14 @@
-use std::time::Instant;
-use nalgebra::{SVector, Vector3};
-use futures::StreamExt;
-use serialport::SerialPortType;
-use serde_json::json;
-use clap::Parser;
-use serde::{Serialize, Deserialize};
-use argmin::core::{CostFunction, Executor, Gradient};
 use argmin::core::observers::ObserverMode;
-use argmin_observer_slog::SlogLogger;
 use argmin::core::Error;
+use argmin::core::{CostFunction, Executor, Gradient};
+use argmin_observer_slog::SlogLogger;
+use clap::Parser;
+use futures::StreamExt;
+use nalgebra::{SVector, Vector3};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use serialport::SerialPortType;
+use std::time::Instant;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[derive(Serialize, Deserialize)]
@@ -168,7 +168,12 @@ async fn main() {
     }
 }
 
-async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, accel_path: &str, num_samples: usize, g: f64) {
+async fn calculate_and_save_bias_scale(
+    device: &mut ats_usb::device::UsbDevice,
+    accel_path: &str,
+    num_samples: usize,
+    g: f64,
+) {
     let orientations = [
         "Place the device with the top side facing up.",
         "Place the device with the bottom side facing up.",
@@ -208,13 +213,11 @@ async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, 
     let init_param = nalgebra::Vector6::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 
     // Perform optimization with constraints and detailed logging
-    let solver = argmin::solver::gradientdescent::SteepestDescent::new(argmin::solver::linesearch::MoreThuenteLineSearch::new());
+    let solver = argmin::solver::gradientdescent::SteepestDescent::new(
+        argmin::solver::linesearch::MoreThuenteLineSearch::new(),
+    );
     let result = Executor::new(cost_function, solver)
-        .configure(|state| {
-            state
-                .param(init_param)
-                .max_iters(1000)
-        })
+        .configure(|state| state.param(init_param).max_iters(1000))
         .add_observer(SlogLogger::term(), ObserverMode::Always)
         .run();
 
@@ -235,7 +238,8 @@ async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, 
             // Save to JSON
             let data = json!(calibration);
 
-            std::fs::write(accel_path, serde_json::to_string_pretty(&data).unwrap()).expect("Unable to write file");
+            std::fs::write(accel_path, serde_json::to_string_pretty(&data).unwrap())
+                .expect("Unable to write file");
 
             println!("Bias and scale saved to {}", accel_path);
         }
@@ -245,7 +249,11 @@ async fn calculate_and_save_bias_scale(device: &mut ats_usb::device::UsbDevice, 
     }
 }
 
-async fn calculate_and_save_gyro_bias(device: &mut ats_usb::device::UsbDevice, gyro_path: &str, num_samples: usize) {
+async fn calculate_and_save_gyro_bias(
+    device: &mut ats_usb::device::UsbDevice,
+    gyro_path: &str,
+    num_samples: usize,
+) {
     let mut gyro_sum = Vector3::zeros();
 
     println!("Please make sure the device is held firmly in place.");
@@ -273,12 +281,15 @@ async fn calculate_and_save_gyro_bias(device: &mut ats_usb::device::UsbDevice, g
 
     let gyro_data = json!(calibration);
 
-    std::fs::write(gyro_path, serde_json::to_string_pretty(&gyro_data).unwrap()).expect("Unable to write file");
+    std::fs::write(gyro_path, serde_json::to_string_pretty(&gyro_data).unwrap())
+        .expect("Unable to write file");
 
     println!("Gyroscope bias saved to {}", gyro_path);
 }
 
-async fn normal_streaming(s: &mut (impl futures::Stream<Item = ats_usb::packet::AccelReport> + Unpin)) {
+async fn normal_streaming(
+    s: &mut (impl futures::Stream<Item = ats_usb::packet::AccelReport> + Unpin),
+) {
     let mut accel_sum = Vector3::zeros();
     let mut gyro_sum = Vector3::zeros();
     let mut count = 0.0;
@@ -356,7 +367,9 @@ fn get_serialport_devices() -> Vec<String> {
             eprintln!("Failed to list serial ports: {}", e);
             return vec![];
         }
-    }.into_iter().filter(|port| {
+    }
+    .into_iter()
+    .filter(|port| {
         match &port.port_type {
             SerialPortType::UsbPort(port_info) => {
                 if port_info.vid == 0x1915 && (port_info.pid == 0x520F || port_info.pid == 0x5210) {
@@ -372,7 +385,7 @@ fn get_serialport_devices() -> Vec<String> {
                 } else {
                     false
                 }
-            },
+            }
             _ => false,
         }
     })

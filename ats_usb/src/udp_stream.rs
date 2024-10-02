@@ -1,6 +1,9 @@
 //! Convert a UDP socket to a Read/Write stream
 
-use std::{io::{Read, Write}, net::UdpSocket};
+use std::{
+    io::{Read, Write},
+    net::UdpSocket,
+};
 
 /// Adapter for using a UDP socket as a byte stream.
 ///
@@ -48,13 +51,15 @@ impl Read for UdpStream {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         while self.read_pos == self.read_len {
             self.read_len = self.socket.recv(&mut self.read_buf)?;
-            if self.read_len >= self.read_prefix.len() && self.read_buf.starts_with(self.read_prefix) {
+            if self.read_len >= self.read_prefix.len()
+                && self.read_buf.starts_with(self.read_prefix)
+            {
                 self.read_pos = self.read_prefix.len();
             } else {
                 self.read_len = 0;
                 self.read_pos = 0;
             }
-        };
+        }
 
         let consume = std::cmp::min(buf.len(), self.read_len - self.read_pos);
         buf[..consume].copy_from_slice(&self.read_buf[self.read_pos..][..consume]);

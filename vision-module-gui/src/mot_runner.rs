@@ -1,33 +1,47 @@
-use std::sync::Arc;
-use ahrs::Ahrs;
-use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
-use ats_cv::foveated::{match3, MARKER_PATTERN_LEN};
-use opencv_ros_camera::RosOpenCvIntrinsics;
-use parking_lot::Mutex;
-use std::time::{Duration, UNIX_EPOCH};
-use arrayvec::ArrayVec;
-use iui::concurrent::Context;
-use leptos_reactive::RwSignal;
-use nalgebra::{Const, Isometry3, Matrix3, Point2, Point3, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
-use sqpnp::types::{SQPSolution, SolverParameters};
-use tokio_stream::StreamExt;
-use tracing::{debug, info};
 use crate::{CloneButShorter, Marker, MotState, TestFrame};
+use ahrs::Ahrs;
+use arrayvec::ArrayVec;
+use ats_cv::foveated::{match3, MARKER_PATTERN_LEN};
+use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
 use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
+use iui::concurrent::Context;
+use leptos_reactive::RwSignal;
+use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
+use opencv_ros_camera::RosOpenCvIntrinsics;
+use parking_lot::Mutex;
+use sqpnp::types::{SQPSolution, SolverParameters};
+use std::sync::Arc;
+use std::time::{Duration, UNIX_EPOCH};
+use tokio_stream::StreamExt;
+use tracing::{debug, info};
 
-pub fn transform_aimpoint_to_identity(center_aim: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, p3: Point2<f64>, p4: Point2<f64>) -> Option<Point2<f64>> {
-    ats_cv::transform_aim_point(center_aim, p1, p2, p3, p4,
-                        Point2::new(0.5, 1.), Point2::new(0., 0.5),
-                        Point2::new(0.5, 0.), Point2::new(1., 0.5))
+pub fn transform_aimpoint_to_identity(
+    center_aim: Point2<f64>,
+    p1: Point2<f64>,
+    p2: Point2<f64>,
+    p3: Point2<f64>,
+    p4: Point2<f64>,
+) -> Option<Point2<f64>> {
+    ats_cv::transform_aim_point(
+        center_aim,
+        p1,
+        p2,
+        p3,
+        p4,
+        Point2::new(0.5, 1.),
+        Point2::new(0., 0.5),
+        Point2::new(0.5, 0.),
+        Point2::new(1., 0.5),
+    )
 }
 
 pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
     let _3dpoints = [
-        Vector3::new(0.35 * 16./9., 0., 0.),
-        Vector3::new(0.65 * 16./9., 0., 0.),
-        Vector3::new(0.65 * 16./9., 1., 0.),
-        Vector3::new(0.35 * 16./9., 1., 0.),
+        Vector3::new(0.35 * 16. / 9., 0., 0.),
+        Vector3::new(0.65 * 16. / 9., 0., 0.),
+        Vector3::new(0.65 * 16. / 9., 1., 0.),
+        Vector3::new(0.35 * 16. / 9., 1., 0.),
     ];
     let solver = sqpnp::PnpSolver::new(&_3dpoints, &projections, None, SolverParameters::default());
     if let Some(mut solver) = solver {
@@ -58,11 +72,21 @@ pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
 ///
 /// Sort them into the order bottom, left, top, right
 pub fn sort_diamond<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
-    if a[0].y < a[1].y { a.swap(0, 1); }
-    if a[2].y > a[3].y { a.swap(2, 3); }
-    if a[0].y < a[3].y { a.swap(0, 3); }
-    if a[2].y > a[1].y { a.swap(2, 1); }
-    if a[1].x > a[3].x { a.swap(1, 3); }
+    if a[0].y < a[1].y {
+        a.swap(0, 1);
+    }
+    if a[2].y > a[3].y {
+        a.swap(2, 3);
+    }
+    if a[0].y < a[3].y {
+        a.swap(0, 3);
+    }
+    if a[2].y > a[1].y {
+        a.swap(2, 1);
+    }
+    if a[1].x > a[3].x {
+        a.swap(1, 3);
+    }
 }
 
 /// Given 4 points in the following shape
@@ -78,13 +102,27 @@ pub fn sort_diamond<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
 ///
 /// Sort them into the order a, b, d, c
 pub fn sort_rectangle<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
-    if a[0].y > a[2].y { a.swap(0, 2); }
-    if a[1].y > a[3].y { a.swap(1, 3); }
-    if a[0].y > a[1].y { a.swap(0, 1); }
-    if a[2].y > a[3].y { a.swap(2, 3); }
-    if a[1].y > a[2].y { a.swap(1, 2); }
-    if a[0].x > a[1].x { a.swap(0, 1); }
-    if a[2].x < a[3].x { a.swap(2, 3); }
+    if a[0].y > a[2].y {
+        a.swap(0, 2);
+    }
+    if a[1].y > a[3].y {
+        a.swap(1, 3);
+    }
+    if a[0].y > a[1].y {
+        a.swap(0, 1);
+    }
+    if a[2].y > a[3].y {
+        a.swap(2, 3);
+    }
+    if a[1].y > a[2].y {
+        a.swap(1, 2);
+    }
+    if a[0].x > a[1].x {
+        a.swap(0, 1);
+    }
+    if a[2].x < a[3].x {
+        a.swap(2, 3);
+    }
 }
 
 pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
@@ -103,7 +141,8 @@ pub struct MotRunner {
     pub ui_ctx: Context,
     pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
-    pub screen_calibrations: ArrayVec<(u8, ScreenCalibration<f64>), {(ats_cv::foveated::MAX_SCREEN_ID+1) as usize}>,
+    pub screen_calibrations:
+        ArrayVec<(u8, ScreenCalibration<f64>), { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize }>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -125,16 +164,22 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
             let nf_data = mot_data.mot_data_nf;
             let wf_data = mot_data.mot_data_wf;
             let mut runner = runner.lock();
-            let nf_data = ArrayVec::<MotData,16>::from_iter(nf_data.into_iter());
+            let nf_data = ArrayVec::<MotData, 16>::from_iter(nf_data.into_iter());
             // let nf_data = ArrayVec::<MotData,16>::from_iter(dummy_nf_data());
-            let wf_data = ArrayVec::<MotData,16>::from_iter(wf_data.into_iter());
+            let wf_data = ArrayVec::<MotData, 16>::from_iter(wf_data.into_iter());
 
             let state = &mut runner.state;
             state.nf_data = Some(nf_data);
             state.wf_data = Some(wf_data);
 
             if runner.record_packets {
-                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::ObjectReport(mot_data)));
+                runner.packets.lock().push((
+                    std::time::SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                    ats_usb::packet::PacketData::ObjectReport(mot_data),
+                ));
             }
         }
     }
@@ -143,27 +188,30 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 // fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_calibration: &ScreenCalibration<f64>) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
 //     let orientation = fv_state.filter.orientation.cast();
 //     let position = fv_state.filter.position.cast();
-// 
+//
 //     let flip_yz = Matrix3::new(
 //         1., 0., 0.,
 //         0., -1., 0.,
 //         0., 0., -1.,
 //     );
-// 
+//
 //     let rot = Rotation3::from_matrix_unchecked(flip_yz * orientation.to_rotation_matrix() * flip_yz);
 //     let trans = Translation3::from(flip_yz * position);
-// 
+//
 //     let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
-// 
+//
 //     let fv_aimpoint = ats_cv::calculate_aimpoint(
 //         &isometry,
 //         screen_calibration,
 //     );
-// 
+//
 //     (rot, trans, fv_aimpoint)
 // }
 
-fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, screen_calibration: &ScreenCalibration<f64>) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
+fn get_raycast_aimpoint(
+    fv_state: &ats_cv::foveated::FoveatedAimpointState,
+    screen_calibration: &ScreenCalibration<f64>,
+) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
     let orientation = fv_state.filter.orientation.cast();
     let position = fv_state.filter.position.cast();
 
@@ -172,17 +220,10 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, scre
 
     let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
 
-    let fv_aimpoint = ats_cv::calculate_aimpoint(
-        &isometry,
-        screen_calibration,
-    );
+    let fv_aimpoint = ats_cv::calculate_aimpoint(&isometry, screen_calibration);
 
-    let flip_yz = Matrix3::new(
-        1., 0., 0.,
-        0., -1., 0.,
-        0., 0., -1.,
-    );
- 
+    let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
+
     let rot = Rotation3::from_matrix_unchecked(flip_yz * rot * flip_yz);
     let trans = Translation3::from(flip_yz * trans.vector);
 
@@ -192,8 +233,15 @@ fn get_raycast_aimpoint(fv_state: &ats_cv::foveated::FoveatedAimpointState, scre
 fn raycast_update(runner: &mut MotRunner) {
     let screen_id = runner.state.fv_state.screen_id;
     if screen_id <= ats_cv::foveated::MAX_SCREEN_ID {
-        if let Some(screen_calibration) = runner.screen_calibrations.iter().find_map(|(id, cal)| if *id == screen_id { Some(cal) } else { None }) {
-            let (rotmat, transmat, fv_aimpoint) = get_raycast_aimpoint(&runner.state.fv_state, screen_calibration);
+        if let Some(screen_calibration) = runner.screen_calibrations.iter().find_map(|(id, cal)| {
+            if *id == screen_id {
+                Some(cal)
+            } else {
+                None
+            }
+        }) {
+            let (rotmat, transmat, fv_aimpoint) =
+                get_raycast_aimpoint(&runner.state.fv_state, screen_calibration);
 
             runner.state.rotation_mat = rotmat.matrix().cast();
             runner.state.translation_mat = transmat.vector.cast();
@@ -210,7 +258,10 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
     while runner.lock().device.is_some() {
         if let Some(combined_markers_report) = combined_markers_stream.next().await {
-            let CombinedMarkersReport { nf_points, wf_points } = combined_markers_report;
+            let CombinedMarkersReport {
+                nf_points,
+                wf_points,
+            } = combined_markers_report;
             let mut runner = runner.lock();
             let nf_point_tuples = filter_and_create_point_tuples(&nf_points);
             let wf_point_tuples = filter_and_create_point_tuples(&wf_points);
@@ -218,26 +269,46 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             let nf_points_slice = nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
             let wf_points_slice = wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
 
-            let nf_points_transformed = transform_points(&nf_points_slice, &runner.general_config.camera_model_nf);
-            let wf_points_transformed = transform_points(&wf_points_slice, &runner.general_config.camera_model_wf);
+            let nf_points_transformed =
+                transform_points(&nf_points_slice, &runner.general_config.camera_model_nf);
+            let wf_points_transformed =
+                transform_points(&wf_points_slice, &runner.general_config.camera_model_wf);
 
-            let nf_point_tuples = nf_point_tuples.iter().enumerate().map(|(i, (id, _))| (*id, nf_points_transformed[i])).collect::<Vec<_>>();
-            let wf_point_tuples = wf_point_tuples.iter().enumerate().map(|(i, (id, _))| (*id, wf_points_transformed[i])).collect::<Vec<_>>();
+            let nf_point_tuples = nf_point_tuples
+                .iter()
+                .enumerate()
+                .map(|(i, (id, _))| (*id, nf_points_transformed[i]))
+                .collect::<Vec<_>>();
+            let wf_point_tuples = wf_point_tuples
+                .iter()
+                .enumerate()
+                .map(|(i, (id, _))| (*id, wf_points_transformed[i]))
+                .collect::<Vec<_>>();
 
-            let wf_normalized: ArrayVec<_, 16> = wf_points_transformed.iter().map(|&p| {
-                to_normalized_image_coordinates(
-                    p,
-                    &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_wf),
-                    Some(&runner.general_config.stereo_iso.cast()),
-                )
-            }).collect();
-            let nf_normalized: ArrayVec<_, 16> = nf_points_transformed.iter().map(|&p| {
-                to_normalized_image_coordinates(
-                    p,
-                    &ats_cv::ros_opencv_intrinsics_type_convert(&runner.general_config.camera_model_nf),
-                    None,
-                )
-            }).collect();
+            let wf_normalized: ArrayVec<_, 16> = wf_points_transformed
+                .iter()
+                .map(|&p| {
+                    to_normalized_image_coordinates(
+                        p,
+                        &ats_cv::ros_opencv_intrinsics_type_convert(
+                            &runner.general_config.camera_model_wf,
+                        ),
+                        Some(&runner.general_config.stereo_iso.cast()),
+                    )
+                })
+                .collect();
+            let nf_normalized: ArrayVec<_, 16> = nf_points_transformed
+                .iter()
+                .map(|&p| {
+                    to_normalized_image_coordinates(
+                        p,
+                        &ats_cv::ros_opencv_intrinsics_type_convert(
+                            &runner.general_config.camera_model_nf,
+                        ),
+                        None,
+                    )
+                })
+                .collect();
             runner.state.nf_markers2 = std::iter::zip(&nf_normalized, &nf_point_tuples)
                 .map(|(&normalized, &(mot_id, _))| Marker {
                     mot_id,
@@ -253,16 +324,24 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 })
                 .collect();
 
-            let gravity_vec = runner.state.orientation.inverse_transform_vector(&Vector3::z_axis());
+            let gravity_vec = runner
+                .state
+                .orientation
+                .inverse_transform_vector(&Vector3::z_axis());
             let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
             if runner.wfnf_realign {
                 // Try to match widefield using brute force p3p, and then
                 // using that to match nearfield
-                if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(&wf_normalized, gravity_vec.cast(), &runner.screen_calibrations) {
+                if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(
+                    &wf_normalized,
+                    gravity_vec.cast(),
+                    &runner.screen_calibrations,
+                ) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
                     let (nf_match_ix, _) = match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
-                        let nf_ordered = nf_match_ix.map(|i| nf_normalized[i.unwrap()].coords.push(1.0));
+                        let nf_ordered =
+                            nf_match_ix.map(|i| nf_normalized[i.unwrap()].coords.push(1.0));
                         let wf_ordered = wf_match_ix.map(|i| wf_normalized[i].coords.push(1.0));
                         let q = calculate_rotational_offset(&wf_ordered, &nf_ordered);
                         runner.general_config.stereo_iso.rotation *= q.cast();
@@ -271,26 +350,51 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            let nf = &runner.state.nf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
-            let wf = &runner.state.wf_markers2.iter().map(|m| m.ats_cv_marker()).collect::<ArrayVec<_, 16>>();
+            let nf = &runner
+                .state
+                .nf_markers2
+                .iter()
+                .map(|m| m.ats_cv_marker())
+                .collect::<ArrayVec<_, 16>>();
+            let wf = &runner
+                .state
+                .wf_markers2
+                .iter()
+                .map(|m| m.ats_cv_marker())
+                .collect::<ArrayVec<_, 16>>();
             let screen_calibrations = runner.screen_calibrations.clone();
-            runner.state.fv_state.observe_markers(nf, wf, gravity_vec.cast(), &screen_calibrations);
+            runner
+                .state
+                .fv_state
+                .observe_markers(nf, wf, gravity_vec.cast(), &screen_calibrations);
 
             raycast_update(&mut runner);
 
             // let wf_markers = ats_cv::foveated::identify_markers(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
-            let wf_markers: Option<([usize; MARKER_PATTERN_LEN], [Vector2<f64>; MARKER_PATTERN_LEN], Option<u8>)> = None;
+            let wf_markers: Option<(
+                [usize; MARKER_PATTERN_LEN],
+                [Vector2<f64>; MARKER_PATTERN_LEN],
+                Option<u8>,
+            )> = None;
             let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
-                .map(|(markers, reproj, _)| (
-                    markers.into_iter().collect(),
-                    reproj.map(|x| x.into()).into_iter().collect(),
-                ))
+                .map(|(markers, reproj, _)| {
+                    (
+                        markers.into_iter().collect(),
+                        reproj.map(|x| x.into()).into_iter().collect(),
+                    )
+                })
                 .unwrap_or_default();
 
             let mut nf_markers = ArrayVec::<_, 16>::new();
 
             if wf_marker_ix.len() >= MARKER_PATTERN_LEN {
-                let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_normalized.iter().enumerate().map(|(i, _)| wf_normalized[i].coords).collect::<ArrayVec<_, MARKER_PATTERN_LEN>>().into_inner().unwrap();
+                let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_normalized
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| wf_normalized[i].coords)
+                    .collect::<ArrayVec<_, MARKER_PATTERN_LEN>>()
+                    .into_inner()
+                    .unwrap();
                 let match_result = ats_cv::foveated::match3(&nf_normalized, &chosen_wf_markers);
                 for i in 0..MARKER_PATTERN_LEN {
                     let j = match_result.0[i];
@@ -323,21 +427,29 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let index = runner.state.fv_aimpoint_history_index;
 
-            let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + std::f64::consts::PI/2.).to_degrees();
+            let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64)
+                + std::f64::consts::PI / 2.)
+                .to_degrees();
 
-            runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle as f32);
-            runner.state.fv_aimpoint_history_index = (index + 1) % runner.state.fv_aimpoint_history.len();
+            runner.state.fv_aimpoint_history[index] =
+                (runner.state.fv_aimpoint, gravity_angle as f32);
+            runner.state.fv_aimpoint_history_index =
+                (index + 1) % runner.state.fv_aimpoint_history.len();
 
             if runner.record_packets {
-                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report)));
+                runner.packets.lock().push((
+                    std::time::SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                    ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report),
+                ));
             }
         }
     }
 }
 
-fn filter_and_create_point_tuples(
-    points: &[Point2<u16>],
-) -> Vec<(u8, Point2<f64>)> {
+fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f64>)> {
     points
         .iter()
         .enumerate()
@@ -352,8 +464,14 @@ fn filter_and_create_point_tuples(
         .collect()
 }
 
-fn transform_points(points: &[Point2<f64>], camera_intrinsics: &RosOpenCvIntrinsics<f32>) -> Vec<Point2<f64>> {
-    ats_cv::undistort_points(&ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics), points)
+fn transform_points(
+    points: &[Point2<f64>],
+    camera_intrinsics: &RosOpenCvIntrinsics<f32>,
+) -> Vec<Point2<f64>> {
+    ats_cv::undistort_points(
+        &ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics),
+        points,
+    )
 }
 
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
@@ -388,24 +506,44 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             if let Some(prev_timestamp) = prev_timestamp {
                 let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
                 // println!("elapsed: {}", elapsed);
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_micros(elapsed));
+                runner.state.fv_state.predict(
+                    -accel.accel.xzy(),
+                    -accel.gyro.xzy(),
+                    Duration::from_micros(elapsed),
+                );
 
                 let sample_period = runner.state.madgwick.sample_period_mut();
-                *sample_period = elapsed as f32/1_000_000.;
+                *sample_period = elapsed as f32 / 1_000_000.;
             } else {
-                runner.state.fv_state.predict(-accel.accel.xzy(), -accel.gyro.xzy(), Duration::from_secs_f32(1./accel_odr as f32));
+                runner.state.fv_state.predict(
+                    -accel.accel.xzy(),
+                    -accel.gyro.xzy(),
+                    Duration::from_secs_f32(1. / accel_odr as f32),
+                );
             }
             prev_timestamp = Some(accel.timestamp);
 
-            let _ = runner.state.madgwick.update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
+            let _ = runner
+                .state
+                .madgwick
+                .update_imu(&Vector3::from(accel.gyro), &Vector3::from(accel.accel));
             runner.state.orientation = runner.state.madgwick.quat.to_rotation_matrix();
 
-            ats_cv::series_add!(imu_data, (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast()));
+            ats_cv::series_add!(
+                imu_data,
+                (-accel.accel.xzy().cast(), -accel.gyro.xzy().cast())
+            );
 
             raycast_update(&mut runner);
 
             if runner.record_packets {
-                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::AccelReport(accel)));
+                runner.packets.lock().push((
+                    std::time::SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                    ats_usb::packet::PacketData::AccelReport(accel),
+                ));
             }
         }
     }
@@ -426,7 +564,8 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 };
 
                 {
-                    let data = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
+                    let data =
+                        runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
                     let fv_aimpoint = data.0;
                     frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                     frame.fv_aimpoint_y = Some(fv_aimpoint.y);
@@ -446,7 +585,13 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 });
             }
             if runner.record_packets {
-                runner.packets.lock().push((std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(), ats_usb::packet::PacketData::ImpactReport(_impact)));
+                runner.packets.lock().push((
+                    std::time::SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis(),
+                    ats_usb::packet::PacketData::ImpactReport(_impact),
+                ));
             }
         }
     }

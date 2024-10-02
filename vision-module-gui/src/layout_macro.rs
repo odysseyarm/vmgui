@@ -2,7 +2,7 @@
 //! Changes:
 //! * enabled property on Entry
 
-use leptos_reactive::{MaybeSignal, ReadSignal, RwSignal, Memo, Signal};
+use leptos_reactive::{MaybeSignal, Memo, ReadSignal, RwSignal, Signal};
 
 /// Creates layout code from a compact, declarative and hierarchical UI description.
 ///

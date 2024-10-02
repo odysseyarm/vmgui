@@ -1,11 +1,34 @@
-use std::{any::Any, borrow::Cow, io::{BufRead, BufReader, ErrorKind, Read, Write}, net::{Ipv4Addr, TcpStream}, pin::Pin, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex, Weak}, task::Poll, time::Duration};
 use anyhow::{anyhow, Context, Result};
 use serial2;
-use tokio::{net::{lookup_host, ToSocketAddrs, UdpSocket}, sync::{mpsc, oneshot}, time::sleep};
+use std::{
+    any::Any,
+    borrow::Cow,
+    io::{BufRead, BufReader, ErrorKind, Read, Write},
+    net::TcpStream,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, Weak,
+    },
+    task::Poll,
+    time::Duration,
+};
+use tokio::{
+    net::{lookup_host, ToSocketAddrs, UdpSocket},
+    sync::{mpsc, oneshot},
+    time::sleep,
+};
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, trace, warn};
 
-use crate::{packet::{AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport, ObjectReportRequest, Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate, WriteRegister}, udp_stream::UdpStream};
+use crate::{
+    packet::{
+        AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport,
+        ObjectReportRequest, Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate,
+        WriteRegister,
+    },
+    udp_stream::UdpStream,
+};
 
 pub const SLIP_FRAME_END: u8 = 0xc0;
 const SLIP_FRAME_ESC: u8 = 0xdb;
@@ -45,7 +68,8 @@ impl Drop for ResponseSlot {
         // channel.
         if !self.finished {
             if let Some(thread_state) = self.thread_state.upgrade() {
-                thread_state.response_channels.lock().unwrap()[usize::from(self.id)] = ResponseChannel::None;
+                thread_state.response_channels.lock().unwrap()[usize::from(self.id)] =
+                    ResponseChannel::None;
             }
         }
     }
@@ -64,13 +88,13 @@ impl std::ops::Index<PacketType> for StreamsActive {
     type Output = AtomicBool;
 
     fn index(&self, index: PacketType) -> &Self::Output {
-        &self.0[index as usize]
+        &self.0[u8::from(index) as usize]
     }
 }
 
 impl std::ops::IndexMut<PacketType> for StreamsActive {
     fn index_mut(&mut self, index: PacketType) -> &mut Self::Output {
-        &mut self.0[index as usize]
+        &mut self.0[u8::from(index) as usize]
     }
 }
 
@@ -80,15 +104,16 @@ impl UsbDevice {
     pub async fn connect_serial<'a>(path: impl Into<Cow<'a, str>>, wait_dsr: bool) -> Result<Self> {
         let path = path.into();
         info!("Connecting to {path}...");
-        let mut read_port = serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
-            settings.set_raw();
-            settings.set_baud_rate(115200)?;
-            settings.set_char_size(serial2::CharSize::Bits7);
-            settings.set_stop_bits(serial2::StopBits::Two);
-            settings.set_parity(serial2::Parity::Odd);
-            settings.set_flow_control(serial2::FlowControl::RtsCts);
-            Ok(settings)
-        })?;
+        let mut read_port =
+            serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
+                settings.set_raw();
+                settings.set_baud_rate(115200)?;
+                settings.set_char_size(serial2::CharSize::Bits7);
+                settings.set_stop_bits(serial2::StopBits::Two);
+                settings.set_parity(serial2::Parity::Odd);
+                settings.set_flow_control(serial2::FlowControl::RtsCts);
+                Ok(settings)
+            })?;
 
         read_port.set_read_timeout(Duration::from_millis(300))?;
         read_port.set_dtr(true)?;
@@ -100,7 +125,14 @@ impl UsbDevice {
                 }
             }
             let mut buf = vec![0xff];
-            Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { packet_id: PacketType::End, action: crate::packet::StreamUpdateAction::DisableAll }) }.serialize(&mut buf);
+            Packet {
+                id: 0,
+                data: PacketData::StreamUpdate(StreamUpdate {
+                    packet_id: PacketType::End(),
+                    action: crate::packet::StreamUpdateAction::DisableAll,
+                }),
+            }
+            .serialize(&mut buf);
             read_port.write_all(&buf).unwrap();
             let mut drained = 0;
             loop {
@@ -113,7 +145,8 @@ impl UsbDevice {
                 info!("{drained} bytes drained");
             }
             Ok(read_port)
-        }).await??;
+        })
+        .await??;
 
         let writer = port.try_clone().context("Failed to clone serial port")?;
         port.set_read_timeout(Duration::from_millis(3000))?;
@@ -131,7 +164,11 @@ impl UsbDevice {
 
     pub async fn connect_hub(local_addr: impl ToSocketAddrs, device_addr: &str) -> Result<Self> {
         info!("Connecting to {device_addr}...");
-        let sock = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        let sock = socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )?;
         sock.set_nonblocking(true)?;
         let addr = match lookup_host(local_addr).await?.next() {
             Some(addr) => addr,
@@ -154,7 +191,14 @@ impl UsbDevice {
 
         // todo get rid of device 1 assumption
         let mut buf = vec![1, 0, 0xff];
-        Packet { id: 0, data: PacketData::StreamUpdate(StreamUpdate { packet_id: PacketType::End, action: crate::packet::StreamUpdateAction::DisableAll }) }.serialize(&mut buf);
+        Packet {
+            id: 0,
+            data: PacketData::StreamUpdate(StreamUpdate {
+                packet_id: PacketType::End(),
+                action: crate::packet::StreamUpdateAction::DisableAll,
+            }),
+        }
+        .serialize(&mut buf);
         sock.send(&buf).await?;
         sleep(Duration::from_millis(100)).await;
 
@@ -208,7 +252,9 @@ impl UsbDevice {
             let mut port = None;
             let mut _serialport;
             let mut reader: BufReader<&mut dyn Read> = if check_dsr {
-                _serialport = (&reader as &dyn Any).downcast_ref::<serial2::SerialPort>().unwrap();
+                _serialport = (&reader as &dyn Any)
+                    .downcast_ref::<serial2::SerialPort>()
+                    .unwrap();
                 port = Some(_serialport);
                 BufReader::new(&mut _serialport)
             } else {
@@ -294,7 +340,9 @@ impl UsbDevice {
                 let response_sender = &mut response_channels[usize::from(reply.id)];
                 let e = match std::mem::take(response_sender) {
                     ResponseChannel::None => None,
-                    ResponseChannel::Oneshot(oneshot) => oneshot.send(reply.data).err().map(|e| format!("{e:?}")),
+                    ResponseChannel::Oneshot(oneshot) => {
+                        oneshot.send(reply.data).err().map(|e| format!("{e:?}"))
+                    }
                     ResponseChannel::Stream(sender) => {
                         let e = sender.try_send(reply.data).err().map(|e| format!("{e:?}"));
                         *response_sender = ResponseChannel::Stream(sender);
@@ -313,7 +361,9 @@ impl UsbDevice {
         }
     }
 
-    fn get_oneshot_slot(&self) -> Result<(ResponseSlot, oneshot::Receiver<PacketData>), anyhow::Error> {
+    fn get_oneshot_slot(
+        &self,
+    ) -> Result<(ResponseSlot, oneshot::Receiver<PacketData>), anyhow::Error> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             let mut response_channels = thread_state.response_channels.lock().unwrap();
             for (i, c) in response_channels.iter_mut().enumerate() {
@@ -334,7 +384,10 @@ impl UsbDevice {
         Err(anyhow::anyhow!("Failed to allocate request id"))
     }
 
-    fn get_stream_slot(&self, buffer: usize) -> Result<(ResponseSlot, mpsc::Receiver<PacketData>), anyhow::Error> {
+    fn get_stream_slot(
+        &self,
+        buffer: usize,
+    ) -> Result<(ResponseSlot, mpsc::Receiver<PacketData>), anyhow::Error> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             let mut response_channels = thread_state.response_channels.lock().unwrap();
             for (i, c) in response_channels.iter_mut().enumerate() {
@@ -357,7 +410,12 @@ impl UsbDevice {
 
     pub async fn request(&self, packet: PacketData) -> Result<PacketData> {
         let (mut response_slot, receiver) = self.get_oneshot_slot()?;
-        self.to_thread.send(Packet { id: response_slot.id, data: packet }).await?;
+        self.to_thread
+            .send(Packet {
+                id: response_slot.id,
+                data: packet,
+            })
+            .await?;
         let result = receiver.await;
         response_slot.finished = true;
         Ok(result?)
@@ -374,7 +432,10 @@ impl UsbDevice {
             .await?
             .read_register_response()
             .with_context(|| "unexpected response")?;
-        println!("read_register: bank={} address={} data={}", bank, address, r.data);
+        println!(
+            "read_register: bank={} address={} data={}",
+            bank, address, r.data
+        );
         assert_eq!(r.bank, bank);
         assert_eq!(r.address, address);
         Ok(r.data)
@@ -387,10 +448,7 @@ impl UsbDevice {
             address,
             data,
         });
-        let pkt = Packet {
-            id: 255,
-            data,
-        };
+        let pkt = Packet { id: 255, data };
         self.to_thread.send(pkt).await?;
         Ok(())
     }
@@ -407,10 +465,7 @@ impl UsbDevice {
 
     pub async fn write_config(&self, config: GeneralConfig) -> Result<()> {
         let data = PacketData::WriteConfig(config);
-        let pkt = Packet {
-            id: 255,
-            data,
-        };
+        let pkt = Packet { id: 255, data };
         self.to_thread.send(pkt).await?;
         Ok(())
     }
@@ -434,19 +489,24 @@ impl UsbDevice {
         Ok((r.mot_data_nf, r.mot_data_wf))
     }
 
-    pub async fn stream(&self, stream_type: PacketType) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
+    pub async fn stream(
+        &self,
+        stream_type: PacketType,
+    ) -> Result<impl Stream<Item = PacketData> + Send + Sync> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             if thread_state.streams_active[stream_type].swap(true, Ordering::Relaxed) {
                 return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
             }
             let (slot, receiver) = self.get_stream_slot(100)?;
-            self.to_thread.send(Packet {
-                id: slot.id,
-                data: PacketData::StreamUpdate(StreamUpdate {
-                    packet_id: stream_type,
-                    action: crate::packet::StreamUpdateAction::Enable,
+            self.to_thread
+                .send(Packet {
+                    id: slot.id,
+                    data: PacketData::StreamUpdate(StreamUpdate {
+                        packet_id: stream_type,
+                        action: crate::packet::StreamUpdateAction::Enable,
+                    }),
                 })
-            }).await?;
+                .await?;
             return Ok(PacketStream {
                 slot,
                 receiver: ReceiverStream::new(receiver),
@@ -458,26 +518,42 @@ impl UsbDevice {
     }
 
     pub async fn stream_mot_data(&self) -> Result<impl Stream<Item = ObjectReport> + Send + Sync> {
-        Ok(self.stream(PacketType::ObjectReport).await?.filter_map(|x| x.object_report()))
+        Ok(self
+            .stream(PacketType::ObjectReport())
+            .await?
+            .filter_map(|x| x.object_report()))
     }
 
-    pub async fn stream_combined_markers(&self) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
-        Ok(self.stream(PacketType::CombinedMarkersReport).await?.filter_map(|x| x.combined_markers_report()))
+    pub async fn stream_combined_markers(
+        &self,
+    ) -> Result<impl Stream<Item = CombinedMarkersReport> + Send + Sync> {
+        Ok(self
+            .stream(PacketType::CombinedMarkersReport())
+            .await?
+            .filter_map(|x| x.combined_markers_report()))
     }
 
     pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
-        Ok(self.stream(PacketType::AccelReport).await?.filter_map(|x| x.accel_report()))
+        Ok(self
+            .stream(PacketType::AccelReport())
+            .await?
+            .filter_map(|x| x.accel_report()))
     }
 
     pub async fn stream_impact(&self) -> Result<impl Stream<Item = ImpactReport> + Send + Sync> {
-        Ok(self.stream(PacketType::ImpactReport).await?.filter_map(|x| x.impact_report()))
+        Ok(self
+            .stream(PacketType::ImpactReport())
+            .await?
+            .filter_map(|x| x.impact_report()))
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
-        self.to_thread.send(Packet {
-            id: 255,
-            data: PacketData::FlashSettings(),
-        }).await?;
+        self.to_thread
+            .send(Packet {
+                id: 255,
+                data: PacketData::FlashSettings(),
+            })
+            .await?;
         Ok(())
     }
 }
@@ -512,7 +588,9 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
     for i in 0..buf.len() {
         match buf[i] {
             self::SLIP_FRAME_ESC => {
-                if esc { anyhow::bail!("double esc"); }
+                if esc {
+                    anyhow::bail!("double esc");
+                }
                 esc = true;
             }
             self::SLIP_FRAME_ESC_END if esc => {
@@ -526,13 +604,17 @@ pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
                 esc = false;
             }
             x => {
-                if esc { anyhow::bail!("invalid esc"); }
+                if esc {
+                    anyhow::bail!("invalid esc");
+                }
                 buf[j] = x;
                 j += 1;
             }
         }
     }
-    if esc { anyhow::bail!("trailing esc"); }
+    if esc {
+        anyhow::bail!("trailing esc");
+    }
     buf.resize(j, 0);
     Ok(())
 }
@@ -547,7 +629,10 @@ pub struct PacketStream {
 impl Stream for PacketStream {
     type Item = PacketData;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.get_mut().receiver).poll_next(cx)
     }
 
@@ -560,10 +645,16 @@ impl Drop for PacketStream {
     fn drop(&mut self) {
         if let Some(thread_state) = self.slot.thread_state.upgrade() {
             thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
-            let _ = self.to_thread.try_send(Packet {
-                id: 255,
-                data: PacketData::StreamUpdate(StreamUpdate { packet_id: self.stream_type, action: crate::packet::StreamUpdateAction::Disable }),
-            }).inspect_err(|e| warn!("Failed to stop stream: {e}"));
+            let _ = self
+                .to_thread
+                .try_send(Packet {
+                    id: 255,
+                    data: PacketData::StreamUpdate(StreamUpdate {
+                        packet_id: self.stream_type,
+                        action: crate::packet::StreamUpdateAction::Disable,
+                    }),
+                })
+                .inspect_err(|e| warn!("Failed to stop stream: {e}"));
         }
     }
 }

@@ -1,20 +1,24 @@
 use std::{sync::Arc, time::Duration};
 
-use ats_usb::{device::UsbDevice, packet::{AccelConfig, GyroConfig, GeneralConfig, Port}};
-use opencv_ros_camera::RosOpenCvIntrinsics;
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
+use ats_usb::{
+    device::UsbDevice,
+    packet::{AccelConfig, GeneralConfig, GyroConfig, Port},
+};
 use iui::{
     controls::{Button, Form},
     prelude::{Window, WindowType},
     UI,
 };
 use leptos_reactive::{
-    create_effect, create_memo, create_rw_signal, Memo, ReadSignal, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith, SignalWithUntracked
+    create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGet, SignalGetUntracked,
+    SignalSet, SignalUpdate, SignalWith, SignalWithUntracked,
 };
+use opencv_ros_camera::RosOpenCvIntrinsics;
+use parking_lot::Mutex;
 use serialport::SerialPortInfo;
 use serialport::SerialPortType::UsbPort;
-use parking_lot::Mutex;
 
 pub fn config_window(
     ui: &UI,
@@ -22,7 +26,11 @@ pub fn config_window(
     udp_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
     _tokio_handle: &tokio::runtime::Handle,
-) -> (Window, ReadSignal<Option<UsbDevice>>, ReadSignal<AccelConfig>) {
+) -> (
+    Window,
+    ReadSignal<Option<UsbDevice>>,
+    ReadSignal<AccelConfig>,
+) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
     config_win.on_closing(&ui, {
@@ -49,7 +57,8 @@ pub fn config_window(
             }
         }
     }
-    let (general_form, general_settings) = GeneralSettingsForm::new(&ui, device.read_only(), mot_runner, config_win.c());
+    let (general_form, general_settings) =
+        GeneralSettingsForm::new(&ui, device.read_only(), mot_runner, config_win.c());
     let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
     tab_group.append(&ui, "General", general_form);
@@ -81,9 +90,11 @@ pub fn config_window(
             let task = async move {
                 let usb_device = if let Some(_device) = _device {
                     match &_device.port_type {
-                        UsbPort(port_info) => {
-                            Ok(UsbDevice::connect_serial(&_device.port_name, port_info.pid == 0x5210).await?)
-                        },
+                        UsbPort(port_info) => Ok(UsbDevice::connect_serial(
+                            &_device.port_name,
+                            port_info.pid == 0x5210,
+                        )
+                        .await?),
                         _ => Err(anyhow::anyhow!("Not a USB device")),
                     }
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
@@ -98,7 +109,7 @@ pub fn config_window(
                         nf_settings.load_from_device(&usb_device).await?;
                         device.set(Some(usb_device));
                         Result::<()>::Ok(())
-                    },
+                    }
                     Err(e) => Err(e),
                 }
             };
@@ -107,7 +118,9 @@ pub fn config_window(
                 let config_win = config_win.c();
                 async move {
                     if let Err(e) = task.await {
-                        config_win.modal_err_async(&ui, "Failed to connect", &e.to_string()).await;
+                        config_win
+                            .modal_err_async(&ui, "Failed to connect", &e.to_string())
+                            .await;
                     }
                 }
             });
@@ -151,10 +164,14 @@ pub fn config_window(
                     config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
                     return;
                 }
-            }.into_iter().filter(|port| {
+            }
+            .into_iter()
+            .filter(|port| {
                 match &port.port_type {
                     UsbPort(port_info) => {
-                        if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210 {
+                        if port_info.vid == 0x1915 && port_info.pid == 0x520F
+                            || port_info.pid == 0x5210
+                        {
                             if let Some(i) = port_info.interface {
                                 // interface 0: cdc acm module
                                 // interface 1: cdc acm module functional subordinate interface
@@ -167,10 +184,11 @@ pub fn config_window(
                         } else {
                             false
                         }
-                    },
+                    }
                     _ => false,
                 }
-            }).collect();
+            })
+            .collect();
             device_list.set(ports.c());
             if simulator_addr.is_some() {
                 device_combobox.set_selected(&ui, ports.len() as i32);
@@ -202,7 +220,9 @@ pub fn config_window(
                     message.push_str(&msg);
                     message.push('\n');
                 }
-                config_win.modal_err_async(&ui, "General Validation Error", &message).await;
+                config_win
+                    .modal_err_async(&ui, "General Validation Error", &message)
+                    .await;
                 return false;
             }
 
@@ -213,7 +233,9 @@ pub fn config_window(
                     message.push_str(&msg);
                     message.push('\n');
                 }
-                config_win.modal_err_async(&ui, "Wide Field Validation Error", &message).await;
+                config_win
+                    .modal_err_async(&ui, "Wide Field Validation Error", &message)
+                    .await;
                 return false;
             }
 
@@ -224,20 +246,28 @@ pub fn config_window(
                     message.push_str(&msg);
                     message.push('\n');
                 }
-                config_win.modal_err_async(&ui, "Near Field Validation Error", &message).await;
+                config_win
+                    .modal_err_async(&ui, "Near Field Validation Error", &message)
+                    .await;
                 return false;
             }
 
             if let Err(e) = general_settings.apply(&device).await {
-                config_win.modal_err_async(&ui, "Failed to apply general settings", &e.to_string()).await;
+                config_win
+                    .modal_err_async(&ui, "Failed to apply general settings", &e.to_string())
+                    .await;
                 return false;
             };
             if let Err(e) = wf_settings.apply(&device).await {
-                config_win.modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string()).await;
+                config_win
+                    .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
+                    .await;
                 return false;
             };
             if let Err(e) = nf_settings.apply(&device).await {
-                config_win.modal_err_async(&ui, "Failed to apply near field settings", &e.to_string()).await;
+                config_win
+                    .modal_err_async(&ui, "Failed to apply near field settings", &e.to_string())
+                    .await;
                 return false;
             };
             return true;
@@ -281,7 +311,13 @@ pub fn config_window(
                         return;
                     }
                     if let Err(e) = device.flash_settings().await {
-                        config_win.modal_err_async(&ui, "Failed to request flash settings", &e.to_string()).await;
+                        config_win
+                            .modal_err_async(
+                                &ui,
+                                "Failed to request flash settings",
+                                &e.to_string(),
+                            )
+                            .await;
                     }
                     save_button.set_text(&ui, "Saved!");
                     tokio::time::sleep(Duration::from_secs(3)).await;
@@ -315,7 +351,11 @@ pub fn config_window(
         }
     });
 
-    (config_win, device.read_only(), general_settings.accel_config.read_only())
+    (
+        config_win,
+        device.read_only(),
+        general_settings.accel_config.read_only(),
+    )
 }
 
 #[derive(Clone)]
@@ -330,13 +370,20 @@ struct GeneralSettingsForm {
 }
 
 impl GeneralSettingsForm {
-    fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, mot_runner: Arc<Mutex<MotRunner>>, win: Window) -> (Form, Self) {
+    fn new(
+        ui: &UI,
+        device: ReadSignal<Option<UsbDevice>>,
+        mot_runner: Arc<Mutex<MotRunner>>,
+        win: Window,
+    ) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let accel_config = create_rw_signal(AccelConfig::default());
         let gyro_config = create_rw_signal(GyroConfig::default());
-        let nf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
-        let wf_intrinsics = create_rw_signal(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+        let nf_intrinsics =
+            create_rw_signal(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
+        let wf_intrinsics =
+            create_rw_signal(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         let stereo_iso = create_rw_signal(nalgebra::Isometry3::identity());
         crate::layout! { &ui,
             let form = Form(padded: true) {
@@ -416,7 +463,8 @@ impl GeneralSettingsForm {
         let timeout = Duration::from_millis(5000);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
 
-        self.impact_threshold.set(i32::from(config.impact_threshold));
+        self.impact_threshold
+            .set(i32::from(config.impact_threshold));
         self.accel_config.set(config.accel_config);
         self.gyro_config.set(config.gyro_config);
         self.nf_intrinsics.set(config.camera_model_nf.clone());
@@ -459,8 +507,7 @@ impl GeneralSettingsForm {
                 )*
             }
         }
-        validators! {
-        }
+        validators! {}
         if !(0..256).contains(&self.impact_threshold.get_untracked()) {
             errors.push("impact threshold: must be between 0 and 255".into());
         }
@@ -498,16 +545,24 @@ impl GeneralSettingsForm {
         self.impact_threshold.set(2);
         self.accel_config.set(AccelConfig::default());
         self.gyro_config.set(GyroConfig::default());
-        self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
-        self.wf_intrinsics.set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+        self.nf_intrinsics
+            .set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
+        self.wf_intrinsics
+            .set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
         self.stereo_iso.set(nalgebra::Isometry3::identity());
     }
 }
 
-fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &mut Button, upload_stereo: &mut Button,
-    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>, wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
-    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>, win: Window)
-{
+fn set_calibration_upload_handlers(
+    ui: &UI,
+    upload_nf: &mut Button,
+    upload_wf: &mut Button,
+    upload_stereo: &mut Button,
+    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>,
+    win: Window,
+) {
     upload_nf.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -515,9 +570,14 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
             if let Some(path) = win.open_file(&ui) {
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
-                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
+                    let intrinsics =
+                        ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     nf_intrinsics.set(intrinsics);
-                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
+                    win.modal_msg(
+                        &ui,
+                        "Uploaded calibration",
+                        "Successfully uploaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
@@ -536,9 +596,14 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
             if let Some(path) = win.open_file(&ui) {
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
-                    let intrinsics = ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
+                    let intrinsics =
+                        ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     wf_intrinsics.set(intrinsics);
-                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
+                    win.modal_msg(
+                        &ui,
+                        "Uploaded calibration",
+                        "Successfully uploaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
@@ -559,7 +624,11 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
                     let reader = std::fs::File::open(&path)?;
                     let iso = ats_cv::get_isometry_from_opencv_stereo_calibration_json(reader)?;
                     stereo_iso.set(iso);
-                    win.modal_msg(&ui, "Uploaded calibration", "Successfully uploaded calibration");
+                    win.modal_msg(
+                        &ui,
+                        "Uploaded calibration",
+                        "Successfully uploaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload calibration", "Failed to read file");
@@ -572,10 +641,16 @@ fn set_calibration_upload_handlers(ui: &UI, upload_nf: &mut Button, upload_wf: &
     });
 }
 
-fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download_wf: &mut Button, download_stereo: &mut Button,
-    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>, wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
-    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>, win: Window)
-{
+fn set_calibration_download_handlers(
+    ui: &UI,
+    download_nf: &mut Button,
+    download_wf: &mut Button,
+    download_stereo: &mut Button,
+    nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    wf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
+    stereo_iso: RwSignal<nalgebra::Isometry3<f32>>,
+    win: Window,
+) {
     download_nf.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -583,11 +658,22 @@ fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_camera_calibration_json(&nf_intrinsics.get(), writer)?;
-                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    ats_cv::write_opencv_minimal_camera_calibration_json(
+                        &nf_intrinsics.get(),
+                        writer,
+                    )?;
+                    win.modal_msg(
+                        &ui,
+                        "Downloaded calibration",
+                        "Successfully downloaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
-                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    win.modal_err(
+                        &ui,
+                        "Failed to download calibration",
+                        "Failed to write file",
+                    );
                     return;
                 };
             } else {
@@ -603,11 +689,22 @@ fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_camera_calibration_json(&wf_intrinsics.get(), writer)?;
-                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    ats_cv::write_opencv_minimal_camera_calibration_json(
+                        &wf_intrinsics.get(),
+                        writer,
+                    )?;
+                    win.modal_msg(
+                        &ui,
+                        "Downloaded calibration",
+                        "Successfully downloaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
-                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    win.modal_err(
+                        &ui,
+                        "Failed to download calibration",
+                        "Failed to write file",
+                    );
                     return;
                 };
             } else {
@@ -623,11 +720,22 @@ fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_stereo_calibration_json(&stereo_iso.get(), writer)?;
-                    win.modal_msg(&ui, "Downloaded calibration", "Successfully downloaded calibration");
+                    ats_cv::write_opencv_minimal_stereo_calibration_json(
+                        &stereo_iso.get(),
+                        writer,
+                    )?;
+                    win.modal_msg(
+                        &ui,
+                        "Downloaded calibration",
+                        "Successfully downloaded calibration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
-                    win.modal_err(&ui, "Failed to download calibration", "Failed to write file");
+                    win.modal_err(
+                        &ui,
+                        "Failed to download calibration",
+                        "Failed to write file",
+                    );
                     return;
                 };
             } else {
@@ -637,7 +745,12 @@ fn set_calibration_download_handlers(ui: &UI, download_nf: &mut Button, download
     });
 }
 
-fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_signal: RwSignal<AccelConfig>, win: Window) {
+fn set_accel_upload_handler(
+    ui: &UI,
+    upload_accel: &mut Button,
+    accel_config_signal: RwSignal<AccelConfig>,
+    win: Window,
+) {
     upload_accel.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -647,7 +760,11 @@ fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_sig
                     let reader = std::fs::File::open(&path)?;
                     let accel_config: AccelConfig = serde_json::from_reader(reader)?;
                     accel_config_signal.set(accel_config);
-                    win.modal_msg(&ui, "Uploaded configuration", "Successfully uploaded configuration");
+                    win.modal_msg(
+                        &ui,
+                        "Uploaded configuration",
+                        "Successfully uploaded configuration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload configuration", "Failed to read file");
@@ -660,7 +777,12 @@ fn set_accel_upload_handler(ui: &UI, upload_accel: &mut Button, accel_config_sig
     });
 }
 
-fn set_accel_download_handler(ui: &UI, download_accel: &mut Button, accel_config_signal: RwSignal<AccelConfig>, win: Window) {
+fn set_accel_download_handler(
+    ui: &UI,
+    download_accel: &mut Button,
+    accel_config_signal: RwSignal<AccelConfig>,
+    win: Window,
+) {
     download_accel.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -669,10 +791,18 @@ fn set_accel_download_handler(ui: &UI, download_accel: &mut Button, accel_config
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
                     serde_json::to_writer(writer, &accel_config_signal.get())?;
-                    win.modal_msg(&ui, "Downloaded configuration", "Successfully downloaded configuration");
+                    win.modal_msg(
+                        &ui,
+                        "Downloaded configuration",
+                        "Successfully downloaded configuration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
-                    win.modal_err(&ui, "Failed to download configuration", "Failed to write file");
+                    win.modal_err(
+                        &ui,
+                        "Failed to download configuration",
+                        "Failed to write file",
+                    );
                     return;
                 };
             } else {
@@ -682,7 +812,12 @@ fn set_accel_download_handler(ui: &UI, download_accel: &mut Button, accel_config
     });
 }
 
-fn set_gyro_upload_handler(ui: &UI, upload_gyro: &mut Button, gyro_config_signal: RwSignal<GyroConfig>, win: Window) {
+fn set_gyro_upload_handler(
+    ui: &UI,
+    upload_gyro: &mut Button,
+    gyro_config_signal: RwSignal<GyroConfig>,
+    win: Window,
+) {
     upload_gyro.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -692,7 +827,11 @@ fn set_gyro_upload_handler(ui: &UI, upload_gyro: &mut Button, gyro_config_signal
                     let reader = std::fs::File::open(&path)?;
                     let gyro_config: GyroConfig = serde_json::from_reader(reader)?;
                     gyro_config_signal.set(gyro_config);
-                    win.modal_msg(&ui, "Uploaded configuration", "Successfully uploaded configuration");
+                    win.modal_msg(
+                        &ui,
+                        "Uploaded configuration",
+                        "Successfully uploaded configuration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
                     win.modal_err(&ui, "Failed to upload configuration", "Failed to read file");
@@ -705,7 +844,12 @@ fn set_gyro_upload_handler(ui: &UI, upload_gyro: &mut Button, gyro_config_signal
     });
 }
 
-fn set_gyro_download_handler(ui: &UI, download_gyro: &mut Button, gyro_config_signal: RwSignal<GyroConfig>, win: Window) {
+fn set_gyro_download_handler(
+    ui: &UI,
+    download_gyro: &mut Button,
+    gyro_config_signal: RwSignal<GyroConfig>,
+    win: Window,
+) {
     download_gyro.on_clicked(&ui, {
         let ui = ui.c();
         let win = win.c();
@@ -714,10 +858,18 @@ fn set_gyro_download_handler(ui: &UI, download_gyro: &mut Button, gyro_config_si
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
                     serde_json::to_writer(writer, &gyro_config_signal.get())?;
-                    win.modal_msg(&ui, "Downloaded configuration", "Successfully downloaded configuration");
+                    win.modal_msg(
+                        &ui,
+                        "Downloaded configuration",
+                        "Successfully downloaded configuration",
+                    );
                     Ok::<(), Box<dyn std::error::Error>>(())
                 })() else {
-                    win.modal_err(&ui, "Failed to download configuration", "Failed to write file");
+                    win.modal_err(
+                        &ui,
+                        "Failed to download configuration",
+                        "Failed to write file",
+                    );
                     return;
                 };
             } else {
@@ -835,27 +987,54 @@ impl SensorSettingsForm {
     async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
         let timeout = Duration::from_millis(2000);
-        let pid = retry(|| device.product_id(self.port), timeout, 3).await.unwrap()?;
-        let res_x = retry(|| device.resolution_x(self.port), timeout, 3).await.unwrap()?;
-        let res_y = retry(|| device.resolution_y(self.port), timeout, 3).await.unwrap()?;
-        let expo = retry(|| device.exposure_time(self.port), timeout, 3).await.unwrap()?;
-        let frame_period = retry(|| device.frame_period(self.port), timeout, 3).await.unwrap()?;
-        let brightness_threshold = retry(|| device.brightness_threshold(self.port), timeout, 3).await.unwrap()?;
-        let noise_threshold = retry(|| device.noise_threshold(self.port), timeout, 3).await.unwrap()?;
-        let area_threshold_min = retry(|| device.area_threshold_min(self.port), timeout, 3).await.unwrap()?;
+        let pid = retry(|| device.product_id(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let res_x = retry(|| device.resolution_x(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let res_y = retry(|| device.resolution_y(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let expo = retry(|| device.exposure_time(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let frame_period = retry(|| device.frame_period(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let brightness_threshold = retry(|| device.brightness_threshold(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let noise_threshold = retry(|| device.noise_threshold(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let area_threshold_min = retry(|| device.area_threshold_min(self.port), timeout, 3)
+            .await
+            .unwrap()?;
         let area_threshold_max = device.area_threshold_max(self.port).await?;
-        let max_object_cnt = retry(|| device.max_object_cnt(self.port), timeout, 3).await.unwrap()?;
-        let operation_mode = retry(|| device.operation_mode(self.port), timeout, 3).await.unwrap()?;
-        let frame_subtraction = retry(|| device.frame_subtraction(self.port), timeout, 3).await.unwrap()?;
-        let gain_1 = retry(|| device.gain_1(self.port), timeout, 3).await.unwrap()?;
-        let gain_2 = retry(|| device.gain_2(self.port), timeout, 3).await.unwrap()?;
+        let max_object_cnt = retry(|| device.max_object_cnt(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let operation_mode = retry(|| device.operation_mode(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let frame_subtraction = retry(|| device.frame_subtraction(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let gain_1 = retry(|| device.gain_1(self.port), timeout, 3)
+            .await
+            .unwrap()?;
+        let gain_2 = retry(|| device.gain_2(self.port), timeout, 3)
+            .await
+            .unwrap()?;
 
         self.pid.set(format!("0x{pid:04x}"));
         self.resolution_x.set(res_x.to_string());
         self.resolution_y.set(res_y.to_string());
         self.exposure_time.set(expo.to_string());
         self.frame_period.set(frame_period.to_string());
-        self.brightness_threshold.set(brightness_threshold.to_string());
+        self.brightness_threshold
+            .set(brightness_threshold.to_string());
         self.noise_threshold.set(noise_threshold.to_string());
         self.area_threshold_min.set(area_threshold_min.to_string());
         self.area_threshold_max.set(area_threshold_max.to_string());
@@ -863,7 +1042,8 @@ impl SensorSettingsForm {
 
         self.operation_mode.set(i32::from(operation_mode));
         self.frame_subtraction.set(i32::from(frame_subtraction));
-        self.gain.set(i32::from(Gain::index_from_reg(gain_1, gain_2)));
+        self.gain
+            .set(i32::from(Gain::index_from_reg(gain_1, gain_2)));
         Ok(())
     }
 
@@ -919,19 +1099,55 @@ impl SensorSettingsForm {
         let gain = GAIN_TABLE[gain].1;
 
         tokio::try_join!(
-            device.set_resolution_x(self.port, self.resolution_x.with_untracked(|v| v.parse().unwrap())),
-            device.set_resolution_y(self.port, self.resolution_y.with_untracked(|v| v.parse().unwrap())),
+            device.set_resolution_x(
+                self.port,
+                self.resolution_x.with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_resolution_y(
+                self.port,
+                self.resolution_y.with_untracked(|v| v.parse().unwrap())
+            ),
             device.set_gain_1(self.port, gain.b_global),
             device.set_gain_2(self.port, gain.b_ggh),
-            device.set_exposure_time(self.port, self.exposure_time.with_untracked(|v| v.parse().unwrap())),
-            device.set_brightness_threshold(self.port, self.brightness_threshold.with_untracked(|v| v.parse().unwrap())),
-            device.set_noise_threshold(self.port, self.noise_threshold.with_untracked(|v| v.parse().unwrap())),
-            device.set_area_threshold_max(self.port, self.area_threshold_max.with_untracked(|v| v.parse().unwrap())),
-            device.set_area_threshold_min(self.port, self.area_threshold_min.with_untracked(|v| v.parse().unwrap())),
-            device.set_operation_mode(self.port, u8::try_from(self.operation_mode.get_untracked()).unwrap()),
-            device.set_max_object_cnt(self.port, self.max_object_cnt.with_untracked(|v| v.parse().unwrap())),
-            device.set_frame_subtraction(self.port, u8::try_from(self.frame_subtraction.get_untracked()).unwrap()),
-            device.set_frame_period(self.port, self.frame_period.with_untracked(|v| v.parse().unwrap())),
+            device.set_exposure_time(
+                self.port,
+                self.exposure_time.with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_brightness_threshold(
+                self.port,
+                self.brightness_threshold
+                    .with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_noise_threshold(
+                self.port,
+                self.noise_threshold.with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_area_threshold_max(
+                self.port,
+                self.area_threshold_max
+                    .with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_area_threshold_min(
+                self.port,
+                self.area_threshold_min
+                    .with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_operation_mode(
+                self.port,
+                u8::try_from(self.operation_mode.get_untracked()).unwrap()
+            ),
+            device.set_max_object_cnt(
+                self.port,
+                self.max_object_cnt.with_untracked(|v| v.parse().unwrap())
+            ),
+            device.set_frame_subtraction(
+                self.port,
+                u8::try_from(self.frame_subtraction.get_untracked()).unwrap()
+            ),
+            device.set_frame_period(
+                self.port,
+                self.frame_period.with_untracked(|v| v.parse().unwrap())
+            ),
         )?;
         tokio::try_join!(
             device.set_bank1_sync_updated(self.port, 1),
@@ -962,10 +1178,12 @@ impl SensorSettingsForm {
         self.resolution_y.update(|s| s.replace_range(.., "4095"));
         self.exposure_time.update(|s| s.replace_range(.., "8192"));
         self.frame_period.update(|s| s.replace_range(.., "49780"));
-        self.brightness_threshold.update(|s| s.replace_range(.., "110"));
+        self.brightness_threshold
+            .update(|s| s.replace_range(.., "110"));
         self.noise_threshold.update(|s| s.replace_range(.., "10"));
         self.area_threshold_min.update(|s| s.replace_range(.., "0"));
-        self.area_threshold_max.update(|s| s.replace_range(.., "9605"));
+        self.area_threshold_max
+            .update(|s| s.replace_range(.., "9605"));
         self.max_object_cnt.update(|s| s.replace_range(.., "16"));
 
         self.operation_mode.set(0);
@@ -1022,7 +1240,7 @@ impl Gain {
         }
         let b_ggh = i32::from(b_ggh);
         let b_global = i32::from(b_global);
-        b_ggh*16 + b_global
+        b_ggh * 16 + b_global
     }
 }
 
@@ -1039,26 +1257,26 @@ const fn n_to_bstr(n: usize) -> [u8; 6] {
     ]
 }
 
-pub static GAIN_TABLE: [(&str, Gain); 16*3 + 1] = {
-    const BACKING: [[u8; 6]; 16*3] = {
-        let mut v = [[0; 6]; 16*3];
+pub static GAIN_TABLE: [(&str, Gain); 16 * 3 + 1] = {
+    const BACKING: [[u8; 6]; 16 * 3] = {
+        let mut v = [[0; 6]; 16 * 3];
         let mut i = 0;
         while i < 16 {
-            v[i] = n_to_bstr((10000 + i*10000/16) * 1);
-            v[i+16] = n_to_bstr((10000 + i*10000/16) * 2);
-            v[i+32] = n_to_bstr((10000 + i*10000/16) * 4);
+            v[i] = n_to_bstr((10000 + i * 10000 / 16) * 1);
+            v[i + 16] = n_to_bstr((10000 + i * 10000 / 16) * 2);
+            v[i + 32] = n_to_bstr((10000 + i * 10000 / 16) * 4);
             i += 1;
         }
         v
     };
-    let mut omegalul = [("", Gain::new(0, 0)); 16*3 + 1];
+    let mut omegalul = [("", Gain::new(0, 0)); 16 * 3 + 1];
     let mut i = 0;
-    while i < 16*3 {
+    while i < 16 * 3 {
         omegalul[i].0 = unsafe { std::str::from_utf8_unchecked(&BACKING[i]) };
-        omegalul[i].1 = Gain::new((i%16) as u8, [0,2,3][i/16]);
+        omegalul[i].1 = Gain::new((i % 16) as u8, [0, 2, 3][i / 16]);
         i += 1;
     }
-    omegalul[16*3] = ("8.0000", Gain::new(16, 3));
+    omegalul[16 * 3] = ("8.0000", Gain::new(16, 3));
     omegalul
 };
 

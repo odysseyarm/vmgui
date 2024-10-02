@@ -9,7 +9,10 @@ use std::path::PathBuf;
 pub fn read_file(path: &str) -> PyResult<(GeneralConfig, Vec<(u128, Packet)>)> {
     match ::ats_playback::read_file(&PathBuf::from(path)) {
         Ok((general_config, packets)) => Ok((general_config, packets)),
-        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("{:?}", e))),
+        Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+            "{:?}",
+            e
+        ))),
     }
 }
 

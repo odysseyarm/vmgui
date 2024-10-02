@@ -1,17 +1,27 @@
-use std::{io::{Read, Write}, net::{TcpListener, TcpStream}, ops::Not, path::PathBuf, sync::{Arc, Mutex}, time::Duration};
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    ops::Not,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
+use ats_usb::{
+    device::encode_slip_frame,
+    packet::{
+        GeneralConfig, Packet, PacketData, PacketType, Props, ReadRegisterResponse,
+        StreamUpdateAction,
+    },
+};
 use crossbeam::channel::{Receiver, TryRecvError};
 use iui::{
-    controls::{
-        Window,
-        WindowType,
-    },
+    controls::{Window, WindowType},
     UI,
 };
 use leptos_reactive::{Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info};
-use ats_usb::{device::encode_slip_frame, packet::{GeneralConfig, Packet, PacketData, PacketType, Props, ReadRegisterResponse, StreamUpdateAction}};
 
 // Positive x is right
 // Positive y is up
@@ -24,18 +34,13 @@ fn main() {
 
     let replay_file = std::env::args_os().nth(1).map(PathBuf::from);
     let ui = UI::init().expect("Couldn't initialize UI library");
-    let mut main_win = Window::new(
-        &ui,
-        "Recording Playback",
-        200,
-        200,
-        WindowType::NoMenubar,
-    );
+    let mut main_win = Window::new(&ui, "Recording Playback", 200, 200, WindowType::NoMenubar);
     let state = Arc::new(Mutex::new(State::new()));
     let stream_ctrl = crossbeam::channel::bounded(2);
     let stream_state = RwSignal::new(StreamState::Pause);
-    Effect::new(move |_| { let _ = stream_ctrl.0.send(stream_state.get()); });
-
+    Effect::new(move |_| {
+        let _ = stream_ctrl.0.send(stream_state.get());
+    });
 
     vision_module_gui::layout! { &ui,
         let vbox = VerticalBox(padded: true) {
@@ -45,7 +50,11 @@ fn main() {
     }
     play_btn.hide(&ui);
 
-    let open_file = |ui: &UI, path, state: &mut State, upload_btn: &mut iui::controls::Button, play_btn: &mut iui::controls::Button| {
+    let open_file = |ui: &UI,
+                     path,
+                     state: &mut State,
+                     upload_btn: &mut iui::controls::Button,
+                     play_btn: &mut iui::controls::Button| {
         let (general_config, packets) = ats_playback::read_file(&path).unwrap();
         state.general_config = general_config;
         state.packets.lock().unwrap().clear();
@@ -68,7 +77,13 @@ fn main() {
         }
     });
     if let Some(replay_file) = replay_file {
-        open_file(&ui, replay_file, &mut state.lock().unwrap(), &mut upload_btn, &mut play_btn);
+        open_file(
+            &ui,
+            replay_file,
+            &mut state.lock().unwrap(),
+            &mut upload_btn,
+            &mut play_btn,
+        );
     }
 
     play_btn.on_clicked(&ui, move |_| {
@@ -90,7 +105,13 @@ fn main() {
     leptos_rt.dispose();
 }
 
-fn listener_thread(port: u16, state: Arc<Mutex<State>>, ui_ctx: iui::concurrent::Context, stream_state: RwSignal<StreamState>, stream_ctrl: Receiver<StreamState>) {
+fn listener_thread(
+    port: u16,
+    state: Arc<Mutex<State>>,
+    ui_ctx: iui::concurrent::Context,
+    stream_state: RwSignal<StreamState>,
+    stream_ctrl: Receiver<StreamState>,
+) {
     let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
     loop {
         match listener.accept() {
@@ -119,7 +140,12 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>, ui_ctx: iui::concurrent:
 }
 
 // Services the requests
-fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iui::concurrent::Context, stream_state: RwSignal<StreamState>) {
+fn socket_serve_thread(
+    mut sock: TcpStream,
+    state: Arc<Mutex<State>>,
+    ui_ctx: iui::concurrent::Context,
+    stream_state: RwSignal<StreamState>,
+) {
     let mut buf = vec![0; 1024];
     let mut first_stream_enable = true;
     loop {
@@ -135,8 +161,14 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
         // stream thread from writing at the same time
         let mut state = state.lock().unwrap();
         let response = match pkt.data {
-            PacketData::WriteRegister(_) => None,  // lmao no thanks
-            PacketData::ReadRegister(r) => Some(PacketData::ReadRegisterResponse(ReadRegisterResponse { bank: r.bank, address: r.address, data: 0 })),
+            PacketData::WriteRegister(_) => None, // lmao no thanks
+            PacketData::ReadRegister(r) => {
+                Some(PacketData::ReadRegisterResponse(ReadRegisterResponse {
+                    bank: r.bank,
+                    address: r.address,
+                    data: 0,
+                }))
+            }
             PacketData::ReadRegisterResponse(_) => unreachable!(),
             PacketData::ObjectReportRequest(_) => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
@@ -148,35 +180,37 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
                     state.stream_combined_markers = None;
                 } else {
                     match s.packet_id {
-                        PacketType::ImpactReport => {
-                            match s.action {
-                                StreamUpdateAction::Enable => state.stream_impact = Some(pkt.id),
-                                StreamUpdateAction::Disable => state.stream_impact = None,
-                                StreamUpdateAction::DisableAll => { unreachable!() },
+                        PacketType::ImpactReport() => match s.action {
+                            StreamUpdateAction::Enable => state.stream_impact = Some(pkt.id),
+                            StreamUpdateAction::Disable => state.stream_impact = None,
+                            StreamUpdateAction::DisableAll => {
+                                unreachable!()
                             }
                         },
-                        PacketType::AccelReport => {
-                            match s.action {
-                                StreamUpdateAction::Enable => state.stream_accel = Some(pkt.id),
-                                StreamUpdateAction::Disable => state.stream_accel = None,
-                                StreamUpdateAction::DisableAll => { unreachable!() },
+                        PacketType::AccelReport() => match s.action {
+                            StreamUpdateAction::Enable => state.stream_accel = Some(pkt.id),
+                            StreamUpdateAction::Disable => state.stream_accel = None,
+                            StreamUpdateAction::DisableAll => {
+                                unreachable!()
                             }
                         },
-                        PacketType::ObjectReport => {
-                            match s.action {
-                                StreamUpdateAction::Enable => state.stream_object_report = Some(pkt.id),
-                                StreamUpdateAction::Disable => state.stream_object_report = None,
-                                StreamUpdateAction::DisableAll => { unreachable!() },
+                        PacketType::ObjectReport() => match s.action {
+                            StreamUpdateAction::Enable => state.stream_object_report = Some(pkt.id),
+                            StreamUpdateAction::Disable => state.stream_object_report = None,
+                            StreamUpdateAction::DisableAll => {
+                                unreachable!()
                             }
                         },
-                        PacketType::CombinedMarkersReport => {
-                            match s.action {
-                                StreamUpdateAction::Enable => state.stream_combined_markers = Some(pkt.id),
-                                StreamUpdateAction::Disable => state.stream_combined_markers = None,
-                                StreamUpdateAction::DisableAll => { unreachable!() },
+                        PacketType::CombinedMarkersReport() => match s.action {
+                            StreamUpdateAction::Enable => {
+                                state.stream_combined_markers = Some(pkt.id)
+                            }
+                            StreamUpdateAction::Disable => state.stream_combined_markers = None,
+                            StreamUpdateAction::DisableAll => {
+                                unreachable!()
                             }
                         },
-                        _ => {},
+                        _ => {}
                     }
                 }
                 if state.stream_combined_markers.is_some() && first_stream_enable {
@@ -190,7 +224,9 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(state.general_config.clone())),
+            PacketData::ReadConfig() => {
+                Some(PacketData::ReadConfigResponse(state.general_config.clone()))
+            }
             PacketData::ReadConfigResponse(_) => unreachable!(),
             PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(state.props.clone())),
             PacketData::ReadPropsResponse(_) => unreachable!(),
@@ -206,7 +242,11 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ui_ctx: iu
 }
 
 // Services the streams
-fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Receiver<StreamState>) {
+fn socket_stream_thread(
+    mut sock: TcpStream,
+    state: Arc<Mutex<State>>,
+    ctrl: Receiver<StreamState>,
+) {
     let mut prev_timestamp = None;
     let mut buf = vec![0; 1024];
     let mut packet_index = 0;
@@ -224,7 +264,7 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
                         Err(_) => return,
                     }
                 }
-            },
+            }
             Ok(StreamState::Play) => (),
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => return,
@@ -234,7 +274,8 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
             continue;
         }
 
-        let (timestamp, mut pkt) = state.lock().unwrap().packets.lock().unwrap()[packet_index].clone();
+        let (timestamp, mut pkt) =
+            state.lock().unwrap().packets.lock().unwrap()[packet_index].clone();
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
@@ -246,18 +287,10 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>, ctrl: Rec
         let state = state.lock().unwrap();
 
         if let Some(id) = match pkt.data {
-            PacketData::ImpactReport(_) => {
-                state.stream_impact
-            }
-            PacketData::AccelReport(_) => {
-                state.stream_accel
-            }
-            PacketData::CombinedMarkersReport(_) => {
-                state.stream_combined_markers
-            }
-            PacketData::ObjectReport(_) => {
-                state.stream_object_report
-            }
+            PacketData::ImpactReport(_) => state.stream_impact,
+            PacketData::AccelReport(_) => state.stream_accel,
+            PacketData::CombinedMarkersReport(_) => state.stream_combined_markers,
+            PacketData::ObjectReport(_) => state.stream_object_report,
             _ => None,
         } {
             pkt.id = id;

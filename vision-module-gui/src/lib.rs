@@ -1,21 +1,21 @@
 use arrayvec::ArrayVec;
-use ats_cv::foveated::MARKER_PATTERN_LEN;
-use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
 use ats_cv::foveated::FoveatedAimpointState;
-use serde::Serialize;
+use ats_cv::foveated::MARKER_PATTERN_LEN;
 use ats_usb::packet::MotData;
+use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
+use serde::Serialize;
 use sqpnp::types::SQPSolution;
 
 pub mod config_window;
+pub mod consts;
+pub mod custom_shapes;
 pub mod layout_macro;
 pub mod mot_runner;
-pub mod run_raw_canvas;
-pub mod run_canvas;
-pub mod test_canvas;
-pub mod custom_shapes;
-pub mod tracking_canvas_helpers;
 pub mod plots_window;
-pub mod consts;
+pub mod run_canvas;
+pub mod run_raw_canvas;
+pub mod test_canvas;
+pub mod tracking_canvas_helpers;
 
 pub trait CloneButShorter: Clone {
     /// Use mainly for GUI code.
@@ -33,8 +33,7 @@ pub struct TestFrame {
     pub opposite_cant: Option<f64>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub struct ScreenInfo {
     pub screen_dimensions_meters: [f64; 2],
     pub marker_points: [nalgebra::Point3<f64>; MARKER_PATTERN_LEN],
@@ -45,9 +44,15 @@ impl From<ScreenInfo> for ats_cv::ScreenCalibration<f64> {
         ats_cv::ScreenCalibration {
             homography: {
                 nalgebra::Matrix3::new(
-                    1./screen_info.screen_dimensions_meters[0], 0.0, 0.0,
-                    0.0, 1./screen_info.screen_dimensions_meters[1], 0.0,
-                    0.0, 0.0, 1.0,
+                    1. / screen_info.screen_dimensions_meters[0],
+                    0.0,
+                    0.0,
+                    0.0,
+                    1. / screen_info.screen_dimensions_meters[1],
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
                 )
             },
             object_points: screen_info.marker_points,
@@ -93,7 +98,7 @@ impl Default for MotState {
             wf_data: None,
             screen_id: 0,
             orientation: Rotation3::identity(),
-            madgwick: ahrs::Madgwick::new(1./100., 0.04),
+            madgwick: ahrs::Madgwick::new(1. / 100., 0.04),
             rotation_mat: Default::default(),
             translation_mat: Default::default(),
             nf_points: Default::default(),
