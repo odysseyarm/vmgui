@@ -9,12 +9,15 @@ use serde_inline_default::serde_inline_default;
 #[cfg(test)]
 mod tests;
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
 pub struct Packet {
     pub data: PacketData,
     pub id: u8,
 }
+
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Debug)]
 pub enum PacketData {
@@ -52,6 +55,7 @@ impl TryFrom<u8> for StreamUpdateAction {
     }
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct Register {
@@ -60,6 +64,7 @@ pub struct Register {
     pub address: u8,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct WriteRegister {
@@ -69,6 +74,7 @@ pub struct WriteRegister {
     pub data: u8,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct ReadRegisterResponse {
@@ -77,6 +83,7 @@ pub struct ReadRegisterResponse {
     pub data: u8,
 }
 
+#[repr(C)]
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -134,6 +141,7 @@ impl AccelConfig {
     }
 }
 
+#[repr(C)]
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -169,6 +177,7 @@ impl GyroConfig {
     }
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct GeneralConfig {
@@ -180,6 +189,7 @@ pub struct GeneralConfig {
     pub stereo_iso: Isometry3<f32>,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Debug)]
 pub struct Props {
@@ -205,10 +215,12 @@ impl Default for GeneralConfig {
     }
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectReportRequest {}
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MotData {
@@ -228,6 +240,7 @@ pub struct MotData {
     pub vy: u8,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ObjectReport {
@@ -236,6 +249,7 @@ pub struct ObjectReport {
     pub mot_data_wf: [MotData; 16],
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CombinedMarkersReport {
@@ -243,6 +257,7 @@ pub struct CombinedMarkersReport {
     pub wf_points: [Point2<u16>; 16],
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AccelReport {
@@ -251,12 +266,14 @@ pub struct AccelReport {
     pub gyro: Vector3<f32>,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ImpactReport {
     pub timestamp: u32,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Clone, Copy, Debug)]
 pub struct StreamUpdate {
@@ -264,6 +281,7 @@ pub struct StreamUpdate {
     pub action: StreamUpdateAction,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum Error {
     UnexpectedEof { packet_type: Option<PacketType> },
@@ -309,6 +327,7 @@ impl TryFrom<u8> for Port {
     }
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[derive(Copy, Clone, Debug)]
 pub enum PacketType {
