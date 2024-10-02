@@ -51,8 +51,14 @@ impl Drop for ResponseSlot {
     }
 }
 
-#[derive(Default, Debug)]
-struct StreamsActive([AtomicBool; PacketType::num_variants()]);
+#[derive(Debug)]
+struct StreamsActive([AtomicBool; 256]);
+
+impl Default for StreamsActive {
+    fn default() -> Self {
+        StreamsActive(std::array::from_fn(|_| AtomicBool::new(false)))
+    }
+}
 
 impl std::ops::Index<PacketType> for StreamsActive {
     type Output = AtomicBool;
