@@ -299,30 +299,28 @@ impl TryFrom<u8> for Port {
     }
 }
 
-num_variants! {
-    #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-    #[repr(u8)]
-    #[derive(Copy, Clone, Debug, enumn::N)]
-    pub enum PacketType {
-        WriteRegister, // a.k.a. Poke
-        ReadRegister,  // a.k.a. Peek
-        ReadRegisterResponse,
-        WriteConfig,
-        ReadConfig,
-        ReadConfigResponse,
-        ReadProps,
-        ReadPropsResponse,
-        ObjectReportRequest,
-        ObjectReport,
-        CombinedMarkersReport,
-        AccelReport,
-        ImpactReport,
-        StreamUpdate,
-        FlashSettings,
-        End,
-        VendorStart = 0x80,
-        VendorEnd = 0xff,
-    }
+#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, enumn::N)]
+pub enum PacketType {
+    WriteRegister, // a.k.a. Poke
+    ReadRegister,  // a.k.a. Peek
+    ReadRegisterResponse,
+    WriteConfig,
+    ReadConfig,
+    ReadConfigResponse,
+    ReadProps,
+    ReadPropsResponse,
+    ObjectReportRequest,
+    ObjectReport,
+    CombinedMarkersReport,
+    AccelReport,
+    ImpactReport,
+    StreamUpdate,
+    FlashSettings,
+    End,
+    VendorStart = 0x80,
+    VendorEnd = 0xff,
 }
 
 impl TryFrom<u8> for PacketType {
