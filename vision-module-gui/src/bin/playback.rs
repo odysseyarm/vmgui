@@ -230,6 +230,7 @@ fn socket_serve_thread(
             PacketData::ReadConfigResponse(_) => unreachable!(),
             PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(state.props.clone())),
             PacketData::ReadPropsResponse(_) => unreachable!(),
+            PacketData::Vendor(..) => None,
         };
 
         if let Some(data) = response {
