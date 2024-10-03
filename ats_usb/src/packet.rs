@@ -503,7 +503,7 @@ impl Packet {
             PacketData::CombinedMarkersReport(_) => CombinedMarkersReport::SIZE,
             PacketData::AccelReport(_) => 16,
             PacketData::ImpactReport(_) => 4,
-            PacketData::StreamUpdate(_) => calculate_length!(StreamUpdate),
+            PacketData::StreamUpdate(_) => 2,
             PacketData::FlashSettings() => 0,
             PacketData::Vendor(_, (len, _)) => if *len % 2 == 1 { (*len + 1) as u16 } else { *len as u16 },
         };
