@@ -43,7 +43,7 @@ enum ResponseChannel {
     Stream(mpsc::Sender<PacketData>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UsbDevice {
     to_thread: mpsc::Sender<Packet>,
     thread_state: Weak<State>,
@@ -448,6 +448,20 @@ impl UsbDevice {
             address,
             data,
         });
+        let pkt = Packet { id: 255, data };
+        self.to_thread.send(pkt).await?;
+        Ok(())
+    }
+
+    pub async fn write_vendor(&self, tag: u8, data: &[u8]) -> Result<()> {
+        assert!(tag > PacketType::VendorStart().into() && tag < PacketType::VendorEnd().into());
+        let data_len = data.len();
+        let data_padded: [u8; 98] = {
+            let mut padded = [0; 98];
+            padded[..data_len].copy_from_slice(data);
+            padded
+        };
+        let data = PacketData::Vendor(tag, (data_len as u8, data_padded));
         let pkt = Packet { id: 255, data };
         self.to_thread.send(pkt).await?;
         Ok(())
