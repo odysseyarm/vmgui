@@ -472,7 +472,7 @@ impl Packet {
             PacketType::Vendor(n) => {
                 let len = bytes[0];
                 let mut data = [0; 98];
-                data.clone_from_slice(&bytes[1..len as usize + 1]);
+                data[..len as usize].copy_from_slice(&bytes[1..len as usize + 1]);
                 *bytes = &bytes[len as usize + 1..];
                 PacketData::Vendor(n, (len, data))
             }
@@ -505,7 +505,7 @@ impl Packet {
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => 2,
             PacketData::FlashSettings() => 0,
-            PacketData::Vendor(_, (len, _)) => if *len % 2 == 1 { (*len + 1) as u16 } else { *len as u16 },
+            PacketData::Vendor(_, (len, _)) => if *len % 2 != 0 { (*len + 1) as u16 } else { *len as u16 + 2 },
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
@@ -530,8 +530,9 @@ impl Packet {
             }
             PacketData::FlashSettings() => (),
             PacketData::Vendor(_, (len, data)) => {
+                buf.push(*len);
                 buf.extend_from_slice(&data[..*len as usize]);
-                if len % 2 == 1 {
+                if len % 2 == 0 {
                     buf.push(0);
                 }
             }
