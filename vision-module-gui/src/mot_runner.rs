@@ -257,88 +257,66 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
 
     while runner.lock().device.is_some() {
-        if let Some(combined_markers_report) = combined_markers_stream.next().await {
+        if let Some(report) = combined_markers_stream.next().await {
             let CombinedMarkersReport {
                 nf_points,
                 wf_points,
-            } = combined_markers_report;
+            } = report;
+
             let mut runner = runner.lock();
-            let nf_point_tuples = filter_and_create_point_tuples(&nf_points);
-            let wf_point_tuples = filter_and_create_point_tuples(&wf_points);
 
-            let nf_points_slice = nf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
-            let wf_points_slice = wf_point_tuples.iter().map(|(_, p)| *p).collect::<Vec<_>>();
+            // Helper closure to process points
+            let process_points = |points, camera_model, stereo_iso| {
+                let point_tuples = filter_and_create_point_tuples(points);
+                let points_raw: Vec<_> = point_tuples.iter().map(|&(_, p)| p).collect();
+                let points_transformed = transform_points(&points_raw, camera_model);
+                let intrinsics = ats_cv::ros_opencv_intrinsics_type_convert(camera_model);
+                let normalized_points: ArrayVec<_, 16> = points_transformed
+                    .iter()
+                    .map(|&p| to_normalized_image_coordinates(p, &intrinsics, stereo_iso))
+                    .collect();
+                let markers = point_tuples
+                    .iter()
+                    .zip(&normalized_points)
+                    .map(|(&(mot_id, _), &normalized)| Marker {
+                        mot_id,
+                        pattern_id: None,
+                        normalized,
+                    })
+                    .collect();
+                (point_tuples, points_transformed, normalized_points, markers)
+            };
 
-            let nf_points_transformed =
-                transform_points(&nf_points_slice, &runner.general_config.camera_model_nf);
-            let wf_points_transformed =
-                transform_points(&wf_points_slice, &runner.general_config.camera_model_wf);
+            // Process nf_points and wf_points
+            let (nf_point_tuples, nf_points_transformed, nf_normalized, nf_markers2) =
+                process_points(&nf_points, &runner.general_config.camera_model_nf, None);
+            let (wf_point_tuples, wf_points_transformed, wf_normalized, wf_markers2) =
+                process_points(
+                    &wf_points,
+                    &runner.general_config.camera_model_wf,
+                    Some(&runner.general_config.stereo_iso.cast()),
+                );
 
-            let nf_point_tuples = nf_point_tuples
-                .iter()
-                .enumerate()
-                .map(|(i, (id, _))| (*id, nf_points_transformed[i]))
-                .collect::<Vec<_>>();
-            let wf_point_tuples = wf_point_tuples
-                .iter()
-                .enumerate()
-                .map(|(i, (id, _))| (*id, wf_points_transformed[i]))
-                .collect::<Vec<_>>();
+            runner.state.nf_markers2 = nf_markers2;
+            runner.state.wf_markers2 = wf_markers2;
 
-            let wf_normalized: ArrayVec<_, 16> = wf_points_transformed
-                .iter()
-                .map(|&p| {
-                    to_normalized_image_coordinates(
-                        p,
-                        &ats_cv::ros_opencv_intrinsics_type_convert(
-                            &runner.general_config.camera_model_wf,
-                        ),
-                        Some(&runner.general_config.stereo_iso.cast()),
-                    )
-                })
-                .collect();
-            let nf_normalized: ArrayVec<_, 16> = nf_points_transformed
-                .iter()
-                .map(|&p| {
-                    to_normalized_image_coordinates(
-                        p,
-                        &ats_cv::ros_opencv_intrinsics_type_convert(
-                            &runner.general_config.camera_model_nf,
-                        ),
-                        None,
-                    )
-                })
-                .collect();
-            runner.state.nf_markers2 = std::iter::zip(&nf_normalized, &nf_point_tuples)
-                .map(|(&normalized, &(mot_id, _))| Marker {
-                    mot_id,
-                    pattern_id: None,
-                    normalized,
-                })
-                .collect();
-            runner.state.wf_markers2 = std::iter::zip(&wf_normalized, &wf_point_tuples)
-                .map(|(&normalized, &(mot_id, _))| Marker {
-                    mot_id,
-                    pattern_id: None,
-                    normalized,
-                })
-                .collect();
+            let gravity_vec = UnitVector3::new_unchecked(
+                runner
+                    .state
+                    .orientation
+                    .inverse_transform_vector(&Vector3::z_axis())
+                    .xzy(),
+            );
 
-            let gravity_vec = runner
-                .state
-                .orientation
-                .inverse_transform_vector(&Vector3::z_axis());
-            let gravity_vec = UnitVector3::new_unchecked(gravity_vec.xzy());
+            // Re-alignment logic
             if runner.wfnf_realign {
-                // Try to match widefield using brute force p3p, and then
-                // using that to match nearfield
                 if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(
                     &wf_normalized,
                     gravity_vec.cast(),
                     &runner.screen_calibrations,
                 ) {
                     let wf_match = wf_match_ix.map(|i| wf_normalized[i].coords);
-                    let (nf_match_ix, _) = match3(&nf_normalized, &wf_match);
+                    let (nf_match_ix, _) = ats_cv::foveated::match3(&nf_normalized, &wf_match);
                     if nf_match_ix.iter().all(Option::is_some) {
                         let nf_ordered =
                             nf_match_ix.map(|i| nf_normalized[i.unwrap()].coords.push(1.0));
@@ -350,99 +328,107 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 }
             }
 
-            let nf = &runner
+            // Observe markers
+            let nf_markers_cv = runner
                 .state
                 .nf_markers2
                 .iter()
                 .map(|m| m.ats_cv_marker())
                 .collect::<ArrayVec<_, 16>>();
-            let wf = &runner
+            let wf_markers_cv = runner
                 .state
                 .wf_markers2
                 .iter()
                 .map(|m| m.ats_cv_marker())
                 .collect::<ArrayVec<_, 16>>();
             let screen_calibrations = runner.screen_calibrations.clone();
-            runner
-                .state
-                .fv_state
-                .observe_markers(nf, wf, gravity_vec.cast(), &screen_calibrations);
+            runner.state.fv_state.observe_markers(
+                &nf_markers_cv,
+                &wf_markers_cv,
+                gravity_vec.cast(),
+                &screen_calibrations,
+            );
 
             raycast_update(&mut runner);
 
-            // let wf_markers = ats_cv::foveated::identify_markers(&wf_normalized, None, gravity_vec.cast(), &runner.screen_calibration);
             let wf_markers: Option<(
                 [usize; MARKER_PATTERN_LEN],
                 [Vector2<f64>; MARKER_PATTERN_LEN],
                 Option<u8>,
             )> = None;
-            let (wf_marker_ix, wf_reproj): (ArrayVec<_, 16>, ArrayVec<_, 16>) = wf_markers
-                .map(|(markers, reproj, _)| {
-                    (
-                        markers.into_iter().collect(),
-                        reproj.map(|x| x.into()).into_iter().collect(),
-                    )
-                })
+
+            let (wf_marker_ix, wf_reproj) = wf_markers
+                .map(|(markers, reproj, _)| (markers.to_vec(), reproj.to_vec()))
                 .unwrap_or_default();
 
-            let mut nf_markers = ArrayVec::<_, 16>::new();
-
+            // Match nf_markers with wf_markers
+            let mut nf_markers = ArrayVec::<Point2<f64>, 16>::new();
             if wf_marker_ix.len() >= MARKER_PATTERN_LEN {
-                let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_normalized
+                let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_marker_ix
                     .iter()
-                    .enumerate()
-                    .map(|(i, _)| wf_normalized[i].coords)
+                    .map(|&i| wf_normalized[i].coords)
                     .collect::<ArrayVec<_, MARKER_PATTERN_LEN>>()
                     .into_inner()
                     .unwrap();
-                let match_result = ats_cv::foveated::match3(&nf_normalized, &chosen_wf_markers);
-                for i in 0..MARKER_PATTERN_LEN {
-                    let j = match_result.0[i];
-                    runner.state.wf_markers2[wf_marker_ix[i]].pattern_id = Some(i as u8);
-                    if let Some(j) = j {
-                        nf_markers.push(nf_points_transformed[j]);
-                        runner.state.nf_markers2[j].pattern_id = Some(i as u8);
+
+                let (nf_match_ix, _) = ats_cv::foveated::match3(&nf_normalized, &chosen_wf_markers);
+
+                for (i, &wf_idx) in wf_marker_ix.iter().enumerate() {
+                    runner.state.wf_markers2[wf_idx].pattern_id = Some(i as u8);
+                    if let Some(nf_idx) = nf_match_ix[i] {
+                        nf_markers.push(nf_points_transformed[nf_idx]);
+                        runner.state.nf_markers2[nf_idx].pattern_id = Some(i as u8);
                     } else {
                         nf_markers.push(Point2::new(-9999., -9999.));
                     }
                 }
             }
 
+            // Update runner state
             runner.state.nf_points = nf_point_tuples
                 .into_iter()
-                .filter(|p| !nf_markers.contains(&p.1))
+                .filter(|&(mot_id, p)| {
+                    !runner
+                        .state
+                        .nf_markers2
+                        .iter()
+                        .any(|m| m.mot_id == mot_id && nf_markers.contains(&p))
+                })
                 .collect();
+
             runner.state.wf_points = wf_point_tuples
-                .iter()
+                .into_iter()
                 .enumerate()
-                .filter(|(i, _)| !wf_marker_ix.contains(&i))
-                .map(|x| *x.1)
+                .filter(|(i, _)| !wf_marker_ix.contains(i))
+                .map(|(_, p)| p)
                 .collect();
+
             runner.state.nf_markers = nf_markers;
             runner.state.wf_markers = wf_marker_ix
-                .into_iter()
-                .map(|i| wf_points_transformed[i])
+                .iter()
+                .map(|&i| wf_points_transformed[i])
                 .collect();
-            runner.state.wf_reproj = wf_reproj;
+            runner.state.wf_reproj = wf_reproj.into_iter().map(Into::into).collect();
 
+            // Update aimpoint history
+            let gravity_angle = (-gravity_vec.z as f64)
+                .atan2(-gravity_vec.x as f64)
+                .to_degrees()
+                + 90.0;
             let index = runner.state.fv_aimpoint_history_index;
-
-            let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64)
-                + std::f64::consts::PI / 2.)
-                .to_degrees();
-
             runner.state.fv_aimpoint_history[index] =
                 (runner.state.fv_aimpoint, gravity_angle as f32);
             runner.state.fv_aimpoint_history_index =
                 (index + 1) % runner.state.fv_aimpoint_history.len();
 
+            // Record packets if enabled
             if runner.record_packets {
                 runner.packets.lock().push((
                     std::time::SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
                         .as_millis(),
-                    ats_usb::packet::PacketData::CombinedMarkersReport(combined_markers_report),
+                    ats_usb::packet::PacketData::CombinedMarkersReport(report),
                 ));
             }
         }
@@ -454,7 +440,6 @@ fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f64
         .iter()
         .enumerate()
         .filter_map(|(id, pos)| {
-            // screen id of 7 means there is no marker
             if (100..3996).contains(&pos.x) && (100..3996).contains(&pos.y) {
                 Some((id as u8, Point2::new(pos.x as f64, pos.y as f64)))
             } else {
