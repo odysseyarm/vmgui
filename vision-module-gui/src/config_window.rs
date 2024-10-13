@@ -1176,12 +1176,10 @@ impl SensorSettingsForm {
     fn load_defaults(&self) {
         self.resolution_x.update(|s| s.replace_range(.., "4095"));
         self.resolution_y.update(|s| s.replace_range(.., "4095"));
-        self.exposure_time.update(|s| s.replace_range(.., "8192"));
         self.frame_period.update(|s| s.replace_range(.., "49780"));
         self.brightness_threshold
             .update(|s| s.replace_range(.., "110"));
-        self.noise_threshold.update(|s| s.replace_range(.., "10"));
-        self.area_threshold_min.update(|s| s.replace_range(.., "0"));
+        self.noise_threshold.update(|s| s.replace_range(.., "15"));
         self.area_threshold_max
             .update(|s| s.replace_range(.., "9605"));
         self.max_object_cnt.update(|s| s.replace_range(.., "16"));
@@ -1190,8 +1188,17 @@ impl SensorSettingsForm {
         self.frame_subtraction.set(0);
 
         match self.port {
-            Port::Nf => self.gain.set(i32::from(Gain::index_from_reg(16, 0))),
-            Port::Wf => self.gain.set(i32::from(Gain::index_from_reg(16, 2))),
+            Port::Nf => {
+                self.area_threshold_min
+                    .update(|s| s.replace_range(.., "10"));
+                self.exposure_time.update(|s| s.replace_range(.., "8192"));
+                self.gain.set(i32::from(Gain::index_from_reg(16, 0)));
+            }
+            Port::Wf => {
+                self.area_threshold_min.update(|s| s.replace_range(.., "5"));
+                self.exposure_time.update(|s| s.replace_range(.., "11365"));
+                self.gain.set(i32::from(Gain::index_from_reg(16, 6)));
+            }
         }
     }
 }

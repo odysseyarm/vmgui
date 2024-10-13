@@ -374,7 +374,11 @@ impl TryFrom<u8> for PacketType {
             0x0f => Ok(Self::End()),
             0x80 => Ok(Self::VendorStart()),
             0xff => Ok(Self::VendorEnd()),
-            n if (PacketType::VendorStart().into()..PacketType::VendorEnd().into()).contains(&n) => Ok(Self::Vendor(n)),
+            n if (PacketType::VendorStart().into()..PacketType::VendorEnd().into())
+                .contains(&n) =>
+            {
+                Ok(Self::Vendor(n))
+            }
             _ => Err(Error::UnrecognizedPacketId(n)),
         }
     }
@@ -505,7 +509,13 @@ impl Packet {
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => 2,
             PacketData::FlashSettings() => 0,
-            PacketData::Vendor(_, (len, _)) => if *len % 2 != 0 { (*len + 1) as u16 } else { *len as u16 + 2 },
+            PacketData::Vendor(_, (len, _)) => {
+                if *len % 2 != 0 {
+                    (*len + 1) as u16
+                } else {
+                    *len as u16 + 2
+                }
+            }
         };
         let words = u16::to_le_bytes((len + 4) / 2);
         let ty = self.ty();
