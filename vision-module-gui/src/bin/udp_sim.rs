@@ -94,33 +94,37 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
     loop {
         let mut buf = vec![0; 1472];
         match listener.recv_from(&mut buf) {
-            Ok((amt, src)) => {
+            Ok((amt, src1)) => {
                 if amt < 2 || buf[0] != 0xff || buf[1] != 0x03 {
                     continue;
                 }
+
+                client.send_to(&[0x01, 0x01], src1).unwrap();
+
                 {
                     let client_read_write_thread_map = client_read_write_thread_map.clone();
                     let client_read_write_thread_map = client_read_write_thread_map.lock().unwrap();
-                    if client_read_write_thread_map.contains_key(&src) {
+                    if client_read_write_thread_map.contains_key(&src1) {
                         continue;
                     }
                 }
-                info!("Connection from {}", src);
 
                 let mut buf = vec![0; 1472];
-                client.send_to(&[0x01, 0x01], src).unwrap();
-                let (amt, src) = client.recv_from(&mut buf).unwrap();
+                let (amt, src2) = client.recv_from(&mut buf).unwrap();
                 if amt < 2 || buf[0] != 0xff || buf[1] != 0x01 {
                     continue;
                 }
-                client.send_to(&[0x01, 0x01], src).unwrap();
 
-                client.connect(src).unwrap();
+                info!("Connection from {}", src2);
+
+                client.send_to(&[0x01, 0x01], src2).unwrap();
+
+                client.connect(src2).unwrap();
 
                 let sock = client.try_clone().unwrap();
                 let sock2 = client.try_clone().unwrap();
 
-                let read = UdpStream::with_capacity(sock, 1472, 0, &[1, 0], &[]);
+                let read = UdpStream::with_capacity(sock, 1472, 1472, &[1, 0], &[1, 0]);
                 let write = UdpStream::with_capacity(sock2, 0, 1472, &[], &[1, 0]);
                 let state_clone = state.clone();
                 let read_task = std::thread::Builder::new()
@@ -144,7 +148,7 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
                             // the threads shouldn't really ever finish right now but just for the spirit
                             read_task.join().unwrap();
                             write_task.join().unwrap();
-                            client_read_write_thread_map.lock().unwrap().remove(&src);
+                            client_read_write_thread_map.lock().unwrap().remove(&src1);
                         })
                         .unwrap()
                 };
@@ -152,7 +156,7 @@ fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
                 client_read_write_thread_map
                     .lock()
                     .unwrap()
-                    .insert(src, join_task);
+                    .insert(src1, join_task);
             }
             Err(e) => {
                 if e.raw_os_error() != Some(10040) {
@@ -248,8 +252,8 @@ fn socket_serve_thread(mut sock: UdpStream, state: Arc<Mutex<State>>) {
             buf.clear();
             Packet { id: pkt.id, data }.serialize(&mut buf);
             encode_slip_frame(&mut buf);
-            println!("buf size: {}", buf.len());
             sock.write_all(&buf).unwrap();
+            sock.flush().unwrap();
         }
     }
 }
@@ -302,6 +306,7 @@ fn socket_stream_thread(mut sock: UdpStream, state: Arc<Mutex<State>>) {
             .serialize(&mut buf);
             encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
+            sock.flush().unwrap();
         }
 
         if let Some(id) = state.stream_combined_markers {
@@ -343,6 +348,7 @@ fn socket_stream_thread(mut sock: UdpStream, state: Arc<Mutex<State>>) {
             pkt.serialize(&mut buf);
             encode_slip_frame(&mut buf);
             sock.write_all(&buf).unwrap();
+            sock.flush().unwrap();
         }
     }
 }
