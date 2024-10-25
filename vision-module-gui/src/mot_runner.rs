@@ -469,11 +469,11 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             let accel_odr = runner.general_config.accel_config.accel_odr;
 
             // correct accel and gyro bias and scale
-            // let accel = ats_usb::packet::AccelReport {
-            //     accel: accel.corrected_accel(&runner.general_config.accel_config),
-            //     gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
-            //     timestamp: accel.timestamp,
-            // };
+            let accel = ats_usb::packet::AccelReport {
+                accel: accel.corrected_accel(&runner.general_config.accel_config),
+                gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
+                timestamp: accel.timestamp,
+            };
 
             // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
             // println!("{:7.3?}", accel.accel.norm());
