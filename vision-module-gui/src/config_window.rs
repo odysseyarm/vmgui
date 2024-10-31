@@ -542,7 +542,7 @@ impl GeneralSettingsForm {
     }
 
     fn load_defaults(&self) {
-        self.impact_threshold.set(2);
+        self.impact_threshold.set(5);
         self.accel_config.set(AccelConfig::default());
         self.gyro_config.set(GyroConfig::default());
         self.nf_intrinsics
@@ -1197,7 +1197,7 @@ impl SensorSettingsForm {
             Port::Wf => {
                 self.area_threshold_min.update(|s| s.replace_range(.., "5"));
                 self.exposure_time.update(|s| s.replace_range(.., "11365"));
-                self.gain.set(i32::from(Gain::index_from_reg(16, 6)));
+                self.gain.set(i32::from(Gain::index_from_reg(8, 3)));
             }
         }
     }
