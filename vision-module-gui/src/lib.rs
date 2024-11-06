@@ -28,18 +28,18 @@ impl<T: Clone> CloneButShorter for T {}
 
 #[derive(Serialize)]
 pub struct TestFrame {
-    pub fv_aimpoint_x: Option<f64>,
-    pub fv_aimpoint_y: Option<f64>,
-    pub opposite_cant: Option<f64>,
+    pub fv_aimpoint_x: Option<f32>,
+    pub fv_aimpoint_y: Option<f32>,
+    pub opposite_cant: Option<f32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub struct ScreenInfo {
-    pub screen_dimensions_meters: [f64; 2],
-    pub marker_points: [nalgebra::Point3<f64>; MARKER_PATTERN_LEN],
+    pub screen_dimensions_meters: [f32; 2],
+    pub marker_points: [nalgebra::Point3<f32>; MARKER_PATTERN_LEN],
 }
 
-impl From<ScreenInfo> for ats_cv::ScreenCalibration<f64> {
+impl From<ScreenInfo> for ats_cv::ScreenCalibration<f32> {
     fn from(screen_info: ScreenInfo) -> Self {
         ats_cv::ScreenCalibration {
             homography: {
@@ -62,16 +62,16 @@ impl From<ScreenInfo> for ats_cv::ScreenCalibration<f64> {
 
 pub struct MotState {
     // Coordinates between 0.0 and 1.0
-    pub fv_aimpoint: Point2<f64>,
+    pub fv_aimpoint: Point2<f32>,
 
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
 
-    pub nf_points: ArrayVec<(u8, Point2<f64>), 16>,
-    pub wf_points: ArrayVec<(u8, Point2<f64>), 16>,
-    pub nf_markers: ArrayVec<Point2<f64>, 16>,
-    pub wf_markers: ArrayVec<Point2<f64>, 16>,
-    pub wf_reproj: ArrayVec<Point2<f64>, 16>,
+    pub nf_points: ArrayVec<(u8, Point2<f32>), 16>,
+    pub wf_points: ArrayVec<(u8, Point2<f32>), 16>,
+    pub nf_markers: ArrayVec<Point2<f32>, 16>,
+    pub wf_markers: ArrayVec<Point2<f32>, 16>,
+    pub wf_reproj: ArrayVec<Point2<f32>, 16>,
     pub nf_markers2: ArrayVec<Marker, 16>,
     pub wf_markers2: ArrayVec<Marker, 16>,
 
@@ -79,12 +79,12 @@ pub struct MotState {
     pub orientation: Rotation3<f32>,
     pub madgwick: ahrs::Madgwick<f32>,
 
-    pub rotation_mat: Matrix3<f64>,
-    pub translation_mat: Matrix3x1<f64>,
+    pub rotation_mat: Matrix3<f32>,
+    pub translation_mat: Matrix3x1<f32>,
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
 
-    pub fv_aimpoint_history: [(Point2<f64>, f32); 80],
+    pub fv_aimpoint_history: [(Point2<f32>, f32); 80],
     pub fv_aimpoint_history_index: usize,
 
     pub previous_sqp_solution: Option<SQPSolution>,
@@ -119,13 +119,13 @@ impl Default for MotState {
 pub struct Marker {
     pub mot_id: u8,
     pub pattern_id: Option<u8>,
-    pub normalized: Point2<f64>,
+    pub normalized: Point2<f32>,
 }
 
 impl Marker {
     pub fn ats_cv_marker(&self) -> ats_cv::foveated::Marker {
         ats_cv::foveated::Marker {
-            position: self.normalized,
+            position: self.normalized.cast(),
         }
     }
 }

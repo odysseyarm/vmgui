@@ -463,7 +463,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simba 0.8.1",
- "sqpnp",
+ "sqpnp 0.2.0 (git+https://github.com/0e4ef622/sqpnp.git?branch=f32)",
 ]
 
 [[package]]
@@ -4519,6 +4519,14 @@ dependencies = [
 [[package]]
 name = "sqpnp"
 version = "0.2.0"
+source = "git+https://github.com/0e4ef622/sqpnp.git?branch=f32#515fb7ae3f9576c6c07430d4ef0dbfc5cb7ed374"
+dependencies = [
+ "nalgebra 0.32.6",
+]
+
+[[package]]
+name = "sqpnp"
+version = "0.2.0"
 source = "git+https://github.com/0e4ef622/sqpnp.git#c7047aa312ff51da52b99a67de8ae839757911ff"
 dependencies = [
  "nalgebra 0.32.6",
@@ -5038,7 +5046,7 @@ dependencies = [
  "serial2",
  "serialport",
  "socket2",
- "sqpnp",
+ "sqpnp 0.2.0 (git+https://github.com/0e4ef622/sqpnp.git)",
  "tokio",
  "tokio-stream",
  "tracing",

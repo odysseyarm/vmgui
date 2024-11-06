@@ -322,12 +322,12 @@ fn draw_not_raw(
     wf_path: &Path,
     _nf_grid_path: &Path,
     _ch_path: &Path,
-    screen: Option<&(u8, ats_cv::ScreenCalibration<f64>)>,
+    screen: Option<&(u8, ats_cv::ScreenCalibration<f32>)>,
 ) {
     nf_path.end(ctx);
     wf_path.end(ctx);
-    let fx = config.camera_model_nf.p.m11 as f64;
-    let fy = config.camera_model_nf.p.m22 as f64;
+    let fx = config.camera_model_nf.p.m11;
+    let fy = config.camera_model_nf.p.m22;
     let normalized_scale = Scale2::new(fx / 4095.0, fy / 4095.0);
 
     // let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
@@ -354,7 +354,7 @@ fn draw_not_raw(
 
     for marker in state.nf_markers2.iter() {
         let p = normalized_scale * marker.normalized;
-        let p = gravity_rot * p;
+        let p = gravity_rot * p.cast();
         let p = draw_tf * p;
 
         let marker_path = Path::new(ctx, FillMode::Winding);
@@ -376,7 +376,7 @@ fn draw_not_raw(
 
     for marker in state.wf_markers2.iter() {
         let p = normalized_scale * marker.normalized;
-        let p = gravity_rot * p;
+        let p = gravity_rot * p.cast();
         let p = draw_tf * p;
 
         let marker_path = Path::new(ctx, FillMode::Winding);
@@ -403,7 +403,7 @@ fn draw_not_raw(
             // todo don't use hardcoded 4095x4095 res assumption
             let p = Point2::new(p.x * fx, p.y * fy);
             let p = p / 4095.;
-            let p = gravity_rot * p;
+            let p = gravity_rot * p.cast();
             let p = draw_tf * p;
             draw_crosshair_rotated(&ctx, &fv_reproj_path, p.x, p.y, 20.);
             fv_reproj_path.end(&ctx);
@@ -422,7 +422,7 @@ fn draw_not_raw(
                 // todo don't use hardcoded 4095x4095 res assumption
                 let p = Point2::new(p.x * fx, p.y * fy);
                 let p = p / 4095.;
-                let p = gravity_rot * p;
+                let p = gravity_rot * p.cast();
                 let p = draw_tf * p;
                 draw_crosshair_rotated(&ctx, &pnp_reproj_path, p.x, p.y, 20.);
                 pnp_reproj_path.end(&ctx);
@@ -435,7 +435,7 @@ fn draw_not_raw(
         // todo don't use hardcoded 4095x4095 res assumption
         let p = Point2::new(p.x * fx, p.y * fy);
         let p = p / 4095.;
-        let p = gravity_rot * p;
+        let p = gravity_rot * p.cast();
         let p = draw_tf * p;
         draw_crosshair_rotated(&ctx, &wf_reproj_path, p.x, p.y, 20.);
         wf_reproj_path.end(&ctx);
