@@ -142,7 +142,7 @@ pub struct MotRunner {
     pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
     pub screen_calibrations:
-        ArrayVec<(u8, ScreenCalibration<f64>), { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize }>,
+        ArrayVec<(u8, ScreenCalibration<f32>), { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize }>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
@@ -210,15 +210,15 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 
 fn get_raycast_aimpoint(
     fv_state: &ats_cv::foveated::FoveatedAimpointState,
-    screen_calibration: &ScreenCalibration<f64>,
-) -> (Rotation3<f64>, Translation3<f64>, Option<Point2<f64>>) {
+    screen_calibration: &ScreenCalibration<f32>,
+) -> (Rotation3<f32>, Translation3<f32>, Option<Point2<f32>>) {
     let orientation = fv_state.filter.orientation.cast();
     let position = fv_state.filter.position.cast();
 
     let rot = orientation.to_rotation_matrix();
     let trans = Translation3::from(position);
 
-    let isometry = nalgebra::Isometry::<f64, Rotation3<f64>, 3>::from_parts(trans, rot);
+    let isometry = nalgebra::Isometry::<f32, Rotation3<f32>, 3>::from_parts(trans, rot);
 
     let fv_aimpoint = ats_cv::calculate_aimpoint(&isometry, screen_calibration);
 
@@ -353,7 +353,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
             let wf_markers: Option<(
                 [usize; MARKER_PATTERN_LEN],
-                [Vector2<f64>; MARKER_PATTERN_LEN],
+                [Vector2<f32>; MARKER_PATTERN_LEN],
                 Option<u8>,
             )> = None;
 
@@ -362,7 +362,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 .unwrap_or_default();
 
             // Match nf_markers with wf_markers
-            let mut nf_markers = ArrayVec::<Point2<f64>, 16>::new();
+            let mut nf_markers = ArrayVec::<Point2<f32>, 16>::new();
             if wf_marker_ix.len() >= MARKER_PATTERN_LEN {
                 let chosen_wf_markers: [_; MARKER_PATTERN_LEN] = wf_marker_ix
                     .iter()
@@ -411,13 +411,13 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             runner.state.wf_reproj = wf_reproj.into_iter().map(Into::into).collect();
 
             // Update aimpoint history
-            let gravity_angle = (-gravity_vec.z as f64)
-                .atan2(-gravity_vec.x as f64)
+            let gravity_angle = -gravity_vec.z
+                .atan2(-gravity_vec.x)
                 .to_degrees()
                 + 90.0;
             let index = runner.state.fv_aimpoint_history_index;
             runner.state.fv_aimpoint_history[index] =
-                (runner.state.fv_aimpoint, gravity_angle as f32);
+                (runner.state.fv_aimpoint, gravity_angle);
             runner.state.fv_aimpoint_history_index =
                 (index + 1) % runner.state.fv_aimpoint_history.len();
 
@@ -435,13 +435,13 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f64>)> {
+fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f32>)> {
     points
         .iter()
         .enumerate()
         .filter_map(|(id, pos)| {
             if (100..3996).contains(&pos.x) && (100..3996).contains(&pos.y) {
-                Some((id as u8, Point2::new(pos.x as f64, pos.y as f64)))
+                Some((id as u8, Point2::new(pos.x as f32, pos.y as f32)))
             } else {
                 None
             }
@@ -450,9 +450,9 @@ fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f64
 }
 
 fn transform_points(
-    points: &[Point2<f64>],
+    points: &[Point2<f32>],
     camera_intrinsics: &RosOpenCvIntrinsics<f32>,
-) -> Vec<Point2<f64>> {
+) -> Vec<Point2<f32>> {
     ats_cv::undistort_points(
         &ats_cv::ros_opencv_intrinsics_type_convert(camera_intrinsics),
         points,
@@ -554,7 +554,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                     let fv_aimpoint = data.0;
                     frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                     frame.fv_aimpoint_y = Some(fv_aimpoint.y);
-                    frame.opposite_cant = Some(data.1 as f64);
+                    frame.opposite_cant = Some(data.1);
                 }
 
                 if runner.datapoints.is_locked() {

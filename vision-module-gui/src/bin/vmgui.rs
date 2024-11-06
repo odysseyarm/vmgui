@@ -209,7 +209,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ui_update: RwSignal<()> = leptos_reactive::create_rw_signal(());
 
     let screen_calibrations: arrayvec::ArrayVec<
-        (u8, ScreenCalibration<f64>),
+        (u8, ScreenCalibration<f32>),
         { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize },
     > = (0..{ (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize })
         .filter_map(|i| {
@@ -578,8 +578,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .state
                     .orientation
                     .inverse_transform_vector(&nalgebra::Vector3::z_axis());
-                let gravity_angle = (f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64)
-                    + std::f64::consts::PI / 2.)
+                let gravity_angle = (f32::atan2(-gravity_vec.z, -gravity_vec.x)
+                    + std::f32::consts::PI / 2.)
                     .to_degrees();
                 frame.opposite_cant = Some(gravity_angle);
             }

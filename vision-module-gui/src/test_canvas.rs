@@ -45,8 +45,8 @@ impl AreaHandler for TestCanvas {
             draw_crosshair(
                 &ctx,
                 &fv_ch_path,
-                aimpoint.x * draw_params.area_width,
-                aimpoint.y * draw_params.area_height,
+                aimpoint.x as f64 * draw_params.area_width,
+                aimpoint.y as f64 * draw_params.area_height,
                 30.,
             );
         }
@@ -169,8 +169,8 @@ impl AreaHandler for TestCanvas {
             };
             let mut state = self.runner.lock();
             let aimpoint = state.state.fv_aimpoint;
-            state.fv_offset.x = mouse_event.x / w - aimpoint.x;
-            state.fv_offset.y = mouse_event.y / h - aimpoint.y;
+            state.fv_offset.x = mouse_event.x / w - aimpoint.x as f64;
+            state.fv_offset.y = mouse_event.y / h - aimpoint.y as f64;
         }
     }
 }

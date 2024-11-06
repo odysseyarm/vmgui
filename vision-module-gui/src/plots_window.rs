@@ -86,7 +86,7 @@ fn gyro_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "IMU Angular Velocity",
-        series.values.lock().unwrap().iter().map(|p| p.1 .1),
+        series.values.lock().unwrap().iter().map(|p| p.1 .1.cast()),
         series.size,
         -0.03..0.03,
     );
@@ -97,7 +97,7 @@ fn accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "IMU Acceleration",
-        series.values.lock().unwrap().iter().map(|p| p.1 .0),
+        series.values.lock().unwrap().iter().map(|p| p.1 .0.cast()),
         series.size,
         -10.0..10.0,
     );
@@ -113,7 +113,7 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
             .lock()
             .unwrap()
             .iter()
-            .map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords),
+            .map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords.cast()),
         series.size,
         -5.0..1.0,
     );
@@ -126,7 +126,7 @@ fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
         "PnP Orientation",
         series.values.lock().unwrap().iter().map(|p| {
             let (x, y, z) = p.1.rotation.inverse().euler_angles();
-            Vector3::new(x, y, z)
+            Vector3::new(x, y, z).cast()
         }),
         series.size,
         -3.15..3.15,
