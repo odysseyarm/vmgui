@@ -103,9 +103,10 @@ impl UsbDevice {
     /// service reads and writes.
     pub async fn connect_serial<'a>(path: impl Into<Cow<'a, str>>, wait_dsr: bool) -> Result<Self> {
         let path = path.into();
+        let path_copy = path.to_string();
         info!("Connecting to {path}...");
-        let mut read_port =
-            serial2::SerialPort::open(path.as_ref(), |mut settings: serial2::Settings| {
+        let read_port_future = tokio::task::spawn_blocking(move || {
+            serial2::SerialPort::open(&path_copy, |mut settings: serial2::Settings| {
                 settings.set_raw();
                 settings.set_baud_rate(115200)?;
                 settings.set_char_size(serial2::CharSize::Bits7);
@@ -113,7 +114,12 @@ impl UsbDevice {
                 settings.set_parity(serial2::Parity::Odd);
                 settings.set_flow_control(serial2::FlowControl::RtsCts);
                 Ok(settings)
-            })?;
+            })
+        });
+        let mut read_port = tokio::time::timeout(Duration::from_secs(5), read_port_future)
+            .await
+            .with_context(|| format!("Failed to connect to {}: timed out after 5 seconds", path))?
+            .unwrap()?;
 
         read_port.set_read_timeout(Duration::from_millis(300))?;
         read_port.set_dtr(true)?;
