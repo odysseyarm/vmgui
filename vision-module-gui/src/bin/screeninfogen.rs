@@ -125,7 +125,7 @@ pub fn main() {
     }
 
     // ScreenCalibration
-    let screen_calibration: ats_cv::ScreenCalibration<f64> = screen_info.into();
+    let screen_calibration: ats_cv::ScreenCalibration<f32> = screen_info.into();
     match get_app_root(AppDataType::UserConfig, &APP_INFO)
         .ok()
         .and_then(|config_dir| {
