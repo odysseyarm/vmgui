@@ -247,6 +247,9 @@ fn raycast_update(runner: &mut MotRunner) {
             runner.state.translation_mat = transmat.vector.cast();
             if let Some(fv_aimpoint) = fv_aimpoint {
                 runner.state.fv_aimpoint = fv_aimpoint;
+                if fv_aimpoint.x > 1.02 || fv_aimpoint.x < -0.02 {
+                    runner.state.fv_state.reset();
+                }
             }
         }
     }
