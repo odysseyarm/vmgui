@@ -4,21 +4,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use ats_usb::packet::GeneralConfig;
-#[cfg(feature = "bevy")]
-use {
-    bevy::{
-        app::{App, Startup, Update},
-        ecs::system::{Commands, Query},
-        prelude::*,
-        window::{PresentMode, WindowCloseRequested, WindowPlugin, WindowTheme},
-        winit::WinitPlugin,
-        DefaultPlugins,
-    },
-    bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin},
-    bevy_infinite_grid::{
-        GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
-    },
-};
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
 use leptos_reactive::{
@@ -35,6 +20,21 @@ use vision_module_gui::run_raw_canvas::RunRawCanvas;
 use vision_module_gui::test_canvas::TestCanvas;
 use vision_module_gui::{config_window, plots_window, TestFrame};
 use vision_module_gui::{CloneButShorter, MotState};
+#[cfg(feature = "bevy")]
+use {
+    bevy::{
+        app::{App, Startup, Update},
+        ecs::system::{Commands, Query},
+        prelude::*,
+        window::{PresentMode, WindowCloseRequested, WindowPlugin, WindowTheme},
+        winit::WinitPlugin,
+        DefaultPlugins,
+    },
+    bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin},
+    bevy_infinite_grid::{
+        GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
+    },
+};
 
 use vision_module_gui::consts::*;
 
