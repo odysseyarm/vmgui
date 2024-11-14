@@ -4,18 +4,20 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use ats_usb::packet::GeneralConfig;
-use bevy::app::{App, Startup, Update};
-use bevy::ecs::system::{Commands, Query};
-use bevy::window::{WindowCloseRequested, WindowPlugin};
-use bevy::winit::WinitPlugin;
-use bevy::DefaultPlugins;
-use bevy::{
-    prelude::*,
-    window::{PresentMode, WindowTheme},
-};
-use bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin};
-use bevy_infinite_grid::{
-    GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
+#[cfg(feature = "bevy")]
+use {
+    bevy::{
+        app::{App, Startup, Update},
+        ecs::system::{Commands, Query},
+        prelude::*,
+        window::{PresentMode, WindowCloseRequested, WindowPlugin, WindowTheme},
+        winit::WinitPlugin,
+        DefaultPlugins,
+    },
+    bevy_atmosphere::plugin::{AtmosphereCamera, AtmospherePlugin},
+    bevy_infinite_grid::{
+        GridShadowCamera, InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings,
+    },
 };
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
@@ -25,7 +27,7 @@ use leptos_reactive::{
 use nalgebra::Vector2;
 use parking_lot::Mutex;
 use tokio::task::AbortHandle;
-use tracing::Level;
+use tracing::{error, Level};
 use tracing_subscriber::EnvFilter;
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
@@ -51,25 +53,31 @@ use ats_cv::ScreenCalibration;
 // * Holding mutexes and setting signals
 //     * Drop the mutex, or use ui_ctx.queue_main()
 
+#[cfg(feature = "bevy")]
 #[derive(Resource)]
 struct MotRunnerResource(Arc<Mutex<MotRunner>>);
 
+#[cfg(feature = "bevy")]
 enum Event {
     OpenWindow,
 }
 
+#[cfg(feature = "bevy")]
 #[derive(Resource, Deref)]
 struct StreamReceiver(crossbeam::channel::Receiver<Event>);
 
+#[cfg(feature = "bevy")]
 #[derive(Event)]
 struct StreamEvent(Event);
 
+#[cfg(feature = "bevy")]
 fn read_stream(receiver: Res<StreamReceiver>, mut events: EventWriter<StreamEvent>) {
     for from_stream in receiver.try_iter() {
         events.send(StreamEvent(from_stream));
     }
 }
 
+#[cfg(feature = "bevy")]
 fn show_window(
     mut commands: Commands,
     mut reader: EventReader<StreamEvent>,
@@ -88,6 +96,7 @@ fn show_window(
     }
 }
 
+#[cfg(feature = "bevy")]
 pub fn hide_instead_of_close(
     mut closed: EventReader<WindowCloseRequested>,
     mut window: Query<&mut bevy::window::Window>,
@@ -99,6 +108,7 @@ pub fn hide_instead_of_close(
     }
 }
 
+#[cfg(feature = "bevy")]
 fn create_bevy_window(visible: bool) -> bevy::window::Window {
     bevy::window::Window {
         title: "I am a window!".into(),
@@ -119,6 +129,7 @@ fn create_bevy_window(visible: bool) -> bevy::window::Window {
     }
 }
 
+#[cfg(feature = "bevy")]
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -158,6 +169,7 @@ fn setup(
 }
 
 // This system will rotate any entity in the scene with a Rotatable component around its y-axis.
+#[cfg(feature = "bevy")]
 fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<MotRunnerResource>) {
     let runner = runner.0.lock();
     let rotation = runner.state.rotation_mat;
@@ -301,6 +313,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 (4, 0)(1, 1) Vertical (Fill, Fill) : let test_button = Button("Run Test")
                 (5, 0)(1, 1) Vertical (Fill, Fill) : let windowed_checkbox = Checkbox("Windowed", checked: false)
+                #[cfg(feature = "bevy")]
                 (6, 0)(1, 1) Vertical (Fill, Fill) : let bevy_button = Button("Launch Bevy")
                 (0, 1)(1, 1) Vertical (Fill, Fill) : let record_button = Button(move || {
                     if !recording.get() { "Start Recording" } else { "Stop Recording" }
@@ -342,8 +355,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_hbox.hide(&ui);
     main_win.set_child(&ui, vert_box.clone());
 
+    #[cfg(feature = "bevy")]
     let (tx, rx) = crossbeam::channel::bounded(10);
 
+    #[cfg(feature = "bevy")]
     std::thread::spawn({
         let mot_runner = mot_runner.c();
         move || {
@@ -377,6 +392,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    #[cfg(feature = "bevy")]
     bevy_button.on_clicked(&ui, move |_| {
         tx.send(Event::OpenWindow).unwrap();
     });

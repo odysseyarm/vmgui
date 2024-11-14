@@ -324,6 +324,7 @@ macro_rules! layout {
     [ $ui:expr ,
         let $ctl:ident = LayoutGrid ( $( padded: $padded:expr )? )
         { $(
+            $( #[$attr:meta] )*
             ( $x:expr , $y:expr ) ( $xspan:expr , $yspan:expr )
             $expand:ident ( $halign:ident , $valign:ident ) :
             let $child:ident = $type:ident ($($opt:tt)*) $({$($body:tt)*})?
@@ -333,7 +334,9 @@ macro_rules! layout {
         let mut $ctl = iui::controls::LayoutGrid::new($ui);
         $( $ctl.set_padded($ui, $padded); )?
         $(
+            $( #[$attr] )*
             $crate::layout! { $ui, let $child = $type ($($opt)*) $({$($body)*})? }
+            $( #[$attr] )*
             $ctl.append($ui, $child.clone(), $x, $y, $xspan, $yspan,
                         iui::controls::GridExpand::$expand,
                         iui::controls::GridAlignment::$halign,
