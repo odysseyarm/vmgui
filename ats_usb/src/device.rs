@@ -19,7 +19,7 @@ use tokio::{
     time::sleep,
 };
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, info_span, instrument, trace, warn};
 
 use crate::{
     packet::{
@@ -427,8 +427,8 @@ impl UsbDevice {
         Ok(result?)
     }
 
+    #[instrument(skip(self))]
     pub async fn read_register(&self, port: Port, bank: u8, address: u8) -> Result<u8> {
-        println!("read_register: bank={} address={}", bank, address);
         let r = self
             .request(PacketData::ReadRegister(Register {
                 port,
@@ -438,9 +438,8 @@ impl UsbDevice {
             .await?
             .read_register_response()
             .with_context(|| "unexpected response")?;
-        println!(
-            "read_register: bank={} address={} data={}",
-            bank, address, r.data
+        info!(
+            data = r.data
         );
         assert_eq!(r.bank, bank);
         assert_eq!(r.address, address);
