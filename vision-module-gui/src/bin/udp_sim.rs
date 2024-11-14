@@ -83,7 +83,12 @@ fn main() {
 
 fn listener_thread(port: u16, state: Arc<Mutex<State>>) {
     let client_read_write_thread_map = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let listener = Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP)).unwrap();
+    let listener = Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::DGRAM,
+        Some(socket2::Protocol::UDP),
+    )
+    .unwrap();
     let address: SocketAddr = (Ipv4Addr::UNSPECIFIED, port).into();
     let address = address.into();
     listener.set_reuse_address(true).unwrap();

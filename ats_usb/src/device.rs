@@ -438,9 +438,7 @@ impl UsbDevice {
             .await?
             .read_register_response()
             .with_context(|| "unexpected response")?;
-        info!(
-            data = r.data
-        );
+        info!(data = r.data);
         assert_eq!(r.bank, bank);
         assert_eq!(r.address, address);
         Ok(r.data)

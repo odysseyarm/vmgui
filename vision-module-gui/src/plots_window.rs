@@ -108,12 +108,11 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f64_chart(
         area,
         "PnP Position",
-        series
-            .values
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|p| p.1.inverse_transform_point(&[0., 0., 0.].into()).coords.cast()),
+        series.values.lock().unwrap().iter().map(|p| {
+            p.1.inverse_transform_point(&[0., 0., 0.].into())
+                .coords
+                .cast()
+        }),
         series.size,
         -5.0..1.0,
     );
