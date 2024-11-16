@@ -59,6 +59,7 @@ fn main() {
         let vbox = VerticalBox(padded: true) {
             Compact : let upload_btn = Button("Upload")
             Compact : let play_btn = Button(move || (!stream_state.get()).as_str())
+            Compact : let autoplay_checkbox = Checkbox("Autoplay", checked: true)
             Compact : let hbox = HorizontalBox(padded: true) {
                 Compact : let progress_bar = ProgressBar(move ||
                     with!(|progress_millis, progress_millis_total| {
@@ -87,13 +88,15 @@ fn main() {
     }
     play_btn.hide(&ui);
     progress_bar.hide(&ui);
+    autoplay_checkbox.hide(&ui);
 
     let open_file = move |ui: &UI,
                      path,
                      state: &mut State,
                      upload_btn: &mut iui::controls::Button,
                      play_btn: &mut iui::controls::Button,
-                     progress_bar: &mut iui::controls::ProgressBar| {
+                     progress_bar: &mut iui::controls::ProgressBar,
+                     autoplay_checkbox: &mut iui::controls::Checkbox| {
         let (general_config, packets) = ats_playback::read_file(&path).unwrap();
         state.general_config = general_config;
         state.packets.clear();
@@ -102,6 +105,7 @@ fn main() {
         upload_btn.hide(ui);
         play_btn.show(ui);
         progress_bar.show(ui);
+        autoplay_checkbox.show(ui);
     };
     upload_btn.on_clicked(&ui, {
         let state = state.clone();
@@ -109,12 +113,21 @@ fn main() {
         let ui = ui.clone();
         let mut play_btn = play_btn.clone();
         let mut progress_bar = progress_bar.clone();
+        let mut autoplay_checkbox = autoplay_checkbox.clone();
         move |btn| {
             let mut state = state.lock().unwrap();
             state.packets.clear();
 
             if let Some(path) = main_win.open_file(&ui) {
-                open_file(&ui, path, &mut state, btn, &mut play_btn, &mut progress_bar);
+                open_file(
+                    &ui,
+                    path,
+                    &mut state,
+                    btn,
+                    &mut play_btn,
+                    &mut progress_bar,
+                    &mut autoplay_checkbox,
+                );
             }
         }
     });
@@ -126,11 +139,17 @@ fn main() {
             &mut upload_btn,
             &mut play_btn,
             &mut progress_bar,
+            &mut autoplay_checkbox,
         );
     }
 
     play_btn.on_clicked(&ui, move |_| {
         stream_state.set(!stream_state.get_untracked());
+    });
+
+    let state_clone = state.clone();
+    autoplay_checkbox.on_toggled(&ui, move |checked| {
+        state_clone.lock().unwrap().autoplay = checked;
     });
 
     main_win.set_child(&ui, vbox);
@@ -258,8 +277,7 @@ fn socket_serve_thread(
     stream_state: RwSignal<StreamState>,
 ) {
     let mut buf = vec![0; 1024];
-    // let mut first_stream_enable = true;
-    let mut first_stream_enable = false;
+    let mut first_stream_enable = true;
     loop {
         buf.resize(1024, 0);
         sock.read_exact(&mut buf[..3]).unwrap();
@@ -269,7 +287,7 @@ fn socket_serve_thread(
         sock.read_exact(&mut buf[3..][..len - 2]).unwrap();
         let pkt = Packet::parse(&mut &buf[1..][..len]).unwrap();
 
-        // hold the state lock as a hack to prevent the
+        // hold the conn lock as a hack to prevent the
         // stream thread from writing at the same time
         let mut conn = conn.lock().unwrap();
         let response = match pkt.data {
@@ -318,7 +336,9 @@ fn socket_serve_thread(
                     }
                 }
                 if conn.stream_combined_markers.is_some() && first_stream_enable {
-                    ui_ctx.queue_main(move || stream_state.set(StreamState::Play));
+                    if state.lock().unwrap().autoplay {
+                        ui_ctx.queue_main(move || stream_state.set(StreamState::Play));
+                    }
                     first_stream_enable = false;
                 }
                 None
@@ -383,12 +403,15 @@ fn socket_stream_thread(
             continue;
         }
 
-        let (timestamp, mut pkt) = state.lock().unwrap().packets[packet_index].clone();
+        let ((timestamp, mut pkt), rate) = {
+            let state = state.lock().unwrap();
+            (state.packets[packet_index].clone(), state.rate)
+        };
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
             if elapsed > 0 {
-                std::thread::sleep(Duration::from_millis(elapsed as u64));
+                std::thread::sleep(Duration::from_secs_f64((elapsed as f64 / rate) / 1000.0));
             }
         }
 
@@ -450,6 +473,8 @@ impl Not for StreamState {
 }
 
 struct State {
+    rate: f64,
+    autoplay: bool,
     packets: Vec<(u128, Packet)>,
     connections: Vec<Arc<Mutex<Connection>>>,
     general_config: GeneralConfig,
@@ -479,6 +504,8 @@ impl Connection {
 impl State {
     fn new() -> Self {
         Self {
+            rate: 1.0,
+            autoplay: true,
             packets: vec![],
             connections: vec![],
             general_config: GeneralConfig {
