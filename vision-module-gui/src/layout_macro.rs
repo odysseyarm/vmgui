@@ -260,10 +260,21 @@ macro_rules! layout {
 
     // ProgressBar
     [ $ui:expr ,
-        let $ctl:ident = ProgressBar ()
+        let $ctl:ident = ProgressBar ( $($value:expr )? )
     ] => [
         #[allow(unused_mut)]
         let mut $ctl = iui::controls::ProgressBar::new($ui);
+        $(
+            leptos_reactive::create_effect({
+                let ui = iui::UI::clone($ui);
+                let ctl = $ctl.clone();
+                let value = $crate::layout_macro::IntoMaybeSignal::<u32>::from($value);
+                move |_| {
+                    let mut ctl = ctl.clone();
+                    ctl.set_value(&ui, leptos_reactive::SignalGet::get(&value));
+                }
+            });
+        )?
     ];
 
     // ----------------- Controls with children (Containers) ------------------
@@ -464,6 +475,12 @@ impl IntoMaybeSignal<bool> for bool {
 
 impl IntoMaybeSignal<i32> for i32 {
     fn from(self) -> MaybeSignal<i32> {
+        MaybeSignal::Static(self)
+    }
+}
+
+impl IntoMaybeSignal<u32> for u32 {
+    fn from(self) -> MaybeSignal<u32> {
         MaybeSignal::Static(self)
     }
 }

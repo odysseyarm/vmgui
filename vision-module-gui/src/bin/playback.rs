@@ -20,7 +20,7 @@ use iui::{
     controls::{Window, WindowType},
     UI,
 };
-use leptos_reactive::{Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
+use leptos_reactive::{with, Effect, RwSignal, SignalGet as _, SignalGetUntracked, SignalSet as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use tracing::{error, info, Level};
 use tracing_subscriber::EnvFilter;
@@ -49,6 +49,8 @@ fn main() {
     let state = Arc::new(Mutex::new(State::new()));
     let stream_ctrl = crossbeam::channel::bounded(2);
     let stream_state = RwSignal::new(StreamState::Pause);
+    let progress_millis = RwSignal::new(0_u32);
+    let progress_millis_total = RwSignal::new(0_u32);
     Effect::new(move |_| {
         let _ = stream_ctrl.0.send(stream_state.get());
     });
@@ -57,33 +59,62 @@ fn main() {
         let vbox = VerticalBox(padded: true) {
             Compact : let upload_btn = Button("Upload")
             Compact : let play_btn = Button(move || (!stream_state.get()).as_str())
+            Compact : let hbox = HorizontalBox(padded: true) {
+                Compact : let progress_bar = ProgressBar(move ||
+                    with!(|progress_millis, progress_millis_total| {
+                        if *progress_millis_total == 0 {
+                            0
+                        } else {
+                            progress_millis * 100 / progress_millis_total
+                        }
+                    })
+                )
+                Compact  : let progress_label = Label(move || with!(|progress_millis, progress_millis_total| {
+                    if *progress_millis_total == 0 {
+                        "--:-- / --:--".into()
+                    } else {
+                        format!(
+                            "{}:{:02} / {}:{:02}",
+                            *progress_millis / 1000 / 60,
+                            *progress_millis / 1000 % 60,
+                            *progress_millis_total / 1000 / 60,
+                            *progress_millis_total / 1000 % 60,
+                        )
+                    }
+                }))
+            }
         }
     }
     play_btn.hide(&ui);
+    progress_bar.hide(&ui);
 
-    let open_file = |ui: &UI,
+    let open_file = move |ui: &UI,
                      path,
                      state: &mut State,
                      upload_btn: &mut iui::controls::Button,
-                     play_btn: &mut iui::controls::Button| {
+                     play_btn: &mut iui::controls::Button,
+                     progress_bar: &mut iui::controls::ProgressBar| {
         let (general_config, packets) = ats_playback::read_file(&path).unwrap();
         state.general_config = general_config;
         state.packets.clear();
         state.packets.extend(packets);
+        progress_millis_total.set((state.packets.last().unwrap().0 - state.packets[0].0) as u32);
         upload_btn.hide(ui);
         play_btn.show(ui);
+        progress_bar.show(ui);
     };
     upload_btn.on_clicked(&ui, {
         let state = state.clone();
         let main_win = main_win.clone();
         let ui = ui.clone();
         let mut play_btn = play_btn.clone();
+        let mut progress_bar = progress_bar.clone();
         move |btn| {
             let mut state = state.lock().unwrap();
             state.packets.clear();
 
             if let Some(path) = main_win.open_file(&ui) {
-                open_file(&ui, path, &mut state, btn, &mut play_btn);
+                open_file(&ui, path, &mut state, btn, &mut play_btn, &mut progress_bar);
             }
         }
     });
@@ -94,6 +125,7 @@ fn main() {
             &mut state.lock().unwrap(),
             &mut upload_btn,
             &mut play_btn,
+            &mut progress_bar,
         );
     }
 
@@ -110,7 +142,7 @@ fn main() {
     std::thread::Builder::new()
         .name("stream".into())
         .spawn(move || {
-            socket_stream_thread(state_clone, stream_ctrl.1);
+            socket_stream_thread(state_clone, stream_ctrl.1, progress_millis, ui_ctx);
         })
         .unwrap();
     let state_clone = state.clone();
@@ -226,7 +258,8 @@ fn socket_serve_thread(
     stream_state: RwSignal<StreamState>,
 ) {
     let mut buf = vec![0; 1024];
-    let mut first_stream_enable = true;
+    // let mut first_stream_enable = true;
+    let mut first_stream_enable = false;
     loop {
         buf.resize(1024, 0);
         sock.read_exact(&mut buf[..3]).unwrap();
@@ -235,7 +268,6 @@ fn socket_serve_thread(
         let len = usize::from(len) * 2;
         sock.read_exact(&mut buf[3..][..len - 2]).unwrap();
         let pkt = Packet::parse(&mut &buf[1..][..len]).unwrap();
-        info!("pkt = {pkt:?}");
 
         // hold the state lock as a hack to prevent the
         // stream thread from writing at the same time
@@ -318,7 +350,12 @@ fn socket_serve_thread(
 }
 
 // Services the streams
-fn socket_stream_thread(state: Arc<Mutex<State>>, ctrl: Receiver<StreamState>) {
+fn socket_stream_thread(
+    state: Arc<Mutex<State>>,
+    ctrl: Receiver<StreamState>,
+    progress_millis: RwSignal<u32>,
+    ui_ctx: iui::concurrent::Context,
+) {
     let mut prev_timestamp = None;
     let mut buf = vec![0; 1024];
     let mut packet_index = 0;
@@ -356,6 +393,9 @@ fn socket_stream_thread(state: Arc<Mutex<State>>, ctrl: Receiver<StreamState>) {
         }
 
         let state = state.lock().unwrap();
+        let p = timestamp - state.packets[0].0;
+        ui_ctx.queue_main(move || progress_millis.set(p as u32));
+
 
         for conn in &state.connections {
             let mut conn = conn.lock().unwrap();
