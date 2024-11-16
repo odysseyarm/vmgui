@@ -79,13 +79,13 @@ define_control! {
 
 impl ProgressBar {
     /// Create a new progress bar with a value of 0
-    pub fn new() -> ProgressBar {
+    pub fn new(_ctx: &UI) -> ProgressBar {
         unsafe { ProgressBar::from_raw(ui_sys::uiNewProgressBar()) }
     }
 
     /// Create a new indeterminate progress bar
     pub fn indeterminate(ctx: &UI) -> ProgressBar {
-        let mut pb = ProgressBar::new();
+        let mut pb = ProgressBar::new(ctx);
         pb.set_value(ctx, ProgressBarValue::Indeterminate);
         pb
     }
