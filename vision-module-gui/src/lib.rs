@@ -42,7 +42,6 @@ pub struct ScreenInfo {
 impl From<ScreenInfo> for ats_cv::ScreenCalibration<f32> {
     fn from(screen_info: ScreenInfo) -> Self {
         ats_cv::ScreenCalibration {
-            rotation: Default::default(),
             homography: {
                 nalgebra::Matrix3::new(
                     1. / screen_info.screen_dimensions_meters[0],

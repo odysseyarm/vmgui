@@ -233,13 +233,11 @@ fn get_raycast_aimpoint(
 fn raycast_update(runner: &mut MotRunner) {
     let screen_id = runner.state.fv_state.screen_id;
     if screen_id <= ats_cv::foveated::MAX_SCREEN_ID {
-        if let Some(screen_calibration) = runner.screen_calibrations.iter().find_map(|(id, cal)| {
-            if *id == screen_id {
-                Some(cal)
-            } else {
-                None
-            }
-        }) {
+        if let Some(screen_calibration) = runner
+            .screen_calibrations
+            .iter()
+            .find_map(|(id, cal)| (*id == screen_id).then_some(cal))
+        {
             let (rotmat, transmat, fv_aimpoint) =
                 get_raycast_aimpoint(&runner.state.fv_state, screen_calibration);
 
@@ -292,12 +290,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         // Process nf_points and wf_points
         let (nf_point_tuples, nf_points_transformed, nf_normalized, nf_markers2) =
             process_points(&nf_points, &runner.general_config.camera_model_nf, None);
-        let (wf_point_tuples, wf_points_transformed, wf_normalized, wf_markers2) =
-            process_points(
-                &wf_points,
-                &runner.general_config.camera_model_wf,
-                Some(&runner.general_config.stereo_iso.cast()),
-            );
+        let (wf_point_tuples, wf_points_transformed, wf_normalized, wf_markers2) = process_points(
+            &wf_points,
+            &runner.general_config.camera_model_wf,
+            Some(&runner.general_config.stereo_iso.cast()),
+        );
 
         runner.state.nf_markers2 = nf_markers2;
         runner.state.wf_markers2 = wf_markers2;
@@ -413,13 +410,9 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         runner.state.wf_reproj = wf_reproj.into_iter().map(Into::into).collect();
 
         // Update aimpoint history
-        let gravity_angle = -gravity_vec.z
-            .atan2(-gravity_vec.x)
-            .to_degrees()
-            + 90.0;
+        let gravity_angle = -gravity_vec.z.atan2(-gravity_vec.x).to_degrees() + 90.0;
         let index = runner.state.fv_aimpoint_history_index;
-        runner.state.fv_aimpoint_history[index] =
-            (runner.state.fv_aimpoint, gravity_angle);
+        runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle);
         runner.state.fv_aimpoint_history_index =
             (index + 1) % runner.state.fv_aimpoint_history.len();
 
@@ -547,8 +540,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
             };
 
             {
-                let data =
-                    runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
+                let data = runner.state.fv_aimpoint_history[runner.state.fv_aimpoint_history_index];
                 let fv_aimpoint = data.0;
                 frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
