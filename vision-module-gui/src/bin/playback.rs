@@ -12,7 +12,8 @@ use ats_usb::{
     packet::{
         GeneralConfig, Packet, PacketData, PacketType, Props, ReadRegisterResponse,
         StreamUpdateAction,
-    }, udp_stream::UdpStream,
+    },
+    udp_stream::UdpStream,
 };
 use crossbeam::channel::{Receiver, TryRecvError};
 use iui::{
@@ -196,20 +197,16 @@ fn listener_thread_udp(
                     .unwrap();
                 std::thread::Builder::new()
                     .name("handle-broadcast-ping-udp".into())
-                    .spawn(move || {
-                        loop {
-                            std::thread::sleep(Duration::from_secs(1));
-                            sock3.send_to(&[1, 1], broadcast_src_addr).unwrap();
-                        }
+                    .spawn(move || loop {
+                        std::thread::sleep(Duration::from_secs(1));
+                        sock3.send_to(&[1, 1], broadcast_src_addr).unwrap();
                     })
                     .unwrap();
                 std::thread::Builder::new()
                     .name("handle-ping-udp".into())
-                    .spawn(move || {
-                        loop {
-                            std::thread::sleep(Duration::from_secs(1));
-                            sock4.send_to(&[1, 1], addr).unwrap();
-                        }
+                    .spawn(move || loop {
+                        std::thread::sleep(Duration::from_secs(1));
+                        sock4.send_to(&[1, 1], addr).unwrap();
                     })
                     .unwrap();
                 break;
@@ -279,7 +276,9 @@ fn socket_serve_thread(
                             StreamUpdateAction::DisableAll => unreachable!(),
                         },
                         PacketType::CombinedMarkersReport() => match s.action {
-                            StreamUpdateAction::Enable => conn.stream_combined_markers = Some(pkt.id),
+                            StreamUpdateAction::Enable => {
+                                conn.stream_combined_markers = Some(pkt.id)
+                            }
                             StreamUpdateAction::Disable => conn.stream_combined_markers = None,
                             StreamUpdateAction::DisableAll => unreachable!(),
                         },
@@ -297,11 +296,13 @@ fn socket_serve_thread(
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
-            PacketData::ReadConfig() => {
-                Some(PacketData::ReadConfigResponse(state.lock().unwrap().general_config.clone()))
-            }
+            PacketData::ReadConfig() => Some(PacketData::ReadConfigResponse(
+                state.lock().unwrap().general_config.clone(),
+            )),
             PacketData::ReadConfigResponse(_) => unreachable!(),
-            PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(state.lock().unwrap().props.clone())),
+            PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(
+                state.lock().unwrap().props.clone(),
+            )),
             PacketData::ReadPropsResponse(_) => unreachable!(),
             PacketData::Vendor(..) => None,
         };
@@ -317,10 +318,7 @@ fn socket_serve_thread(
 }
 
 // Services the streams
-fn socket_stream_thread(
-    state: Arc<Mutex<State>>,
-    ctrl: Receiver<StreamState>,
-) {
+fn socket_stream_thread(state: Arc<Mutex<State>>, ctrl: Receiver<StreamState>) {
     let mut prev_timestamp = None;
     let mut buf = vec![0; 1024];
     let mut packet_index = 0;
@@ -348,8 +346,7 @@ fn socket_stream_thread(
             continue;
         }
 
-        let (timestamp, mut pkt) =
-            state.lock().unwrap().packets[packet_index].clone();
+        let (timestamp, mut pkt) = state.lock().unwrap().packets[packet_index].clone();
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
@@ -374,6 +371,7 @@ fn socket_stream_thread(
                 pkt.serialize(&mut buf);
                 encode_slip_frame(&mut buf);
                 conn.sink.write_all(&buf).unwrap();
+                conn.sink.flush().unwrap();
             }
         }
         prev_timestamp = Some(timestamp);
