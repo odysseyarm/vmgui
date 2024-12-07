@@ -406,7 +406,7 @@ macro_rules! layout {
         leptos_reactive::create_effect({
             let ui = iui::UI::clone($ui);
             let ctl = $ctl.clone();
-            let value = $crate::layout_macro::IntoMaybeSignal::from($value);
+            let value = $crate::layout_macro::IntoMaybeSignal::<String>::from($value);
             move |_| {
                 let mut ctl = ctl.clone();
                 leptos_reactive::SignalWith::with(&value, |v| iui::controls::TextEntry::set_value(&mut ctl, &ui, v));

@@ -360,6 +360,7 @@ pub fn config_window(
 
 #[derive(Clone)]
 struct GeneralSettingsForm {
+    device_uuid: RwSignal<[u8; 6]>,
     impact_threshold: RwSignal<i32>,
     accel_config: RwSignal<AccelConfig>,
     gyro_config: RwSignal<GyroConfig>,
@@ -376,6 +377,7 @@ impl GeneralSettingsForm {
         mot_runner: Arc<Mutex<MotRunner>>,
         win: Window,
     ) -> (Form, Self) {
+        let device_uuid = create_rw_signal([0; 6]);
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let accel_config = create_rw_signal(AccelConfig::default());
@@ -387,6 +389,22 @@ impl GeneralSettingsForm {
         let stereo_iso = create_rw_signal(nalgebra::Isometry3::identity());
         crate::layout! { &ui,
             let form = Form(padded: true) {
+                (Compact, "Device UUID") : let x = Label(move || {
+                    if connected() {
+                        let id = device_uuid.get();
+                        format!(
+                            "{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                            id[0],
+                            id[1],
+                            id[2],
+                            id[3],
+                            id[4],
+                            id[5],
+                        )
+                    } else {
+                        "".into()
+                    }
+                })
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
                 (Compact, "Accelerometer Config") : let x = HorizontalBox(padded: true) {
                     Compact : let upload_accel_config = Button("Upload")
@@ -455,6 +473,7 @@ impl GeneralSettingsForm {
                 wf_intrinsics,
                 stereo_iso,
                 mot_runner,
+                device_uuid,
             },
         )
     }
@@ -462,6 +481,7 @@ impl GeneralSettingsForm {
     async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
         let timeout = Duration::from_millis(5000);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
+        let props = retry(|| device.read_props(), timeout, 3).await.unwrap()?;
 
         self.impact_threshold
             .set(i32::from(config.impact_threshold));
@@ -470,6 +490,7 @@ impl GeneralSettingsForm {
         self.nf_intrinsics.set(config.camera_model_nf.clone());
         self.wf_intrinsics.set(config.camera_model_wf.clone());
         self.stereo_iso.set(config.stereo_iso.clone());
+        self.device_uuid.set(props.uuid);
 
         if first_load {
             self.mot_runner.lock().general_config = config;
