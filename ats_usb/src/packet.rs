@@ -2,7 +2,7 @@ use std::{error::Error as StdError, fmt::Display};
 
 use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
 use nalgebra::{Isometry3, Point2, Vector3};
-use opencv_ros_camera::RosOpenCvIntrinsics;
+use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
 
@@ -208,8 +208,21 @@ impl Default for GeneralConfig {
             impact_threshold: 5,
             accel_config: Default::default(),
             gyro_config: Default::default(),
-            camera_model_nf: RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.),
-            camera_model_wf: RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.),
+            camera_model_nf: RosOpenCvIntrinsics::from_params(5896.181, 0., 5896.181, 2047.5, 2047.5),
+            camera_model_wf: RosOpenCvIntrinsics::from_params_with_distortion(
+                1434.9723,
+                0.,
+                1437.214,
+                2036.575,
+                2088.8027,
+                Distortion::from_opencv_vec([
+                    0.039820533,
+                    -0.03993317,
+                    0.00043006078,
+                    -0.0012057066,
+                    0.005302235
+                ].into()),
+            ),
             stereo_iso: Isometry3::identity(),
         }
     }
