@@ -65,6 +65,8 @@ pub struct MotState {
     // Coordinates between 0.0 and 1.0
     pub fv_aimpoint: Point2<f32>,
 
+    pub distance: f32,
+
     pub nf_data: Option<ArrayVec<MotData, 16>>,
     pub wf_data: Option<ArrayVec<MotData, 16>>,
 
@@ -95,6 +97,7 @@ impl Default for MotState {
     fn default() -> Self {
         Self {
             fv_aimpoint: Point2::new(0.0, 0.0),
+            distance: 0.0,
             nf_data: None,
             wf_data: None,
             screen_id: 0,

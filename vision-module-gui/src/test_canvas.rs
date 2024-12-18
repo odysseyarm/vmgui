@@ -63,6 +63,12 @@ impl AreaHandler for TestCanvas {
         draw_text(
             &ctx,
             20.0,
+            40.0,
+            &format!("distance = {:.4}", runner.state.distance),
+        );
+        draw_text(
+            &ctx,
+            20.0,
             60.0,
             &format!("screen_id = {}", runner.state.fv_state.screen_id),
         );
