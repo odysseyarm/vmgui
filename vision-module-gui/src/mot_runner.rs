@@ -211,7 +211,7 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 fn get_raycast_aimpoint(
     fv_state: &ats_cv::foveated::FoveatedAimpointState,
     screen_calibration: &ScreenCalibration<f32>,
-) -> (Rotation3<f32>, Translation3<f32>, Option<Point2<f32>>) {
+) -> (Rotation3<f32>, Translation3<f32>, Option<(Point2<f32>, f32)>) {
     let orientation = fv_state.filter.orientation.cast();
     let position = fv_state.filter.position.cast();
 
@@ -220,14 +220,14 @@ fn get_raycast_aimpoint(
 
     let isometry = nalgebra::Isometry::<f32, Rotation3<f32>, 3>::from_parts(trans, rot);
 
-    let fv_aimpoint = ats_cv::calculate_aimpoint(&isometry, screen_calibration);
+    let fv_aimpoint_and_d = ats_cv::calculate_aimpoint_and_distance(&isometry, screen_calibration);
 
     let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
     let rot = Rotation3::from_matrix_unchecked(flip_yz * rot * flip_yz);
     let trans = Translation3::from(flip_yz * trans.vector);
 
-    (rot, trans, fv_aimpoint)
+    (rot, trans, fv_aimpoint_and_d)
 }
 
 fn raycast_update(runner: &mut MotRunner) {
@@ -243,8 +243,9 @@ fn raycast_update(runner: &mut MotRunner) {
 
             runner.state.rotation_mat = rotmat.matrix().cast();
             runner.state.translation_mat = transmat.vector.cast();
-            if let Some(fv_aimpoint) = fv_aimpoint {
+            if let Some((fv_aimpoint, d)) = fv_aimpoint {
                 runner.state.fv_aimpoint = fv_aimpoint;
+                runner.state.distance = d;
                 if fv_aimpoint.x > 1.02 || fv_aimpoint.x < -0.02 {
                     runner.state.fv_state.reset();
                 }
