@@ -1,8 +1,10 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use app_dirs2::{get_app_root, AppDataType};
 use ats_usb::packet::GeneralConfig;
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
@@ -36,9 +38,7 @@ use {
     },
 };
 
-use vision_module_gui::consts::*;
-
-use app_dirs2::*;
+use vision_module_gui::consts::APP_INFO;
 
 use ats_cv::ScreenCalibration;
 

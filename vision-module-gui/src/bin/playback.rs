@@ -91,12 +91,12 @@ fn main() {
     autoplay_checkbox.hide(&ui);
 
     let open_file = move |ui: &UI,
-                     path,
-                     state: &mut State,
-                     upload_btn: &mut iui::controls::Button,
-                     play_btn: &mut iui::controls::Button,
-                     progress_bar: &mut iui::controls::ProgressBar,
-                     autoplay_checkbox: &mut iui::controls::Checkbox| {
+                          path,
+                          state: &mut State,
+                          upload_btn: &mut iui::controls::Button,
+                          play_btn: &mut iui::controls::Button,
+                          progress_bar: &mut iui::controls::ProgressBar,
+                          autoplay_checkbox: &mut iui::controls::Checkbox| {
         let (general_config, packets) = ats_playback::read_file(&path).unwrap();
         state.general_config = general_config;
         state.packets.clear();
@@ -418,7 +418,6 @@ fn socket_stream_thread(
         let state = state.lock().unwrap();
         let p = timestamp - state.packets[0].0;
         ui_ctx.queue_main(move || progress_millis.set(p as u32));
-
 
         for conn in &state.connections {
             let mut conn = conn.lock().unwrap();
