@@ -14,7 +14,7 @@ use leptos_reactive::{
 use nalgebra::Vector2;
 use parking_lot::Mutex;
 use tokio::task::AbortHandle;
-use tracing::{error, Level};
+use tracing::{error, info, warn, Level};
 use tracing_subscriber::EnvFilter;
 use vision_module_gui::mot_runner::MotRunner;
 use vision_module_gui::run_canvas::RunCanvas;
@@ -187,6 +187,22 @@ fn rotate_cube(mut camera_query: Query<(&Camera, &mut Transform)>, runner: Res<M
     camera_transform.rotation = Quat::from_mat3(&rotation);
 }
 
+fn get_screens_dir() -> Option<PathBuf> {
+    if let Some(env_override) = std::env::var_os("SCREEN_CALIBRATIONS_DIR") {
+        return Some(env_override.into());
+    }
+
+    let mut app_cfg_root = match get_app_root(AppDataType::UserConfig, &APP_INFO) {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("Failed to load app config: {e}");
+            return None;
+        }
+    };
+    app_cfg_root.push("screens");
+    Some(app_cfg_root)
+}
+
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -225,17 +241,18 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize },
     > = (0..{ (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize })
         .filter_map(|i| {
-            get_app_root(AppDataType::UserConfig, &APP_INFO)
-                .ok()
+            get_screens_dir()
                 .and_then(|config_dir| {
                     let screen_path = config_dir
-                        .join("screens")
                         .join(std::format!("screen_{}.json", i));
                     if screen_path.exists() {
-                        File::open(screen_path)
+                        File::open(&screen_path)
                             .ok()
                             .and_then(|file| match serde_json::from_reader(file) {
-                                Ok(calibration) => Some((i as u8, calibration)),
+                                Ok(calibration) => {
+                                    info!("Loaded {}", screen_path.display());
+                                    Some((i as u8, calibration))
+                                }
                                 Err(e) => {
                                     error!("Failed to deserialize screen calibration: {}", e);
                                     None
