@@ -1,6 +1,6 @@
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream, UdpSocket},
+    net::{TcpListener, UdpSocket},
     ops::Not,
     path::PathBuf,
     sync::{Arc, Mutex},

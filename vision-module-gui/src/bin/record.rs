@@ -4,7 +4,9 @@ use ats_usb::device::UsbDevice;
 use serialport::SerialPortType;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
+#[allow(unused_imports)]
 use tracing::Level;
+#[allow(unused_imports)]
 use tracing_subscriber::EnvFilter;
 
 fn get_ports() -> Vec<serialport::SerialPortInfo> {

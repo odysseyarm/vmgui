@@ -103,6 +103,7 @@ fn accel_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
+#[allow(dead_code)]
 fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::pnp_solutions();
     vec3_f64_chart(
@@ -118,6 +119,7 @@ fn pnp_position_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
+#[allow(dead_code)]
 fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     let series = ats_cv::telemetry::pnp_solutions();
     vec3_f64_chart(
@@ -132,6 +134,7 @@ fn pnp_orientation_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
+#[allow(dead_code)]
 fn rot_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f32_chart(
         area,
@@ -150,6 +153,7 @@ fn accel_bias_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     );
 }
 
+#[allow(dead_code)]
 fn gravity_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f32_chart(
         area,
@@ -195,6 +199,7 @@ fn accel_bias_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift
     );
 }
 
+#[allow(dead_code)]
 fn rot_bias_uncertainty_chart<DB: DrawingBackend>(area: &DrawingArea<DB, Shift>) {
     vec3_f32_chart(
         area,
