@@ -85,6 +85,7 @@ impl AreaHandler for MainCanvas {
     }
 }
 
+#[allow(dead_code)]
 fn example_chart<DB: DrawingBackend>(root: DrawingArea<DB, Shift>) {
     root.fill(&WHITE).unwrap();
     let root = root.margin(50, 50, 50, 50);
@@ -132,6 +133,7 @@ fn example_chart<DB: DrawingBackend>(root: DrawingArea<DB, Shift>) {
         .unwrap();
 }
 
+#[allow(dead_code)]
 fn matshow<DB: DrawingBackend>(
     root: &mut DrawingArea<DB, Shift>,
 ) -> Result<(), Box<dyn Error + '_>> {
