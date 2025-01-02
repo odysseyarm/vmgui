@@ -19,8 +19,7 @@
 
 #[macro_use]
 extern crate bitflags;
-#[macro_use]
-extern crate failure;
+extern crate thiserror;
 extern crate ui_sys;
 extern crate futures;
 #[cfg(feature = "plotters")]
