@@ -91,6 +91,25 @@ impl AreaHandler for TestCanvas {
         }
         grid_path.end(ctx);
 
+        let center_target_path = Path::new(ctx, FillMode::Winding);
+        draw_crosshair(
+            &ctx,
+            &center_target_path,
+            draw_params.area_width / 2.0,
+            draw_params.area_height / 2.0,
+            25.,
+        );
+        center_target_path.new_figure_with_arc(
+            &ctx,
+            draw_params.area_width / 2.0,
+            draw_params.area_height / 2.0,
+            25.,
+            0.,
+            2. * std::f64::consts::PI,
+            false,
+        );
+        center_target_path.end(ctx);
+
         let stroke = StrokeParams {
             cap: 0,  // Bevel
             join: 0, // Flat
@@ -134,6 +153,23 @@ impl AreaHandler for TestCanvas {
             dash_phase: 0.,
         };
         ctx.stroke(&grid_path, &brush, &stroke);
+
+        // Center target
+        let brush = Brush::Solid(SolidBrush {
+            r: 0.,
+            g: 0.,
+            b: 1.,
+            a: 1.,
+        });
+        let stroke = StrokeParams {
+            cap: 0,  // Bevel
+            join: 0, // Flat
+            thickness: 1.,
+            miter_limit: 0.,
+            dashes: vec![],
+            dash_phase: 0.,
+        };
+        ctx.stroke(&center_target_path, &brush, &stroke);
     }
 
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
