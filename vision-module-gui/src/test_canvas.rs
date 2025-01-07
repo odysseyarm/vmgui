@@ -3,7 +3,7 @@ use crate::mot_runner::MotRunner;
 use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use nalgebra::Point2;
+use nalgebra::{Isometry3, Point2, Translation3, Vector2, Vector3};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tracing::debug;
@@ -55,21 +55,12 @@ impl AreaHandler for TestCanvas {
             &ctx,
             20.0,
             20.0,
-            &format!(
-                "offset = ({:.4}, {:.4})",
-                runner.fv_offset.x, runner.fv_offset.y
-            ),
-        );
-        draw_text(
-            &ctx,
-            20.0,
-            40.0,
             &format!("distance = {:.4}", runner.state.distance),
         );
         draw_text(
             &ctx,
             20.0,
-            60.0,
+            40.0,
             &format!("screen_id = {}", runner.state.fv_state.screen_id),
         );
 
@@ -175,44 +166,38 @@ impl AreaHandler for TestCanvas {
     fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
         debug!("{:?}", area_key_event);
         if area_key_event.up {
+            match area_key_event.ext_key {
+                _ => match area_key_event.key {
+                    b'z' => {
+                        let t = Translation3::new(0., 0.0381, 0.);
+                        let quat = {
+                            let screen_calibrations = self.runner.lock().screen_calibrations.clone();
+                            let fv_state = &self.runner.lock().state.fv_state;
+                            ats_cv::helpers::calculate_zero_offset_quat(t, Point2::new(0.5, 0.5), &screen_calibrations, fv_state)
+                        };
+                        if let Some(quat) = quat {
+                            self.runner.lock().state.fv_zero_offset = Isometry3::from_parts(
+                                t,
+                                quat,
+                            );
+                        } else {
+                            tracing::warn!("Failed to calculate zero offset quat");
+                        }
+                    },
+                    _ => (),
+                }
+            }
             return true;
         }
-        let mut slow_speed = 0.001;
-        if area_key_event.modifiers.contains(Modifiers::MODIFIER_SHIFT) {
-            slow_speed = 0.0001;
-        }
         match area_key_event.ext_key as _ {
-            ui_sys::uiExtKeyUp => self.runner.lock().fv_offset.y -= slow_speed,
-            ui_sys::uiExtKeyDown => self.runner.lock().fv_offset.y += slow_speed,
-            ui_sys::uiExtKeyLeft => self.runner.lock().fv_offset.x -= slow_speed,
-            ui_sys::uiExtKeyRight => self.runner.lock().fv_offset.x += slow_speed,
             ui_sys::uiExtKeyEscape => (self.on_closing)(&mut self.window),
             _ => match area_key_event.key {
-                b'w' => self.runner.lock().fv_offset.y -= 0.1,
-                b's' => self.runner.lock().fv_offset.y += 0.1,
-                b'a' => self.runner.lock().fv_offset.x -= 0.1,
-                b'd' => self.runner.lock().fv_offset.x += 0.1,
                 b'q' => (self.on_closing)(&mut self.window),
                 // Backspace
-                8 => self.runner.lock().fv_offset = Default::default(),
+                8 => self.runner.lock().state.fv_zero_offset = Default::default(),
                 _ => (),
             },
         }
         true
-    }
-
-    fn mouse_event(&mut self, _area: &Area, mouse_event: &iui::controls::AreaMouseEvent) {
-        if mouse_event.down == 1 && mouse_event.modifiers.contains(Modifiers::MODIFIER_CTRL) {
-            let Some(w) = self.last_draw_width else {
-                return;
-            };
-            let Some(h) = self.last_draw_height else {
-                return;
-            };
-            let mut state = self.runner.lock();
-            let aimpoint = state.state.fv_aimpoint;
-            state.fv_offset.x = mouse_event.x / w - aimpoint.x as f64;
-            state.fv_offset.y = mouse_event.y / h - aimpoint.y as f64;
-        }
     }
 }

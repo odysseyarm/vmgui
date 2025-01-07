@@ -2,6 +2,7 @@ use arrayvec::ArrayVec;
 use ats_cv::foveated::FoveatedAimpointState;
 use ats_cv::foveated::MARKER_PATTERN_LEN;
 use ats_usb::packet::MotData;
+use nalgebra::Isometry3;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
 use serde::Serialize;
 use sqpnp::types::SQPSolution;
@@ -86,6 +87,7 @@ pub struct MotState {
     pub translation_mat: Matrix3x1<f32>,
 
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
+    pub fv_zero_offset: Isometry3<f32>,
 
     pub fv_aimpoint_history: [(Point2<f32>, f32); 80],
     pub fv_aimpoint_history_index: usize,
@@ -113,6 +115,7 @@ impl Default for MotState {
             nf_markers2: Default::default(),
             wf_markers2: Default::default(),
             fv_state: FoveatedAimpointState::new(),
+            fv_zero_offset: Isometry3::identity(),
             fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0.); 80],
             fv_aimpoint_history_index: 0,
             previous_sqp_solution: None,

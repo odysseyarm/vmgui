@@ -139,7 +139,6 @@ pub struct MotRunner {
     pub packets: Arc<Mutex<Vec<(u128, ats_usb::packet::PacketData)>>>,
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
-    pub fv_offset: Vector2<f64>,
     pub wfnf_realign: bool,
     pub screen_calibrations:
         ArrayVec<(u8, ScreenCalibration<f32>), { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize }>,
@@ -211,7 +210,8 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
 fn my_raycast_update(runner: &mut MotRunner) {
     let screen_calibrations = runner.screen_calibrations.clone();
     let fv_state = &mut runner.state.fv_state;
-    let (pose, aimpoint_and_d) = ats_cv::helpers::raycast_update(&screen_calibrations, fv_state);
+    let offset = runner.state.fv_zero_offset;
+    let (pose, aimpoint_and_d) = ats_cv::helpers::raycast_update(&screen_calibrations, fv_state, Some(offset));
     if let Some(pose) = pose {
         runner.state.rotation_mat = pose.0;
         runner.state.translation_mat = pose.1;
