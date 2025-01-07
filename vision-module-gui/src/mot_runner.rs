@@ -7,7 +7,7 @@ use ats_usb::device::UsbDevice;
 use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
-use nalgebra::{Point2, Scalar, UnitVector3, Vector2, Vector3};
+use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
 use sqpnp::types::{SQPSolution, SolverParameters};
@@ -213,8 +213,12 @@ fn my_raycast_update(runner: &mut MotRunner) {
     let offset = runner.state.fv_zero_offset;
     let (pose, aimpoint_and_d) = ats_cv::helpers::raycast_update(&screen_calibrations, fv_state, Some(offset));
     if let Some(pose) = pose {
-        runner.state.rotation_mat = pose.0;
-        runner.state.translation_mat = pose.1;
+        let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
+
+        let rot = Rotation3::from_matrix_unchecked(flip_yz * pose.0 * flip_yz);
+        let trans = Translation3::from(flip_yz * pose.1);
+        runner.state.rotation_mat = *rot.matrix();
+        runner.state.translation_mat = trans.vector;
     }
     if let Some(aimpoint_and_d) = aimpoint_and_d {
         runner.state.fv_aimpoint = aimpoint_and_d.0;

@@ -169,7 +169,7 @@ impl AreaHandler for TestCanvas {
             match area_key_event.ext_key {
                 _ => match area_key_event.key {
                     b'z' => {
-                        let t = Translation3::new(0., 0.0381, 0.);
+                        let t = Translation3::new(0., -0.0381, 0.);
                         let quat = {
                             let screen_calibrations = self.runner.lock().screen_calibrations.clone();
                             let fv_state = &self.runner.lock().state.fv_state;
