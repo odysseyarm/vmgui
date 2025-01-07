@@ -277,7 +277,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         packets: packets.c(),
         ui_update: ui_update.c(),
         ui_ctx,
-        fv_offset: Vector2::default(),
         general_config: GeneralConfig::default(),
         wfnf_realign: true,
         screen_calibrations,
