@@ -592,7 +592,7 @@ fn set_calibration_upload_handlers(
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
                     let intrinsics =
-                        ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
+                        ats_common::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     nf_intrinsics.set(intrinsics);
                     win.modal_msg(
                         &ui,
@@ -618,7 +618,7 @@ fn set_calibration_upload_handlers(
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
                     let intrinsics =
-                        ats_cv::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
+                        ats_common::get_intrinsics_from_opencv_camera_calibration_json(reader)?;
                     wf_intrinsics.set(intrinsics);
                     win.modal_msg(
                         &ui,
@@ -643,7 +643,7 @@ fn set_calibration_upload_handlers(
             if let Some(path) = win.open_file(&ui) {
                 let Ok(()) = (|| {
                     let reader = std::fs::File::open(&path)?;
-                    let iso = ats_cv::get_isometry_from_opencv_stereo_calibration_json(reader)?;
+                    let iso = ats_common::get_isometry_from_opencv_stereo_calibration_json(reader)?;
                     stereo_iso.set(iso);
                     win.modal_msg(
                         &ui,
@@ -679,7 +679,7 @@ fn set_calibration_download_handlers(
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_camera_calibration_json(
+                    ats_common::write_opencv_minimal_camera_calibration_json(
                         &nf_intrinsics.get(),
                         writer,
                     )?;
@@ -710,7 +710,7 @@ fn set_calibration_download_handlers(
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_camera_calibration_json(
+                    ats_common::write_opencv_minimal_camera_calibration_json(
                         &wf_intrinsics.get(),
                         writer,
                     )?;
@@ -741,7 +741,7 @@ fn set_calibration_download_handlers(
             if let Some(path) = win.save_file(&ui) {
                 let Ok(()) = (|| {
                     let writer = std::fs::File::create(&path)?;
-                    ats_cv::write_opencv_minimal_stereo_calibration_json(
+                    ats_common::write_opencv_minimal_stereo_calibration_json(
                         &stereo_iso.get(),
                         writer,
                     )?;
