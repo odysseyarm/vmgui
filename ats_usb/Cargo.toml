@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 argmin = "0.10.0"
-ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git" }
 enumn = "0.1.13"
 nalgebra = "0.32.3"
 opencv-ros-camera = { version = "0.14.1" }
@@ -21,6 +20,7 @@ socket2 = "0.5.7"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time", "net"] }
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
+ats_common = { git = "https://github.com/odysseyarm/ats_common.git" }
 
 [features]
 pyo3 = ["dep:pyo3"]

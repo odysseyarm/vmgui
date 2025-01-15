@@ -1,9 +1,9 @@
 use crate::custom_shapes::{draw_crosshair, draw_grid, draw_text};
 use crate::mot_runner::MotRunner;
-use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Modifiers, Window};
+use iui::controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window};
 use iui::draw::{Brush, FillMode, Path, SolidBrush, StrokeParams};
 use iui::UI;
-use nalgebra::{Isometry3, Point2, Translation3, Vector2, Vector3};
+use nalgebra::{Isometry3, Point2, Translation3};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use tracing::debug;
@@ -183,6 +183,7 @@ impl AreaHandler for TestCanvas {
                         } else {
                             tracing::warn!("Failed to calculate zero offset quat");
                         }
+                
                     },
                     _ => (),
                 }

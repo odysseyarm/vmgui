@@ -1,6 +1,6 @@
 use std::{error::Error as StdError, fmt::Display};
 
-use ats_cv::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
+use ats_common::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
 use nalgebra::{Isometry3, Point2, Vector3};
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
 use serde::{Deserialize, Serialize};
@@ -704,18 +704,18 @@ impl GeneralConfig {
         };
 
         let mut camera_model_nf: RosOpenCvIntrinsics<f32> =
-            match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+            match ats_common::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
                 Ok(x) => x.into(),
                 Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
             };
 
         let mut camera_model_wf: RosOpenCvIntrinsics<f32> =
-            match ats_cv::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
+            match ats_common::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
                 Ok(x) => x.into(),
                 Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
             };
 
-        let stereo_iso = match ats_cv::ocv_types::MinimalStereoCalibrationParams::parse(bytes) {
+        let stereo_iso = match ats_common::ocv_types::MinimalStereoCalibrationParams::parse(bytes) {
             Ok(x) => x.into(),
             Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
         };

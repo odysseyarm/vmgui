@@ -11,7 +11,6 @@ use iui::prelude::*;
 use leptos_reactive::{
     create_effect, RwSignal, SignalGet, SignalGetUntracked, SignalSet, SignalWith,
 };
-use nalgebra::Vector2;
 use parking_lot::Mutex;
 use tokio::task::AbortHandle;
 use tracing::{error, info, warn, Level};
