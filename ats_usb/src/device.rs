@@ -356,7 +356,7 @@ impl UsbDevice {
                     }
                 };
                 if let Some(e) = e {
-                    info!("device reader thread failed to send reply: {e:?}");
+                    debug!("device reader thread failed to send reply: {e:?}");
                 }
             }
             info!("device reader thread exiting");
