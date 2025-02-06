@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use ats_cv::foveated::FoveatedAimpointState;
 use ats_cv::foveated::MARKER_PATTERN_LEN;
-use ats_usb::packet::MotData;
+use ats_usb::packets::vm::MotData;
 use nalgebra::Isometry3;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
 use serde::Serialize;

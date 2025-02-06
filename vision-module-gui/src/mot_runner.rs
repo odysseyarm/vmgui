@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 use ats_cv::foveated::MARKER_PATTERN_LEN;
 use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
 use ats_usb::device::UsbDevice;
-use ats_usb::packet::{CombinedMarkersReport, GeneralConfig, MotData};
+use ats_usb::packets::vm::{CombinedMarkersReport, GeneralConfig, MotData};
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
 use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
@@ -136,7 +136,7 @@ pub struct MotRunner {
     pub record_impact: bool,
     pub record_packets: bool,
     pub datapoints: Arc<Mutex<Vec<crate::TestFrame>>>,
-    pub packets: Arc<Mutex<Vec<(u128, ats_usb::packet::PacketData)>>>,
+    pub packets: Arc<Mutex<Vec<(u128, ats_usb::packets::vm::PacketData)>>>,
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
     pub wfnf_realign: bool,
@@ -177,7 +177,7 @@ pub async fn frame_loop(runner: Arc<Mutex<MotRunner>>) {
                         .duration_since(UNIX_EPOCH)
                         .unwrap()
                         .as_millis(),
-                    ats_usb::packet::PacketData::ObjectReport(mot_data),
+                    ats_usb::packets::vm::PacketData::ObjectReport(mot_data),
                 ));
             }
         }
@@ -396,7 +396,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_millis(),
-                ats_usb::packet::PacketData::CombinedMarkersReport(report),
+                ats_usb::packets::vm::PacketData::CombinedMarkersReport(report),
             ));
         }
     }
@@ -435,7 +435,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
         let accel_odr = runner.general_config.accel_config.accel_odr;
 
         // correct accel and gyro bias and scale
-        let accel = ats_usb::packet::AccelReport {
+        let accel = ats_usb::packets::vm::AccelReport {
             accel: accel.corrected_accel(&runner.general_config.accel_config),
             gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
             timestamp: accel.timestamp,
@@ -493,7 +493,7 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_millis(),
-                ats_usb::packet::PacketData::AccelReport(accel),
+                ats_usb::packets::vm::PacketData::AccelReport(accel),
             ));
         }
     }
@@ -538,7 +538,7 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_millis(),
-                ats_usb::packet::PacketData::ImpactReport(_impact),
+                ats_usb::packets::vm::PacketData::ImpactReport(_impact),
             ));
         }
     }

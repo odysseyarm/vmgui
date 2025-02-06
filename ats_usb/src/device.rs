@@ -22,7 +22,7 @@ use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::{
-    packet::{
+    packets::vm::{
         AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport,
         ObjectReportRequest, Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate,
         WriteRegister,
@@ -135,7 +135,7 @@ impl UsbDevice {
                 id: 0,
                 data: PacketData::StreamUpdate(StreamUpdate {
                     packet_id: PacketType::End(),
-                    action: crate::packet::StreamUpdateAction::DisableAll,
+                    action: crate::packets::vm::StreamUpdateAction::DisableAll,
                 }),
             }
             .serialize(&mut buf);
@@ -201,7 +201,7 @@ impl UsbDevice {
             id: 0,
             data: PacketData::StreamUpdate(StreamUpdate {
                 packet_id: PacketType::End(),
-                action: crate::packet::StreamUpdateAction::DisableAll,
+                action: crate::packets::vm::StreamUpdateAction::DisableAll,
             }),
         }
         .serialize(&mut buf);
@@ -520,7 +520,7 @@ impl UsbDevice {
                     id: slot.id,
                     data: PacketData::StreamUpdate(StreamUpdate {
                         packet_id: stream_type,
-                        action: crate::packet::StreamUpdateAction::Enable,
+                        action: crate::packets::vm::StreamUpdateAction::Enable,
                     }),
                 })
                 .await?;
@@ -668,7 +668,7 @@ impl Drop for PacketStream {
                     id: 255,
                     data: PacketData::StreamUpdate(StreamUpdate {
                         packet_id: self.stream_type,
-                        action: crate::packet::StreamUpdateAction::Disable,
+                        action: crate::packets::vm::StreamUpdateAction::Disable,
                     }),
                 })
                 .inspect_err(|e| warn!("Failed to stop stream: {e}"));

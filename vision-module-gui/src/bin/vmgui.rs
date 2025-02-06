@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use app_dirs2::{get_app_root, AppDataType};
-use ats_usb::packet::GeneralConfig;
+use ats_usb::packets::vm::GeneralConfig;
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
 use leptos_reactive::{
@@ -733,7 +733,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mot_runner.lock().general_config.serialize(&mut bytes);
 
                 for (timestamp, packet_data) in packets.iter() {
-                    let packet = ats_usb::packet::Packet {
+                    let packet = ats_usb::packets::vm::Packet {
                         data: packet_data.clone(),
                         id: 0,
                     };
