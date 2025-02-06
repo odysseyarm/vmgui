@@ -4,7 +4,7 @@ use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
     device::UsbDevice,
-    packet::{AccelConfig, GeneralConfig, GyroConfig, Port},
+    packets::vm::{AccelConfig, GeneralConfig, GyroConfig, Port},
 };
 use iui::{
     controls::{Button, Form},
