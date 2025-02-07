@@ -1,5 +1,5 @@
-use ats_usb::packet::GeneralConfig;
-use ats_usb::packet::Packet;
+use ats_usb::packets::vm::GeneralConfig;
+use ats_usb::packets::vm::Packet;
 use std::io::Error;
 use std::io::Read;
 use std::io::Seek;
@@ -11,7 +11,7 @@ pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>),
     file.read_exact(&mut buf).unwrap();
     let general_config = GeneralConfig::parse(
         &mut &buf[..],
-        ats_usb::packet::PacketType::ReadConfigResponse(),
+        ats_usb::packets::vm::PacketType::ReadConfigResponse(),
     )
     .unwrap();
     let mut packets = Vec::new();
@@ -30,7 +30,7 @@ pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>),
                 match Packet::parse(chunk_slice) {
                     Ok(pkt) => packets.push((timestamp, pkt)),
                     Err(e) => {
-                        if let ats_usb::packet::Error::UnexpectedEof { packet_type: _ } = e {
+                        if let ats_usb::packets::vm::Error::UnexpectedEof { packet_type: _ } = e {
                             panic!("Unexpected EOF");
                         } else {
                             panic!("Error parsing packet: {:?}", e);
