@@ -32,6 +32,9 @@ pub struct TestFrame {
     pub fv_aimpoint_x: Option<f32>,
     pub fv_aimpoint_y: Option<f32>,
     pub opposite_cant: Option<f32>,
+    pub position_x: Option<f32>,
+    pub position_y: Option<f32>,
+    pub position_z: Option<f32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
@@ -89,7 +92,7 @@ pub struct MotState {
     pub fv_state: ats_cv::foveated::FoveatedAimpointState,
     pub fv_zero_offset: Isometry3<f32>,
 
-    pub fv_aimpoint_history: [(Point2<f32>, f32); 80],
+    pub fv_aimpoint_history: [(Point2<f32>, f32, Matrix3x1<f32>); 80],
     pub fv_aimpoint_history_index: usize,
 
     pub previous_sqp_solution: Option<SQPSolution>,
@@ -116,7 +119,7 @@ impl Default for MotState {
             wf_markers2: Default::default(),
             fv_state: FoveatedAimpointState::new(),
             fv_zero_offset: Isometry3::identity(),
-            fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0.); 80],
+            fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0., Matrix3x1::new(0.0, 0.0, 0.0)); 80],
             fv_aimpoint_history_index: 0,
             previous_sqp_solution: None,
         }

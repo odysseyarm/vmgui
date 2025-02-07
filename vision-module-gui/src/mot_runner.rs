@@ -385,7 +385,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         // Update aimpoint history
         let gravity_angle = -gravity_vec.z.atan2(-gravity_vec.x).to_degrees() + 90.0;
         let index = runner.state.fv_aimpoint_history_index;
-        runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle);
+        runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle, runner.state.translation_mat);
         runner.state.fv_aimpoint_history_index =
             (index + 1) % runner.state.fv_aimpoint_history.len();
 
@@ -510,6 +510,9 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 fv_aimpoint_x: None,
                 fv_aimpoint_y: None,
                 opposite_cant: None,
+                position_x: None,
+                position_y: None,
+                position_z: None,
             };
 
             {
@@ -518,6 +521,9 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
                 frame.fv_aimpoint_x = Some(fv_aimpoint.x);
                 frame.fv_aimpoint_y = Some(fv_aimpoint.y);
                 frame.opposite_cant = Some(data.1);
+                frame.position_x = Some(data.2.x);
+                frame.position_y = Some(data.2.y);
+                frame.position_z = Some(data.2.z);
             }
 
             if runner.datapoints.is_locked() {
