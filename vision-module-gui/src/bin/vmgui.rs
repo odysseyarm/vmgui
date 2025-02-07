@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use app_dirs2::{get_app_root, AppDataType};
-use ats_usb::packet::GeneralConfig;
+use ats_usb::packets::vm::GeneralConfig;
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
 use leptos_reactive::{
@@ -593,6 +593,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fv_aimpoint_x: None,
                 fv_aimpoint_y: None,
                 opposite_cant: None,
+                position_x: None,
+                position_y: None,
+                position_z: None,
             };
 
             let runner = state.lock();
@@ -611,6 +614,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     + std::f32::consts::PI / 2.)
                     .to_degrees();
                 frame.opposite_cant = Some(gravity_angle);
+
+                let translation = &runner.state.translation_mat;
+                frame.position_x = Some(translation.x);
+                frame.position_y = Some(translation.y);
+                frame.position_z = Some(translation.z);
             }
 
             datapoints.push(frame);
@@ -733,7 +741,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mot_runner.lock().general_config.serialize(&mut bytes);
 
                 for (timestamp, packet_data) in packets.iter() {
-                    let packet = ats_usb::packet::Packet {
+                    let packet = ats_usb::packets::vm::Packet {
                         data: packet_data.clone(),
                         id: 0,
                     };

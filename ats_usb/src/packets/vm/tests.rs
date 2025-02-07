@@ -1,6 +1,4 @@
-use crate::packet::PacketType;
-
-use super::{CombinedMarkersReport, GeneralConfig, ObjectReport};
+use super::{CombinedMarkersReport, GeneralConfig, ObjectReport, PacketType};
 
 #[test]
 fn test_combined_marker_report_parse_serialize() {
