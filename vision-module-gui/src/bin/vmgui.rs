@@ -593,6 +593,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 fv_aimpoint_x: None,
                 fv_aimpoint_y: None,
                 opposite_cant: None,
+                position_x: None,
+                position_y: None,
+                position_z: None,
             };
 
             let runner = state.lock();
@@ -611,6 +614,11 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                     + std::f32::consts::PI / 2.)
                     .to_degrees();
                 frame.opposite_cant = Some(gravity_angle);
+
+                let translation = &runner.state.translation_mat;
+                frame.position_x = Some(translation.x);
+                frame.position_y = Some(translation.y);
+                frame.position_z = Some(translation.z);
             }
 
             datapoints.push(frame);
