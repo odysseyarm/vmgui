@@ -9,7 +9,7 @@ use std::{
 
 use ats_usb::{
     device::encode_slip_frame,
-    packets::vm::packet::{
+    packets::vm::{
         CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, PacketType,
         ReadRegisterResponse, StreamUpdateAction,
     },
