@@ -288,7 +288,7 @@ async fn calculate_and_save_gyro_bias(
 }
 
 async fn normal_streaming(
-    s: &mut (impl futures::Stream<Item = ats_usb::packets::vm::packet::AccelReport> + Unpin),
+    s: &mut (impl futures::Stream<Item = ats_usb::packets::vm::AccelReport> + Unpin),
 ) {
     let mut accel_sum = Vector3::zeros();
     let mut gyro_sum = Vector3::zeros();

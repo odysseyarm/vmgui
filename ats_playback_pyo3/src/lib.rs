@@ -1,5 +1,5 @@
-use ats_usb::packets::vm::packet::GeneralConfig;
-use ats_usb::packets::vm::packet::Packet;
+use ats_usb::packets::vm::GeneralConfig;
+use ats_usb::packets::vm::Packet;
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
