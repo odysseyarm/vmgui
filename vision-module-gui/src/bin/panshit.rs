@@ -1,5 +1,5 @@
 use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
-use ats_usb::packets::vm::packet::{Packet, PacketData, Port, Register};
+use ats_usb::packets::vm::{Packet, PacketData, Port, Register};
 use std::net::{Ipv4Addr, SocketAddr};
 // use multicast_socket::MulticastSocket;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -74,9 +74,9 @@ fn main() {
                 }
             }
             Err(e) => match e {
-                ats_usb::packets::vm::packet::Error::UnexpectedEof { .. } => {}
-                ats_usb::packets::vm::packet::Error::UnrecognizedPacketId(_) => {}
-                ats_usb::packets::vm::packet::Error::UnrecognizedPort => {}
+                ats_usb::packets::vm::Error::UnexpectedEof { .. } => {}
+                ats_usb::packets::vm::Error::UnrecognizedPacketId(_) => {}
+                ats_usb::packets::vm::Error::UnrecognizedPort => {}
                 _ => {
                     println!("Error: {:?}", e);
                 }

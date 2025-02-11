@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use ats_usb::{device::UsbDevice, packets::vm::packet::Port};
+use ats_usb::{device::UsbDevice, packets::vm::Port};
 
 fn print_help() {
     eprintln!("Usage: ./cli [options] <address>");

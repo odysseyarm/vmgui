@@ -89,15 +89,15 @@ async fn main() -> ExitCode {
     eprintln!("Press enter to stop recording");
 
     let accel_stream = device
-        .stream(ats_usb::packets::vm::packet::PacketType::AccelReport())
+        .stream(ats_usb::packets::vm::PacketType::AccelReport())
         .await
         .unwrap();
     let mot_stream = device
-        .stream(ats_usb::packets::vm::packet::PacketType::ObjectReport())
+        .stream(ats_usb::packets::vm::PacketType::ObjectReport())
         .await
         .unwrap();
     let comb_stream = device
-        .stream(ats_usb::packets::vm::packet::PacketType::CombinedMarkersReport())
+        .stream(ats_usb::packets::vm::PacketType::CombinedMarkersReport())
         .await
         .unwrap();
     let mut merged_stream = accel_stream.merge(mot_stream).merge(comb_stream);
@@ -116,7 +116,7 @@ async fn main() -> ExitCode {
     let mut bytes = vec![];
     general_config.serialize(&mut bytes);
     for (timestamp, packet_data) in packets.iter() {
-        let packet = ats_usb::packets::vm::packet::Packet {
+        let packet = ats_usb::packets::vm::Packet {
             data: packet_data.clone(),
             id: 0,
         };
