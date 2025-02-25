@@ -240,7 +240,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
         // Helper closure to process points
         let process_points = |points, camera_model, stereo_iso| {
-            let point_tuples = filter_and_create_point_tuples(points);
+            let point_tuples = create_point_tuples(points);
             let points_raw: Vec<_> = point_tuples.iter().map(|&(_, p)| p).collect();
             let points_transformed = transform_points(&points_raw, camera_model);
             let intrinsics = ats_common::ros_opencv_intrinsics_type_convert(camera_model);
@@ -402,16 +402,12 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
     }
 }
 
-fn filter_and_create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f32>)> {
+fn create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f32>)> {
     points
         .iter()
         .enumerate()
-        .filter_map(|(id, pos)| {
-            if (100..3996).contains(&pos.x) && (100..3996).contains(&pos.y) {
-                Some((id as u8, Point2::new(pos.x as f32, pos.y as f32)))
-            } else {
-                None
-            }
+        .map(|(id, pos)| {
+            (id as u8, Point2::new(pos.x as f32, pos.y as f32))
         })
         .collect()
 }
