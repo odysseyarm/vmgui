@@ -330,7 +330,8 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         )> = None;
 
         let (wf_marker_ix, wf_reproj) = wf_markers
-            .map(|(markers, reproj, _)| (markers.to_vec(), reproj.to_vec()))
+            .as_ref()
+            .map(|(markers, reproj, _)| (markers.as_slice(), reproj.as_slice()))
             .unwrap_or_default();
 
         // Match nf_markers with wf_markers
@@ -380,7 +381,7 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
             .iter()
             .map(|&i| wf_points_transformed[i])
             .collect();
-        runner.state.wf_reproj = wf_reproj.into_iter().map(Into::into).collect();
+        runner.state.wf_reproj = wf_reproj.iter().copied().map(Into::into).collect();
 
         // Update aimpoint history
         let gravity_angle = -gravity_vec.z.atan2(-gravity_vec.x).to_degrees() + 90.0;
@@ -406,6 +407,7 @@ fn create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f32>)> {
     points
         .iter()
         .enumerate()
+        .filter(|(_id, pos)| **pos != Point2::new(0, 0))
         .map(|(id, pos)| {
             (id as u8, Point2::new(pos.x as f32, pos.y as f32))
         })
