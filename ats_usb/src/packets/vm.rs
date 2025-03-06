@@ -1,13 +1,74 @@
-use std::{error::Error as StdError, fmt::Display};
+// Assume we're running on little-endian
+use std::{error::Error as StdError, fmt::Display, mem::MaybeUninit};
 
-use ats_common::ocv_types::{MinimalCameraCalibrationParams, MinimalStereoCalibrationParams};
+use bytemuck::{AnyBitPattern, CheckedBitPattern, NoUninit};
 use nalgebra::{Isometry3, Point2, Vector3};
 use opencv_ros_camera::{Distortion, RosOpenCvIntrinsics};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_inline_default::serde_inline_default;
 
 #[cfg(test)]
 mod tests;
+mod wire;
+
+pub trait Parse: Sized {
+    fn parse(bytes: &mut &[u8]) -> Result<Self, Error>;
+}
+
+pub trait Serialize {
+    const SIZE: usize;
+    #[must_use]
+    fn serialize(&self, buf: &mut &mut [MaybeUninit<u8>]);
+    fn serialize_to_vec(&self, buf: &mut Vec<u8>) {
+        buf.reserve(Self::SIZE);
+        let _ = self.serialize(&mut buf.spare_capacity_mut());
+        unsafe {
+            buf.set_len(buf.len() + Self::SIZE);
+        }
+    }
+}
+
+/// Implements [`Parse`] and [`Serialize`] via a "wire" type.
+trait Delegated: From<Self::Wire> + Clone + Sized {
+    type Wire: From<Self> + NoUninit + CheckedBitPattern;
+
+    /// What value to put in the error when an `UnexpectedEof` error occurs.
+    const PACKET_TYPE: Option<PacketType>;
+}
+
+impl<T: Delegated> Serialize for T {
+    // make sure it's a multiple of 2
+    const SIZE: usize = (std::mem::size_of::<T::Wire>() + 1) / 2 * 2;
+    fn serialize<'a>(&self, buf: &mut &mut [MaybeUninit<u8>]) {
+        let wire = T::Wire::from(self.clone());
+        let wire_bytes = bytemuck::bytes_of(&wire);
+        unsafe {
+            let ptr = <[_]>::as_mut_ptr(buf) as *mut u8;
+            ptr.copy_from_nonoverlapping(wire_bytes.as_ptr(), wire_bytes.len());
+            ptr.add(wire_bytes.len()).write_bytes(0, T::SIZE - wire_bytes.len());
+        }
+        *buf = &mut std::mem::take(buf)[T::SIZE..];
+    }
+}
+
+impl<T: Delegated> Parse for T {
+    fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
+        let size_with_padding = T::SIZE;
+        if bytes.len() < size_with_padding {
+            Err(Error::UnexpectedEof { packet_type: Self::PACKET_TYPE })
+        } else {
+            let size = std::mem::size_of::<T::Wire>();
+            match bytemuck::checked::try_pod_read_unaligned(&bytes[..size]) {
+                Ok(v) => {
+                    *bytes = &bytes[size_with_padding..];
+                    Ok(Self::from(v))
+                }
+                Err(bytemuck::checked::CheckedCastError::InvalidBitPattern) => Err(Error::InvalidBitPattern),
+                Err(e) => unreachable!("{e}"),
+            }
+        }
+    }
+}
 
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
@@ -29,7 +90,7 @@ pub enum PacketData {
     ReadConfigResponse(GeneralConfig),
     ReadProps(),
     ReadPropsResponse(Props),
-    ObjectReportRequest(ObjectReportRequest),
+    ObjectReportRequest(),
     ObjectReport(ObjectReport),
     CombinedMarkersReport(CombinedMarkersReport),
     AccelReport(AccelReport),
@@ -57,16 +118,21 @@ impl TryFrom<u8> for StreamUpdateAction {
 
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, NoUninit, CheckedBitPattern)]
 pub struct Register {
     pub port: Port,
     pub bank: u8,
     pub address: u8,
 }
 
+impl Delegated for Register {
+    type Wire = Self;
+    const PACKET_TYPE: Option<PacketType> = Some(PacketType::ReadRegister());
+}
+
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, NoUninit, CheckedBitPattern)]
 pub struct WriteRegister {
     pub port: Port,
     pub bank: u8,
@@ -74,19 +140,29 @@ pub struct WriteRegister {
     pub data: u8,
 }
 
+impl Delegated for WriteRegister {
+    type Wire = Self;
+    const PACKET_TYPE: Option<PacketType> = Some(PacketType::WriteRegister());
+}
+
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, NoUninit, AnyBitPattern)]
 pub struct ReadRegisterResponse {
     pub bank: u8,
     pub address: u8,
     pub data: u8,
 }
 
+impl Delegated for ReadRegisterResponse {
+    type Wire = Self;
+    const PACKET_TYPE: Option<PacketType> = Some(PacketType::ReadRegisterResponse());
+}
+
 #[repr(C)]
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct AccelConfig {
     #[serde_inline_default(100)]
     pub accel_odr: u16,
@@ -112,69 +188,14 @@ impl Default for AccelConfig {
     }
 }
 
-impl AccelConfig {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let accel_odr = u16::from_le_bytes([bytes[0], bytes[1]]);
-        let b_x = f32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
-        let b_y = f32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]);
-        let b_z = f32::from_le_bytes([bytes[10], bytes[11], bytes[12], bytes[13]]);
-        let s_x = f32::from_le_bytes([bytes[14], bytes[15], bytes[16], bytes[17]]);
-        let s_y = f32::from_le_bytes([bytes[18], bytes[19], bytes[20], bytes[21]]);
-        let s_z = f32::from_le_bytes([bytes[22], bytes[23], bytes[24], bytes[25]]);
-        *bytes = &bytes[26..];
-        Ok(Self {
-            accel_odr,
-            b_x,
-            b_y,
-            b_z,
-            s_x,
-            s_y,
-            s_z,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.accel_odr.to_le_bytes());
-        for &b in &[self.b_x, self.b_y, self.b_z, self.s_x, self.s_y, self.s_z] {
-            buf.extend_from_slice(&b.to_le_bytes());
-        }
-    }
-}
-
 #[repr(C)]
 #[serde_inline_default]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, NoUninit, AnyBitPattern)]
 pub struct GyroConfig {
     pub b_x: f32,
     pub b_y: f32,
     pub b_z: f32,
-}
-
-impl Default for GyroConfig {
-    fn default() -> Self {
-        Self {
-            b_x: 0.0,
-            b_y: 0.0,
-            b_z: 0.0,
-        }
-    }
-}
-
-impl GyroConfig {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let b_x = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let b_y = f32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let b_z = f32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]);
-        *bytes = &bytes[12..];
-        Ok(Self { b_x, b_y, b_z })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        for &b in &[self.b_x, self.b_y, self.b_z] {
-            buf.extend_from_slice(&b.to_le_bytes());
-        }
-    }
 }
 
 #[repr(C)]
@@ -189,17 +210,9 @@ pub struct GeneralConfig {
     pub stereo_iso: Isometry3<f32>,
 }
 
-#[repr(C)]
-#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[derive(Clone, Debug)]
-pub struct Props {
-    pub uuid: [u8; 6],
-}
-
-impl Default for Props {
-    fn default() -> Self {
-        Self { uuid: [0; 6] }
-    }
+impl Delegated for GeneralConfig {
+    type Wire = wire::GeneralConfig;
+    const PACKET_TYPE: Option<PacketType> = None;
 }
 
 impl Default for GeneralConfig {
@@ -234,9 +247,16 @@ impl Default for GeneralConfig {
 }
 
 #[repr(C)]
-#[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug)]
-pub struct ObjectReportRequest {}
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[derive(Clone, Copy, Debug, Default, NoUninit, AnyBitPattern)]
+pub struct Props {
+    pub uuid: [u8; 6],
+}
+
+impl Delegated for Props {
+    type Wire = Self;
+    const PACKET_TYPE: Option<PacketType> = None;
+}
 
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
@@ -284,11 +304,21 @@ pub struct AccelReport {
     pub gyro: Vector3<f32>,
 }
 
+impl Delegated for AccelReport {
+    type Wire = wire::AccelReport;
+    const PACKET_TYPE: Option<PacketType> = Some(PacketType::AccelReport());
+}
+
 #[repr(C)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, NoUninit, AnyBitPattern)]
 pub struct ImpactReport {
     pub timestamp: u32,
+}
+
+impl Delegated for ImpactReport {
+    type Wire = Self;
+    const PACKET_TYPE: Option<PacketType> = Some(PacketType::ImpactReport());
 }
 
 #[repr(C)]
@@ -306,6 +336,7 @@ pub enum Error {
     UnrecognizedPacketId(u8),
     UnrecognizedPort,
     UnrecognizedStreamUpdateAction(u8),
+    InvalidBitPattern,
 }
 
 impl Display for Error {
@@ -321,6 +352,7 @@ impl Display for Error {
             S::UnrecognizedStreamUpdateAction(n) => {
                 write!(f, "unrecognized stream update action {n}")
             }
+            S::InvalidBitPattern => write!(f, "invalid bit pattern"),
         }
     }
 }
@@ -329,7 +361,7 @@ impl StdError for Error {}
 
 #[cfg_attr(feature = "pyo3", pyo3::pyclass(get_all))]
 #[repr(u8)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, NoUninit, CheckedBitPattern)]
 pub enum Port {
     Nf,
     Wf,
@@ -439,7 +471,7 @@ impl Packet {
             PacketData::ReadConfigResponse(_) => PacketType::ReadConfigResponse(),
             PacketData::ReadProps() => PacketType::ReadProps(),
             PacketData::ReadPropsResponse(_) => PacketType::ReadPropsResponse(),
-            PacketData::ObjectReportRequest(_) => PacketType::ObjectReportRequest(),
+            PacketData::ObjectReportRequest() => PacketType::ObjectReportRequest(),
             PacketData::ObjectReport(_) => PacketType::ObjectReport(),
             PacketData::CombinedMarkersReport(_) => PacketType::CombinedMarkersReport(),
             PacketData::AccelReport(_) => PacketType::AccelReport(),
@@ -467,22 +499,20 @@ impl Packet {
         *bytes = &bytes[4..];
         let data = match ty {
             PacketType::WriteRegister() => PacketData::WriteRegister(WriteRegister::parse(bytes)?),
-            PacketType::ReadRegister() => PacketData::ReadRegister(Register::parse(bytes, ty)?),
+            PacketType::ReadRegister() => PacketData::ReadRegister(Register::parse(bytes)?),
             PacketType::ReadRegisterResponse() => {
                 PacketData::ReadRegisterResponse(ReadRegisterResponse::parse(bytes)?)
             }
             PacketType::WriteConfig() => unimplemented!(),
             PacketType::ReadConfig() => PacketData::ReadConfig(),
             PacketType::ReadConfigResponse() => {
-                PacketData::ReadConfigResponse(GeneralConfig::parse(bytes, ty)?)
+                PacketData::ReadConfigResponse(GeneralConfig::parse(bytes)?)
             }
             PacketType::ReadProps() => PacketData::ReadProps(),
             PacketType::ReadPropsResponse() => {
-                PacketData::ReadPropsResponse(Props::parse(bytes, ty)?)
+                PacketData::ReadPropsResponse(Props::parse(bytes)?)
             }
-            PacketType::ObjectReportRequest() => {
-                PacketData::ObjectReportRequest(ObjectReportRequest {})
-            }
+            PacketType::ObjectReportRequest() => PacketData::ObjectReportRequest(),
             PacketType::ObjectReport() => PacketData::ObjectReport(ObjectReport::parse(bytes)?),
             PacketType::CombinedMarkersReport() => {
                 PacketData::CombinedMarkersReport(CombinedMarkersReport::parse(bytes)?)
@@ -504,26 +534,19 @@ impl Packet {
     }
 
     pub fn serialize(&self, buf: &mut Vec<u8>) {
-        macro_rules! calculate_length {
-            ($ty:ty) => {{
-                assert_eq!(std::mem::align_of::<$ty>(), 1);
-                std::mem::size_of::<$ty>() as u16
-            }};
-        }
-
         let len = match &self.data {
-            PacketData::WriteRegister(_) => calculate_length!(WriteRegister),
-            PacketData::ReadRegister(_) => calculate_length!(Register) + 1,
-            PacketData::ReadRegisterResponse(_) => calculate_length!(ReadRegisterResponse) + 1,
-            PacketData::WriteConfig(_) => GeneralConfig::SIZE,
+            PacketData::WriteRegister(_) => WriteRegister::SIZE as u16,
+            PacketData::ReadRegister(_) => Register::SIZE as u16,
+            PacketData::ReadRegisterResponse(_) => ReadRegisterResponse::SIZE as u16,
+            PacketData::WriteConfig(_) => GeneralConfig::SIZE as u16,
             PacketData::ReadConfig() => 0,
-            PacketData::ReadConfigResponse(_) => GeneralConfig::SIZE,
+            PacketData::ReadConfigResponse(_) => GeneralConfig::SIZE as u16,
             PacketData::ReadProps() => 0,
             PacketData::ReadPropsResponse(_) => 6,
-            PacketData::ObjectReportRequest(_) => calculate_length!(ObjectReportRequest),
+            PacketData::ObjectReportRequest() => 0,
             PacketData::ObjectReport(_) => ObjectReport::SIZE,
             PacketData::CombinedMarkersReport(_) => CombinedMarkersReport::SIZE,
-            PacketData::AccelReport(_) => 16,
+            PacketData::AccelReport(_) => AccelReport::SIZE as u16,
             PacketData::ImpactReport(_) => 4,
             PacketData::StreamUpdate(_) => 2,
             PacketData::FlashSettings() => 0,
@@ -540,19 +563,19 @@ impl Packet {
         buf.reserve(4 + usize::from(len));
         buf.extend_from_slice(&[words[0], words[1], ty.into(), self.id]);
         match &self.data {
-            PacketData::WriteRegister(x) => x.serialize(buf),
-            PacketData::ReadRegister(x) => x.serialize(buf),
-            PacketData::ReadRegisterResponse(x) => x.serialize(buf),
-            PacketData::WriteConfig(x) => x.serialize(buf),
+            PacketData::WriteRegister(x) => x.serialize_to_vec(buf),
+            PacketData::ReadRegister(x) => x.serialize_to_vec(buf),
+            PacketData::ReadRegisterResponse(x) => x.serialize_to_vec(buf),
+            PacketData::WriteConfig(x) => x.serialize_to_vec(buf),
             PacketData::ReadConfig() => (),
-            PacketData::ReadConfigResponse(x) => x.serialize(buf),
+            PacketData::ReadConfigResponse(x) => x.serialize_to_vec(buf),
             PacketData::ReadProps() => (),
-            PacketData::ReadPropsResponse(x) => x.serialize(buf),
-            PacketData::ObjectReportRequest(_) => (),
+            PacketData::ReadPropsResponse(x) => x.serialize_to_vec(buf),
+            PacketData::ObjectReportRequest() => (),
             PacketData::ObjectReport(x) => x.serialize(buf),
             PacketData::CombinedMarkersReport(x) => x.serialize(buf),
-            PacketData::AccelReport(x) => x.serialize(buf),
-            PacketData::ImpactReport(x) => x.serialize(buf),
+            PacketData::AccelReport(x) => x.serialize_to_vec(buf),
+            PacketData::ImpactReport(x) => x.serialize_to_vec(buf),
             PacketData::StreamUpdate(x) => {
                 buf.extend_from_slice(&[x.packet_id.into(), x.action as u8])
             }
@@ -616,160 +639,6 @@ impl PacketData {
             PacketData::ImpactReport(x) => Some(x),
             _ => None,
         }
-    }
-}
-
-impl Register {
-    pub fn parse(bytes: &mut &[u8], pkt_ty: PacketType) -> Result<Self, Error> {
-        use Error as E;
-        let [port, bank, address, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof {
-                packet_type: Some(pkt_ty),
-            });
-        };
-        let port = port.try_into()?;
-        *bytes = &bytes[4..];
-        Ok(Self {
-            port,
-            bank,
-            address,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.port as u8, self.bank, self.address, 0]);
-    }
-}
-
-impl ReadRegisterResponse {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        use Error as E;
-        let [bank, address, data, _, ..] = **bytes else {
-            return Err(E::UnexpectedEof {
-                packet_type: Some(PacketType::ReadRegisterResponse()),
-            });
-        };
-        *bytes = &bytes[4..];
-        Ok(Self {
-            bank,
-            address,
-            data,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.bank, self.address, self.data, 0]);
-    }
-}
-
-impl WriteRegister {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        use Error as E;
-        let [port, bank, address, data, ..] = **bytes else {
-            return Err(E::UnexpectedEof {
-                packet_type: Some(PacketType::WriteRegister()),
-            });
-        };
-        let port = port.try_into()?;
-        *bytes = &bytes[4..];
-        Ok(Self {
-            port,
-            bank,
-            address,
-            data,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.port as u8, self.bank, self.address, self.data]);
-    }
-}
-
-impl GeneralConfig {
-    pub const SIZE: u16 = 200;
-    pub fn parse(bytes: &mut &[u8], _pkt_ty: PacketType) -> Result<Self, Error> {
-        use Error as E;
-        let impact_threshold = bytes[0];
-
-        *bytes = &bytes[1..];
-
-        let accel_config = match AccelConfig::parse(bytes) {
-            Ok(x) => x,
-            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-        };
-
-        let gyro_config = match GyroConfig::parse(bytes) {
-            Ok(x) => x,
-            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-        };
-
-        let mut camera_model_nf: RosOpenCvIntrinsics<f32> =
-            match ats_common::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
-                Ok(x) => x.into(),
-                Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-            };
-
-        let mut camera_model_wf: RosOpenCvIntrinsics<f32> =
-            match ats_common::ocv_types::MinimalCameraCalibrationParams::parse(bytes) {
-                Ok(x) => x.into(),
-                Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-            };
-
-        let stereo_iso = match ats_common::ocv_types::MinimalStereoCalibrationParams::parse(bytes) {
-            Ok(x) => x.into(),
-            Err(_) => return Err(E::UnexpectedEof { packet_type: None }),
-        };
-
-        *bytes = &bytes[1..];
-
-        // HACK old configs use camera calibration based on 98x98.
-        // Check cx and rescale to 4095x4095
-        if camera_model_nf.p.m13 < 100.0 {
-            eprintln!("please recalibrate nearfield");
-            camera_model_nf.p.m11 *= 4095.0 / 98.0;
-            camera_model_nf.p.m22 *= 4095.0 / 98.0;
-            camera_model_nf.p.m13 *= 4095.0 / 98.0;
-            camera_model_nf.p.m23 *= 4095.0 / 98.0;
-        }
-        if camera_model_wf.p.m13 < 100.0 {
-            eprintln!("please recalibrate widefield");
-            camera_model_wf.p.m11 *= 4095.0 / 98.0;
-            camera_model_wf.p.m22 *= 4095.0 / 98.0;
-            camera_model_wf.p.m13 *= 4095.0 / 98.0;
-            camera_model_wf.p.m23 *= 4095.0 / 98.0;
-        }
-
-        Ok(Self {
-            impact_threshold,
-            accel_config,
-            gyro_config,
-            camera_model_nf,
-            camera_model_wf,
-            stereo_iso,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&[self.impact_threshold]);
-        self.accel_config.serialize(buf);
-        self.gyro_config.serialize(buf);
-        MinimalCameraCalibrationParams::from(self.camera_model_nf.clone()).serialize(buf);
-        MinimalCameraCalibrationParams::from(self.camera_model_wf.clone()).serialize(buf);
-        MinimalStereoCalibrationParams::from(self.stereo_iso).serialize(buf);
-        buf.push(0); // padding
-    }
-}
-
-impl Props {
-    pub fn parse(bytes: &mut &[u8], _pkt_ty: PacketType) -> Result<Self, Error> {
-        let mut uuid = [0; 6];
-        uuid.clone_from_slice(&bytes[..6]);
-        *bytes = &bytes[..6];
-        Ok(Self { uuid })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.uuid);
     }
 }
 
@@ -906,44 +775,6 @@ impl CombinedMarkersReport {
 }
 
 impl AccelReport {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        // accel: x, y, z, 16384 = 1g
-        // gyro: x, y, z, 16.4 = 1dps
-        let data = &mut &bytes[..16];
-        let timestamp = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        *data = &data[4..];
-        let accel = [(); 3].map(|_| {
-            let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = (x as f32 / 2048.0) * 9.81;
-            *data = &data[2..];
-            x
-        });
-        let gyro = [(); 3].map(|_| {
-            let x = i16::from_le_bytes([data[0], data[1]]);
-            let x = (x as f32 / 16.4).to_radians();
-            *data = &data[2..];
-            x
-        });
-        *bytes = &bytes[16..];
-        Ok(Self {
-            accel: Vector3::from(accel),
-            gyro: Vector3::from(gyro),
-            timestamp,
-        })
-    }
-
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.timestamp.to_le_bytes());
-        for a in self.accel.iter() {
-            let a = (a / 9.81 * 2048.0) as i16;
-            buf.extend_from_slice(&a.to_le_bytes());
-        }
-        for g in self.gyro.iter() {
-            let g = (g.to_degrees() * 16.4) as i16;
-            buf.extend_from_slice(&g.to_le_bytes());
-        }
-    }
-
     pub fn corrected_accel(&self, accel_config: &AccelConfig) -> Vector3<f32> {
         Vector3::new(
             (self.accel.x - accel_config.b_x) / accel_config.s_x,
@@ -967,17 +798,6 @@ impl AccelReport {
     #[getter]
     fn timestamp(&self) -> u32 {
         self.timestamp
-    }
-}
-
-impl ImpactReport {
-    pub fn parse(bytes: &mut &[u8]) -> Result<Self, Error> {
-        let timestamp = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        *bytes = &bytes[4..];
-        Ok(Self { timestamp })
-    }
-    pub fn serialize(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.timestamp.to_le_bytes());
     }
 }
 

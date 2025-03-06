@@ -24,8 +24,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use crate::{
     packets::vm::{
         AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport,
-        ObjectReportRequest, Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate,
-        WriteRegister,
+        Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate, WriteRegister,
     },
     udp_stream::UdpStream,
 };
@@ -499,7 +498,7 @@ impl UsbDevice {
 
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
         let r = self
-            .request(PacketData::ObjectReportRequest(ObjectReportRequest {}))
+            .request(PacketData::ObjectReportRequest())
             .await?
             .object_report()
             .with_context(|| "unexpected response")?;

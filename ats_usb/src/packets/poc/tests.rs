@@ -1,4 +1,4 @@
-use super::GeneralConfig;
+use super::{GeneralConfig, PacketType};
 
 #[test]
 fn test_general_config_parse_serialize() {
