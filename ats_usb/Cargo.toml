@@ -21,6 +21,7 @@ tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sy
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
 ats_common = { git = "https://github.com/odysseyarm/ats_common.git" }
+bytemuck = { version = "1.22.0", features = ["derive"] }
 
 [features]
 pyo3 = ["dep:pyo3"]

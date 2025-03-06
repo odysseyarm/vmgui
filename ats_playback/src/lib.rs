@@ -1,5 +1,4 @@
-use ats_usb::packets::vm::GeneralConfig;
-use ats_usb::packets::vm::Packet;
+use ats_usb::packets::vm::{GeneralConfig, Packet, Parse, Serialize};
 use std::io::Error;
 use std::io::Read;
 use std::io::Seek;
@@ -9,11 +8,7 @@ pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>),
     let mut file = std::fs::File::open(path).unwrap();
     let mut buf = [0; GeneralConfig::SIZE as usize];
     file.read_exact(&mut buf).unwrap();
-    let general_config = GeneralConfig::parse(
-        &mut &buf[..],
-        ats_usb::packets::vm::PacketType::ReadConfigResponse(),
-    )
-    .unwrap();
+    let general_config = GeneralConfig::parse(&mut &buf[..]).unwrap();
     let mut packets = Vec::new();
     loop {
         let mut buf = [0; 16];
