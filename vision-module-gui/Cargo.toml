@@ -29,7 +29,6 @@ ats_playback = { path = "../ats_playback" }
 ats_usb = { path = "../ats_usb" }
 tokio-stream = "0.1.14"
 pin-project = "1.1.4"
-sqpnp = { git = "https://github.com/0e4ef622/sqpnp.git" }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 enumn = "0.1.13"

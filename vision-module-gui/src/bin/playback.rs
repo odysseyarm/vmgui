@@ -300,7 +300,7 @@ fn socket_serve_thread(
                 }))
             }
             PacketData::ReadRegisterResponse(_) => unreachable!(),
-            PacketData::ObjectReportRequest(_) => todo!(),
+            PacketData::ObjectReportRequest() => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
             PacketData::StreamUpdate(s) => {
                 if s.action == StreamUpdateAction::DisableAll {

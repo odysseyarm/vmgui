@@ -129,7 +129,7 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 }))
             }
             PacketData::ReadRegisterResponse(_) => unreachable!(),
-            PacketData::ObjectReportRequest(_) => todo!(),
+            PacketData::ObjectReportRequest() => todo!(),
             PacketData::ObjectReport(_) => unreachable!(),
             PacketData::StreamUpdate(s) => {
                 if s.action == StreamUpdateAction::DisableAll {

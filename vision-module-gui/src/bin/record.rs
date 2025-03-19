@@ -1,6 +1,6 @@
 use std::{process::ExitCode, time::UNIX_EPOCH};
 
-use ats_usb::device::UsbDevice;
+use ats_usb::{device::UsbDevice, packets::vm::Serialize as _};
 use serialport::SerialPortType;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
@@ -114,7 +114,7 @@ async fn main() -> ExitCode {
         }
     }
     let mut bytes = vec![];
-    general_config.serialize(&mut bytes);
+    general_config.serialize_to_vec(&mut bytes);
     for (timestamp, packet_data) in packets.iter() {
         let packet = ats_usb::packets::vm::Packet {
             data: packet_data.clone(),

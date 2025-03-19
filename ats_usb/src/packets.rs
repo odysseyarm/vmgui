@@ -1,2 +1,3 @@
-pub mod vm;
-pub mod poc;
+pub mod vm {
+    pub use protodongers::*;
+}

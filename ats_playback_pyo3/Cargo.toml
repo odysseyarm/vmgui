@@ -15,5 +15,5 @@ ats_usb = { path = "../ats_usb", features = ["pyo3"] }
 ats_cv = { git = "https://github.com/odysseyarm/ats_cv" }
 
 [dependencies.pyo3]
-git = "https://github.com/PyO3/pyo3.git"
+version = "0.24.0"
 features = ["extension-module", "abi3-py38"]
