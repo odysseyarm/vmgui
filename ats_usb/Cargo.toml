@@ -11,17 +11,14 @@ argmin = "0.10.0"
 enumn = "0.1.13"
 nalgebra = "0.32.3"
 opencv-ros-camera = { version = "0.14.1" }
-pyo3 = { git = "https://github.com/PyO3/pyo3.git", optional = true }
 serde = "1.0.204"
-serde-inline-default = "0.2.0"
 serde_json = "1.0.121"
 serial2 = "0.2.19"
 socket2 = "0.5.7"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time", "net"] }
 tokio-stream = "0.1.14"
 tracing = "0.1.40"
-ats_common = { git = "https://github.com/odysseyarm/ats_common.git" }
-bytemuck = { version = "1.22.0", features = ["derive"] }
+protodongers = { git = "https://github.com/odysseyarm/protodonge-rs", features = ["std", "serde"] }
 
 [features]
-pyo3 = ["dep:pyo3"]
+pyo3 = ["protodongers/pyo3"]

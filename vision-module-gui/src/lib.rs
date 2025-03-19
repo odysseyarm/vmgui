@@ -5,7 +5,6 @@ use ats_usb::packets::vm::MotData;
 use nalgebra::Isometry3;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
 use serde::Serialize;
-use sqpnp::types::SQPSolution;
 
 pub mod config_window;
 pub mod consts;
@@ -94,8 +93,6 @@ pub struct MotState {
 
     pub fv_aimpoint_history: [(Point2<f32>, f32, Matrix3x1<f32>); 80],
     pub fv_aimpoint_history_index: usize,
-
-    pub previous_sqp_solution: Option<SQPSolution>,
 }
 
 impl Default for MotState {
@@ -121,7 +118,6 @@ impl Default for MotState {
             fv_zero_offset: Isometry3::identity(),
             fv_aimpoint_history: [(Point2::new(0.0, 0.0), 0., Matrix3x1::new(0.0, 0.0, 0.0)); 80],
             fv_aimpoint_history_index: 0,
-            previous_sqp_solution: None,
         }
     }
 }

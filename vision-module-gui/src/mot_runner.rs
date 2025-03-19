@@ -10,7 +10,6 @@ use leptos_reactive::RwSignal;
 use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
-use sqpnp::types::{SQPSolution, SolverParameters};
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio_stream::StreamExt;
@@ -34,26 +33,6 @@ pub fn transform_aimpoint_to_identity(
         Point2::new(0.5, 0.),
         Point2::new(1., 0.5),
     )
-}
-
-pub fn my_pnp(projections: &[Vector2<f64>]) -> Option<SQPSolution> {
-    let _3dpoints = [
-        Vector3::new(0.35 * 16. / 9., 0., 0.),
-        Vector3::new(0.65 * 16. / 9., 0., 0.),
-        Vector3::new(0.65 * 16. / 9., 1., 0.),
-        Vector3::new(0.35 * 16. / 9., 1., 0.),
-    ];
-    let solver = sqpnp::PnpSolver::new(&_3dpoints, &projections, None, SolverParameters::default());
-    if let Some(mut solver) = solver {
-        solver.solve();
-        debug!("pnp found {} solutions", solver.number_of_solutions());
-        if solver.number_of_solutions() >= 1 {
-            return Some(solver.solution_ptr(0).unwrap().clone());
-        }
-    } else {
-        info!("pnp solver failed");
-    }
-    None
 }
 
 /// Given 4 points in the following shape
