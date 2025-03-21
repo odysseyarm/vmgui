@@ -269,7 +269,10 @@ fn draw_raw(
                 ctx,
                 &ch_path,
                 p,
-                &format!("({:.3}, {:.3}) id={} area={}", mot_data.cx, mot_data.cy, i, mot_data.area),
+                &format!(
+                    "({:.3}, {:.3}) id={} area={}",
+                    mot_data.cx, mot_data.cy, i, mot_data.area
+                ),
             );
         }
     }
@@ -304,7 +307,10 @@ fn draw_raw(
                 ctx,
                 &ch_path,
                 p,
-                &format!("({:.3}, {:.3}) id={} area={}", mot_data.cx, mot_data.cy, i, mot_data.area),
+                &format!(
+                    "({:.3}, {:.3}) id={} area={}",
+                    mot_data.cx, mot_data.cy, i, mot_data.area
+                ),
             );
             // draw_crosshair_rotated(&ctx, &ch_path, p.x, p.y, 50.);
         }

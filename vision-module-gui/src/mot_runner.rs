@@ -190,7 +190,8 @@ fn my_raycast_update(runner: &mut MotRunner) {
     let screen_calibrations = runner.screen_calibrations.clone();
     let fv_state = &mut runner.state.fv_state;
     let offset = runner.state.fv_zero_offset;
-    let (pose, aimpoint_and_d) = ats_cv::helpers::raycast_update(&screen_calibrations, fv_state, Some(offset));
+    let (pose, aimpoint_and_d) =
+        ats_cv::helpers::raycast_update(&screen_calibrations, fv_state, Some(offset));
     if let Some(pose) = pose {
         let flip_yz = Matrix3::new(1., 0., 0., 0., -1., 0., 0., 0., -1.);
 
@@ -365,7 +366,11 @@ async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
         // Update aimpoint history
         let gravity_angle = -gravity_vec.z.atan2(-gravity_vec.x).to_degrees() + 90.0;
         let index = runner.state.fv_aimpoint_history_index;
-        runner.state.fv_aimpoint_history[index] = (runner.state.fv_aimpoint, gravity_angle, runner.state.translation_mat);
+        runner.state.fv_aimpoint_history[index] = (
+            runner.state.fv_aimpoint,
+            gravity_angle,
+            runner.state.translation_mat,
+        );
         runner.state.fv_aimpoint_history_index =
             (index + 1) % runner.state.fv_aimpoint_history.len();
 
@@ -387,9 +392,7 @@ fn create_point_tuples(points: &[Point2<u16>]) -> Vec<(u8, Point2<f32>)> {
         .iter()
         .enumerate()
         .filter(|(_id, pos)| **pos != Point2::new(0, 0))
-        .map(|(id, pos)| {
-            (id as u8, Point2::new(pos.x as f32, pos.y as f32))
-        })
+        .map(|(id, pos)| (id as u8, Point2::new(pos.x as f32, pos.y as f32)))
         .collect()
 }
 
