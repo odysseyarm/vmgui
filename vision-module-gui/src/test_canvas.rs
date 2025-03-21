@@ -171,22 +171,25 @@ impl AreaHandler for TestCanvas {
                     b'z' => {
                         let t = Translation3::new(0., -0.0381, 0.);
                         let quat = {
-                            let screen_calibrations = self.runner.lock().screen_calibrations.clone();
+                            let screen_calibrations =
+                                self.runner.lock().screen_calibrations.clone();
                             let fv_state = &self.runner.lock().state.fv_state;
-                            ats_cv::helpers::calculate_zero_offset_quat(t, Point2::new(0.5, 0.5), &screen_calibrations, fv_state)
+                            ats_cv::helpers::calculate_zero_offset_quat(
+                                t,
+                                Point2::new(0.5, 0.5),
+                                &screen_calibrations,
+                                fv_state,
+                            )
                         };
                         if let Some(quat) = quat {
-                            self.runner.lock().state.fv_zero_offset = Isometry3::from_parts(
-                                t,
-                                quat,
-                            );
+                            self.runner.lock().state.fv_zero_offset =
+                                Isometry3::from_parts(t, quat);
                         } else {
                             tracing::warn!("Failed to calculate zero offset quat");
                         }
-                
-                    },
+                    }
                     _ => (),
-                }
+                },
             }
             return true;
         }
