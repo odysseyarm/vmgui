@@ -169,8 +169,7 @@ pub fn config_window(
             .filter(|port| {
                 match &port.port_type {
                     UsbPort(port_info) => {
-                        if port_info.vid == 0x1915 && port_info.pid == 0x520F
-                            || port_info.pid == 0x5210
+                        if port_info.vid == 0x1915 && (port_info.pid == 0x520F || port_info.pid == 0x5210)
                         {
                             if let Some(i) = port_info.interface {
                                 // interface 0: cdc acm module
