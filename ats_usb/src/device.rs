@@ -21,6 +21,8 @@ use tokio::{
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, instrument, trace, warn};
 
+use num_derive::{FromPrimitive, ToPrimitive};
+
 use crate::{
     packets::vm::{
         AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport,
@@ -46,6 +48,14 @@ enum ResponseChannel {
 pub struct UsbDevice {
     to_thread: mpsc::Sender<Packet>,
     thread_state: Weak<State>,
+}
+
+#[derive(PartialEq, Eq)]
+#[derive(FromPrimitive, ToPrimitive)]
+pub enum ProductId {
+    PajUsb = 0x520F,
+    PajAts = 0x5210,
+    PocAts = 0x5211,
 }
 
 struct State {

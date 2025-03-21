@@ -356,6 +356,7 @@ fn socket_serve_thread(
                 state.lock().unwrap().props.clone(),
             )),
             PacketData::ReadPropsResponse(_) => unreachable!(),
+            PacketData::Ack() => unreachable!(),
             PacketData::Vendor(..) => None,
         };
 
@@ -529,6 +530,7 @@ impl State {
             },
             props: Props {
                 uuid: [42, 69, 3, 7, 9, 13],
+                product_id: ats_usb::device::ProductId::PajUsb as u16,
             },
         }
     }

@@ -42,6 +42,10 @@ pub fn config_window(
 
     let device = create_rw_signal(None);
     let connected = move || device.with(|d| d.is_some());
+
+    let (general_form, general_settings) =
+        GeneralSettingsForm::new(&ui, device.read_only(), mot_runner, config_win.c());
+
     crate::layout! { &ui,
         let vbox = VerticalBox(padded: true) {
             Compact : let device_hbox = HorizontalBox(padded: true) {
@@ -57,16 +61,22 @@ pub fn config_window(
             }
         }
     }
-    let (general_form, general_settings) =
-        GeneralSettingsForm::new(&ui, device.read_only(), mot_runner, config_win.c());
-    let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
+    let (mut wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
     tab_group.append(&ui, "General", general_form);
-    tab_group.append(&ui, "Wide field", wf_form);
+    tab_group.append(&ui, "Wide field", wf_form.c());
     tab_group.append(&ui, "Near field", nf_form);
     tab_group.set_margined(&ui, 0, true);
     tab_group.set_margined(&ui, 1, true);
     tab_group.set_margined(&ui, 2, true);
+
+    general_settings.device_pid.with(|pid| {
+        match num_traits::FromPrimitive::from_u16(*pid) {
+            Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => { wf_form.show(&ui); }
+            Some(ats_usb::device::ProductId::PocAts) => { wf_form.hide(&ui); }
+            _ => { wf_form.hide(&ui); }
+        }
+    });
 
     config_win.set_child(&ui, vbox);
 
@@ -92,7 +102,7 @@ pub fn config_window(
                     match &_device.port_type {
                         UsbPort(port_info) => Ok(UsbDevice::connect_serial(
                             &_device.port_name,
-                            port_info.pid == 0x5210,
+                            port_info.pid == ats_usb::device::ProductId::PajAts as u16,
                         )
                         .await?),
                         _ => Err(anyhow::anyhow!("Not a USB device")),
@@ -361,6 +371,7 @@ pub fn config_window(
 #[derive(Clone)]
 struct GeneralSettingsForm {
     device_uuid: RwSignal<[u8; 6]>,
+    device_pid: RwSignal<u16>,
     impact_threshold: RwSignal<i32>,
     accel_config: RwSignal<AccelConfig>,
     gyro_config: RwSignal<GyroConfig>,
@@ -378,6 +389,7 @@ impl GeneralSettingsForm {
         win: Window,
     ) -> (Form, Self) {
         let device_uuid = create_rw_signal([0; 6]);
+        let device_pid = create_rw_signal(0u16);
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
         let accel_config = create_rw_signal(AccelConfig::default());
@@ -474,6 +486,7 @@ impl GeneralSettingsForm {
                 stereo_iso,
                 mot_runner,
                 device_uuid,
+                device_pid,
             },
         )
     }
@@ -491,6 +504,7 @@ impl GeneralSettingsForm {
         self.wf_intrinsics.set(config.camera_model_wf.clone());
         self.stereo_iso.set(config.stereo_iso.clone());
         self.device_uuid.set(props.uuid);
+        self.device_pid.set(props.product_id);
 
         if first_load {
             self.mot_runner.lock().general_config = config;

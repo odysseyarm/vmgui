@@ -446,7 +446,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "ats_common"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/ats_common.git#d94ce8a0a1a699636f5aa65c903039c0a9e0889f"
+source = "git+https://github.com/odysseyarm/ats_common.git#eb43e0936fdf170b20f70304aaef364f344494d6"
 dependencies = [
  "nalgebra 0.32.6",
  "num",
@@ -500,6 +500,8 @@ dependencies = [
  "argmin",
  "enumn",
  "nalgebra 0.32.6",
+ "num-derive",
+ "num-traits",
  "opencv-ros-camera",
  "protodongers",
  "serde",
@@ -1501,9 +1503,9 @@ dependencies = [
 
 [[package]]
 name = "bytemuck_derive"
-version = "1.9.1"
+version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d35fadd3de6c82a550b136427123552b401efdab9859130f1cf485fbdea40af"
+checksum = "2ff22c2722516255d1823ce3cc4bc0b154dbc9364be5c905d6baa6eccbbc8774"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1550,9 +1552,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.16"
+version = "1.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be714c154be609ec7f5dad223a33bf1482fff90472de28f7362806e6d4832b8c"
+checksum = "1fcb57c740ae1daf453ae85f16e37396f672b039e00d9d866e07ddb24e328e3a"
 dependencies = [
  "jobserver",
  "libc",
@@ -3851,7 +3853,7 @@ version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
- "zerocopy 0.8.23",
+ "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -3903,7 +3905,7 @@ checksum = "afbdc74edc00b6f6a218ca6a5364d6226a259d4b8ea1af4a0ea063f27e179f4d"
 [[package]]
 name = "protodongers"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/protodonge-rs#851ccf135f992c7dd80bb23f07e8802a9d17e803"
+source = "git+https://github.com/odysseyarm/protodonge-rs#d2b79a1ecfcf2c16c1d3be9183422d42d0e832b4"
 dependencies = [
  "ats_common",
  "bytemuck",
@@ -3912,6 +3914,7 @@ dependencies = [
  "opencv-ros-camera",
  "pyo3",
  "serde",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -5044,6 +5047,8 @@ dependencies = [
  "iui",
  "leptos_reactive",
  "nalgebra 0.32.6",
+ "num-derive",
+ "num-traits",
  "opencv-ros-camera",
  "parking_lot",
  "pin-project",
@@ -5878,11 +5883,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd97444d05a4328b90e75e503a34bad781f14e28a823ad3557f0750df1ebcbc6"
+checksum = "2586fea28e186957ef732a5f8b3be2da217d65c5969d4b1e17f973ebbe876879"
 dependencies = [
- "zerocopy-derive 0.8.23",
+ "zerocopy-derive 0.8.24",
 ]
 
 [[package]]
@@ -5898,9 +5903,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.23"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6352c01d0edd5db859a63e2605f4ea3183ddbd15e2c4a9e7d32184df75e4f154"
+checksum = "a996a8f63c5c4448cd959ac1bab0aaa3306ccfd060472f85943ee0750f0169be"
 dependencies = [
  "proc-macro2",
  "quote",
