@@ -345,6 +345,7 @@ fn socket_serve_thread(
             }
             PacketData::FlashSettings() => None,
             PacketData::CombinedMarkersReport(_) => unreachable!(),
+            PacketData::PocMarkersReport(_) => unreachable!(),
             PacketData::ImpactReport(_) => unreachable!(),
             PacketData::AccelReport(_) => unreachable!(),
             PacketData::WriteConfig(_) => None,
