@@ -61,7 +61,7 @@ pub fn config_window(
             }
         }
     }
-    let (mut wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
+    let (wf_form, wf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = SensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
     tab_group.append(&ui, "General", general_form);
     tab_group.append(&ui, "Wide field", wf_form.c());
@@ -70,11 +70,18 @@ pub fn config_window(
     tab_group.set_margined(&ui, 1, true);
     tab_group.set_margined(&ui, 2, true);
 
-    general_settings.device_pid.with(|pid| {
-        match num_traits::FromPrimitive::from_u16(*pid) {
-            Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => { wf_form.show(&ui); }
-            Some(ats_usb::device::ProductId::PocAts) => { wf_form.hide(&ui); }
-            _ => { wf_form.hide(&ui); }
+    create_effect({
+        let ui = ui.c();
+        let wf_form = wf_form.c();
+        move |_| {
+            let mut wf_form = wf_form.c();
+            general_settings.device_pid.with(|pid| {
+                match num_traits::FromPrimitive::from_u16(*pid) {
+                    Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => { wf_form.show(&ui); }
+                    Some(ats_usb::device::ProductId::PocAts) => { wf_form.hide(&ui); }
+                    _ => { wf_form.hide(&ui); }
+                }
+            });
         }
     });
 
