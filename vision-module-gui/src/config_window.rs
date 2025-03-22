@@ -1,4 +1,5 @@
 mod paj_sensor_settings;
+mod poc_sensor_settings;
 
 use std::{sync::Arc, time::Duration};
 
@@ -65,23 +66,42 @@ pub fn config_window(
     }
     let (wf_form, wf_settings) = paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) = paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
+    let (poc_form, poc_settings) = poc_sensor_settings::PocSensorSettingsForm::new(&ui, device.read_only());
     tab_group.append(&ui, "General", general_form);
     tab_group.append(&ui, "Wide field", wf_form.c());
-    tab_group.append(&ui, "Near field", nf_form);
+    tab_group.append(&ui, "Near field", nf_form.c());
+    tab_group.append(&ui, "POC", poc_form.c());
     tab_group.set_margined(&ui, 0, true);
     tab_group.set_margined(&ui, 1, true);
     tab_group.set_margined(&ui, 2, true);
+    tab_group.set_margined(&ui, 3, true);
 
     create_effect({
         let ui = ui.c();
+        let nf_form = nf_form.c();
         let wf_form = wf_form.c();
+        let poc_form = poc_form.c();
         move |_| {
+            let mut nf_form = nf_form.c();
             let mut wf_form = wf_form.c();
+            let mut poc_form = poc_form.c();
             general_settings.device_pid.with(|pid| {
                 match num_traits::FromPrimitive::from_u16(*pid) {
-                    Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => { wf_form.show(&ui); }
-                    Some(ats_usb::device::ProductId::PocAts) => { wf_form.hide(&ui); }
-                    _ => { wf_form.hide(&ui); }
+                    Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => {
+                        nf_form.show(&ui);
+                        wf_form.show(&ui);
+                        poc_form.hide(&ui);
+                    }
+                    Some(ats_usb::device::ProductId::PocAts) => {
+                        nf_form.hide(&ui);
+                        wf_form.hide(&ui);
+                        poc_form.show(&ui);
+                    }
+                    _ => {
+                        nf_form.hide(&ui);
+                        wf_form.hide(&ui);
+                        poc_form.hide(&ui);
+                    }
                 }
             });
         }
@@ -101,6 +121,7 @@ pub fn config_window(
             general_settings.clear();
             wf_settings.clear();
             nf_settings.clear();
+            poc_settings.clear();
             let Ok(i) = usize::try_from(i) else { return };
             let _device = device_list.with_untracked(|d| d.get(i).cloned());
             let sim_addr = sim_addr.c();
@@ -123,9 +144,16 @@ pub fn config_window(
                 };
                 match usb_device {
                     Ok(usb_device) => {
-                        general_settings.load_from_device(&usb_device, true).await?;
-                        wf_settings.load_from_device(&usb_device).await?;
-                        nf_settings.load_from_device(&usb_device).await?;
+                        match num_traits::FromPrimitive::from_u16(general_settings.load_from_device(&usb_device, true).await?) {
+                            Some(ats_usb::device::ProductId::PajAts) | Some(ats_usb::device::ProductId::PajUsb) => {
+                                wf_settings.load_from_device(&usb_device).await?;
+                                nf_settings.load_from_device(&usb_device).await?;
+                            }
+                            Some(ats_usb::device::ProductId::PocAts) => {
+                                poc_settings.load_from_device(&usb_device).await?;
+                            }
+                            None => {}
+                        }
                         device.set(Some(usb_device));
                         Result::<()>::Ok(())
                     }
@@ -502,7 +530,7 @@ impl GeneralSettingsForm {
         )
     }
 
-    async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<()> {
+    async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<u16> {
         let timeout = Duration::from_millis(5000);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
         let props = retry(|| device.read_props(), timeout, 3).await.unwrap()?;
@@ -520,7 +548,7 @@ impl GeneralSettingsForm {
         if first_load {
             self.mot_runner.lock().general_config = config;
         }
-        Ok(())
+        Ok(props.product_id)
     }
 
     fn validate(&self, errors: &mut Vec<String>) {
