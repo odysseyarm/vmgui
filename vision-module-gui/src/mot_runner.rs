@@ -125,7 +125,7 @@ pub struct MotRunner {
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {
     tokio::join!(
-        combined_markers_loop(runner.clone()),
+        markers_loop(runner.clone()),
         accel_stream(runner.clone()),
         impact_loop(runner.clone()),
     );
@@ -206,11 +206,14 @@ fn my_raycast_update(runner: &mut MotRunner) {
     }
 }
 
-async fn combined_markers_loop(runner: Arc<Mutex<MotRunner>>) {
+async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = runner.lock().device.c().unwrap();
-    let mut combined_markers_stream = device.stream_combined_markers().await.unwrap();
+    let combined_markers_stream = device.stream_combined_markers().await.unwrap();
+    let poc_markers_stream = device.stream_poc_markers().await.unwrap();
 
-    while let Some(report) = combined_markers_stream.next().await {
+    let mut markers_stream = combined_markers_stream.merge(poc_markers_stream.map(|x| x.into()));
+
+    while let Some(report) = markers_stream.next().await {
         let CombinedMarkersReport {
             nf_points,
             wf_points,

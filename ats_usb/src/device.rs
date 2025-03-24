@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use protodongers::PocMarkersReport;
 use serial2;
 use std::{
     any::Any,
@@ -557,6 +558,15 @@ impl UsbDevice {
             .stream(PacketType::CombinedMarkersReport())
             .await?
             .filter_map(|x| x.combined_markers_report()))
+    }
+
+    pub async fn stream_poc_markers(
+        &self,
+    ) -> Result<impl Stream<Item = PocMarkersReport> + Send + Sync> {
+        Ok(self
+            .stream(PacketType::PocMarkersReport())
+            .await?
+            .filter_map(|x| x.poc_markers_report()))
     }
 
     pub async fn stream_accel(&self) -> Result<impl Stream<Item = AccelReport> + Send + Sync> {
