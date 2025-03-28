@@ -3906,7 +3906,7 @@ checksum = "afbdc74edc00b6f6a218ca6a5364d6226a259d4b8ea1af4a0ea063f27e179f4d"
 [[package]]
 name = "protodongers"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/protodonge-rs#cb22321b5c21f621bb8e23cafe53670820be9f44"
+source = "git+https://github.com/odysseyarm/protodonge-rs#53ca8b198db356a514d991dcaa3c01a1b468be4e"
 dependencies = [
  "ats_common",
  "bytemuck",

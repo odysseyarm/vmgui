@@ -720,6 +720,7 @@ macro_rules! write_register_spec {
 }
 
 impl UsbDevice {
+    // paj
     read_register_spec!(product_id: u16 = 0x00; [0x02, 0x03]);
     read_register_spec!(resolution_x: u16 = 0x0c; [0x60, 0x61]);
     read_register_spec!(resolution_y: u16 = 0x0c; [0x62, 0x63]);
@@ -749,6 +750,13 @@ impl UsbDevice {
     write_register_spec!(set_frame_period: u32 = 0x0c; [0x07, 0x08, 0x09]);
     write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
     write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
+
+    // pag
+    read_register_spec!(pag_chip_id: u16 = 0x00; [0x00, 0x01]);
+    read_register_spec!(poc_exposure: u8 = 0x00; [0x66]);
+    write_register_spec!(set_poc_exposure: u8 = 0x00; [0x66]);
+    read_register_spec!(poc_gain: u8 = 0x00; [0x67]);
+    write_register_spec!(set_poc_gain: u8 = 0x00; [0x67]);
 }
 
 #[cfg(test)]
