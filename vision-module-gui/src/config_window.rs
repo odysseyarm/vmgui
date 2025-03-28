@@ -275,47 +275,72 @@ pub fn config_window(
                 return false;
             }
 
-            wf_settings.validate(&mut errors);
-            if !errors.is_empty() {
-                let mut message = String::new();
-                for msg in &errors {
-                    message.push_str(&msg);
-                    message.push('\n');
-                }
-                config_win
-                    .modal_err_async(&ui, "Wide Field Validation Error", &message)
-                    .await;
-                return false;
-            }
+            match num_traits::FromPrimitive::from_u16(general_settings.device_pid.get_untracked()) {
+                Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => {
+                    wf_settings.validate(&mut errors);
+                    if !errors.is_empty() {
+                        let mut message = String::new();
+                        for msg in &errors {
+                            message.push_str(&msg);
+                            message.push('\n');
+                        }
+                        config_win
+                            .modal_err_async(&ui, "Wide Field Validation Error", &message)
+                            .await;
+                        return false;
+                    }
 
-            nf_settings.validate(&mut errors);
-            if !errors.is_empty() {
-                let mut message = String::new();
-                for msg in &errors {
-                    message.push_str(&msg);
-                    message.push('\n');
-                }
-                config_win
-                    .modal_err_async(&ui, "Near Field Validation Error", &message)
-                    .await;
-                return false;
-            }
+                    nf_settings.validate(&mut errors);
+                    if !errors.is_empty() {
+                        let mut message = String::new();
+                        for msg in &errors {
+                            message.push_str(&msg);
+                            message.push('\n');
+                        }
+                        config_win
+                            .modal_err_async(&ui, "Near Field Validation Error", &message)
+                            .await;
+                        return false;
+                    }
 
+                    if let Err(e) = wf_settings.apply(&device).await {
+                        config_win
+                            .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
+                            .await;
+                        return false;
+                    };
+                    if let Err(e) = nf_settings.apply(&device).await {
+                        config_win
+                            .modal_err_async(&ui, "Failed to apply near field settings", &e.to_string())
+                            .await;
+                        return false;
+                    };
+                }
+                Some(ats_usb::device::ProductId::PocAts) => {
+                    poc_settings.validate(&mut errors);
+                    if !errors.is_empty() {
+                        let mut message = String::new();
+                        for msg in &errors {
+                            message.push_str(&msg);
+                            message.push('\n');
+                        }
+                        config_win
+                            .modal_err_async(&ui, "Pag Validation Error", &message)
+                            .await;
+                        return false;
+                    }
+                    if let Err(e) = poc_settings.apply(&device).await {
+                        config_win
+                            .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
+                            .await;
+                        return false;
+                    };
+                }
+                _ => unreachable!()
+            }
             if let Err(e) = general_settings.apply(&device).await {
                 config_win
                     .modal_err_async(&ui, "Failed to apply general settings", &e.to_string())
-                    .await;
-                return false;
-            };
-            if let Err(e) = wf_settings.apply(&device).await {
-                config_win
-                    .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
-                    .await;
-                return false;
-            };
-            if let Err(e) = nf_settings.apply(&device).await {
-                config_win
-                    .modal_err_async(&ui, "Failed to apply near field settings", &e.to_string())
                     .await;
                 return false;
             };
@@ -382,6 +407,7 @@ pub fn config_window(
                 general_settings.load_defaults();
                 nf_settings.load_defaults();
                 wf_settings.load_defaults();
+                poc_settings.load_defaults();
             }
         }
     });
@@ -395,6 +421,7 @@ pub fn config_window(
                     _ = general_settings.load_from_device(&device, false).await;
                     _ = nf_settings.load_from_device(&device).await;
                     _ = wf_settings.load_from_device(&device).await;
+                    _ = poc_settings.load_from_device(&device).await;
                 });
             }
         }
