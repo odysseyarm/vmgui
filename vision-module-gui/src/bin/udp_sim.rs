@@ -251,8 +251,9 @@ fn socket_serve_thread(mut sock: UdpStream, state: Arc<Mutex<State>>) {
             PacketData::ReadConfigResponse(_) => unreachable!(),
             PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(Default::default())),
             PacketData::ReadPropsResponse(_) => unreachable!(),
-            PacketData::Vendor(_, _) => None,
             PacketData::Ack() => unreachable!(),
+            PacketData::WriteMode(_) => None,
+            PacketData::Vendor(_, _) => None,
         };
 
         if let Some(data) = response {

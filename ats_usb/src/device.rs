@@ -592,6 +592,13 @@ impl UsbDevice {
             .await?;
         Ok(())
     }
+
+    pub async fn write_mode(&self, mode: protodongers::Mode) -> Result<()> {
+        let data = PacketData::WriteMode(mode);
+        let pkt = Packet { id: 255, data };
+        self.to_thread.send(pkt).await?;
+        Ok(())
+    }
 }
 
 pub fn encode_slip_frame(buf: &mut Vec<u8>) {
@@ -753,10 +760,18 @@ impl UsbDevice {
 
     // pag
     read_register_spec!(pag_chip_id: u16 = 0x00; [0x00, 0x01]);
-    read_register_spec!(poc_exposure: u8 = 0x00; [0x66]);
-    write_register_spec!(set_poc_exposure: u8 = 0x00; [0x66]);
-    read_register_spec!(poc_gain: u8 = 0x00; [0x67]);
-    write_register_spec!(set_poc_gain: u8 = 0x00; [0x67]);
+    read_register_spec!(pag_fps: u16 = 0x00; [0x13]);
+    write_register_spec!(set_pag_fps: u8 = 0x00; [0x13]);
+    read_register_spec!(pag_exposure: u8 = 0x00; [0x66]);
+    write_register_spec!(set_pag_exposure: u8 = 0x00; [0x66]);
+    read_register_spec!(pag_gain: u8 = 0x00; [0x67]);
+    write_register_spec!(set_pag_gain: u8 = 0x00; [0x67]);
+    read_register_spec!(pag_area_lower: u16 = 0x00; [0x68, 0x69]);
+    write_register_spec!(set_pag_area_lower: u16 = 0x00; [0x68, 0x69]);
+    read_register_spec!(pag_area_upper: u16 = 0x00; [0x6A, 0x6B]);
+    write_register_spec!(set_pag_area_upper: u16 = 0x00; [0x6A, 0x6B]);
+    read_register_spec!(pag_light_threshold: u8 = 0x00; [0x6C]);
+    write_register_spec!(set_pag_light_threshold: u8 = 0x00; [0x6C]);
 }
 
 #[cfg(test)]

@@ -13,7 +13,6 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio_stream::StreamExt;
-use tracing::{debug, info};
 
 pub fn transform_aimpoint_to_identity(
     center_aim: Point2<f64>,
@@ -423,6 +422,8 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
             gyro: accel.corrected_gyro(&runner.general_config.gyro_config),
             timestamp: accel.timestamp,
         };
+
+        // println!("Timestamp: {}", accel.timestamp);
 
         // println!("{:7.3?} {:7.3?}", accel.accel.xzy(), accel.gyro.xzy());
         // println!("{:7.3?}", accel.accel.norm());

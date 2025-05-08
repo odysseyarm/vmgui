@@ -358,6 +358,7 @@ fn socket_serve_thread(
             )),
             PacketData::ReadPropsResponse(_) => unreachable!(),
             PacketData::Ack() => unreachable!(),
+            PacketData::WriteMode(_) => None,
             PacketData::Vendor(..) => None,
         };
 
