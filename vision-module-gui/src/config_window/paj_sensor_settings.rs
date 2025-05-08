@@ -139,7 +139,9 @@ impl PajSensorSettingsForm {
         let area_threshold_min = retry(|| device.area_threshold_min(self.port), timeout, 3)
             .await
             .unwrap()?;
-        let area_threshold_max = device.area_threshold_max(self.port).await?;
+        let area_threshold_max = retry(|| device.area_threshold_max(self.port), timeout, 3)
+            .await
+            .unwrap()?;
         let max_object_cnt = retry(|| device.max_object_cnt(self.port), timeout, 3)
             .await
             .unwrap()?;

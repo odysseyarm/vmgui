@@ -3,94 +3,68 @@ use std::time::Duration;
 use anyhow::Result;
 use ats_usb::{device::UsbDevice, packets::vm::Port};
 use iui::{controls::Form, UI};
-use leptos_reactive::{create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith, SignalWithUntracked};
+use leptos_reactive::{create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
 
 use super::retry;
 
 #[derive(Copy, Clone)]
 pub struct PocSensorSettingsForm {
     cid: RwSignal<String>,
-    // resolution_x: RwSignal<String>,
-    // resolution_y: RwSignal<String>,
+    fps: RwSignal<i32>,
     exposure_us: RwSignal<i32>,
-    // frame_period: RwSignal<String>,
-    // brightness_threshold: RwSignal<String>,
-    // noise_threshold: RwSignal<String>,
-    // area_threshold_min: RwSignal<String>,
-    // area_threshold_max: RwSignal<String>,
-    // max_object_cnt: RwSignal<String>,
-
-    // operation_mode: RwSignal<i32>,
-    // frame_subtraction: RwSignal<i32>,
     gain: RwSignal<i32>,
+    area_threshold_min: RwSignal<i32>,
+    area_threshold_max: RwSignal<i32>,
+    light_threshold: RwSignal<i32>,
 }
 
 impl PocSensorSettingsForm {
     pub fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let cid = create_rw_signal(String::new());
-        // let resolution_x = create_rw_signal(String::new());
-        // let resolution_y = create_rw_signal(String::new());
+        let fps = create_rw_signal(0);
         let exposure_us = create_rw_signal(0);
-        // let frame_period = create_rw_signal(String::new());
-        // let brightness_threshold = create_rw_signal(String::new());
-        // let noise_threshold = create_rw_signal(String::new());
-        // let area_threshold_min = create_rw_signal(String::new());
-        // let area_threshold_max = create_rw_signal(String::new());
-        // let max_object_cnt = create_rw_signal(String::new());
-        // let operation_mode = create_rw_signal(0);
-        // let frame_subtraction = create_rw_signal(0);
+        let area_threshold_min = create_rw_signal(0);
+        let area_threshold_max = create_rw_signal(0);
+        let light_threshold = create_rw_signal(0);
         let gain = create_rw_signal(0);
 
-        // let frame_period_ms = move || match frame_period.with(|s| s.parse::<u32>()) {
-        //     Ok(n) => format!("{:.4}", f64::from(n) / 1e4),
-        //     Err(_) => format!("???"),
-        // };
-        // let fps = move || match frame_period.with(|s| s.parse::<u32>()) {
-        //     Ok(n) => format!("{:.2}", 1e7 / f64::from(n)),
-        //     Err(_) => format!("???"),
-        // };
         crate::layout! { &ui,
             let form = Form(padded: true) {
                 (Compact, "Chip ID")               : let chip_id = Entry(value: cid, enabled: false)
-                // (Compact, "DSP brightness threshold") : let x = Entry(enabled: connected, signal: brightness_threshold)
-                // (Compact, "DSP noise threshold")      : let x = Entry(enabled: connected, signal: noise_threshold)
-                // (Compact, "DSP area threshold min")   : let x = Entry(enabled: connected, signal: area_threshold_min)
-                // (Compact, "DSP area threshold max")   : let x = Entry(enabled: connected, signal: area_threshold_max)
-                // (Compact, "DSP maximum object count") : let x = Entry(enabled: connected, signal: max_object_cnt)
-                // (Compact, "DSP operation mode")       : let x = Combobox(enabled: connected, signal: operation_mode) { "Normal", "Tracking" }
-                (Compact, "Exposure time (us)")          : let x = Spinbox(enabled: connected, signal: exposure_us)
-                // (Compact, "Frame period") : let x = HorizontalBox(padded: true) {
-                //     Stretchy : let e = Entry(
-                //         enabled: connected,
-                //         signal: frame_period,
-                //     )
-                //     Compact : let fps_label = LayoutGrid() {
-                //         (0, 0)(1, 1) Vertical (Start, Center) : let s = Label(move || format!("{} ms ({} fps)", frame_period_ms(), fps()))
-                //     }
-                // }
-                // (Compact, "Frame subtraction")  : let x = Combobox(enabled: connected, signal: frame_subtraction) { "Off", "On" }
-                (Compact, "Gain")               : let gain_combobox = Spinbox(enabled: connected, signal: gain)
-                // (Compact, "Scale resolution X") : let x = Entry(enabled: connected, signal: resolution_x)
-                // (Compact, "Scale resolution Y") : let x = Entry(enabled: connected, signal: resolution_y)
+                (Compact, "FPS")                   : let x = Spinbox(enabled: connected, signal: fps)
+                (Compact, "Exposure time (us)")    : let x = Spinbox(enabled: connected, signal: exposure_us)
+                (Compact, "Gain")                  : let gain_combobox = Spinbox(enabled: connected, signal: gain)
+                (Compact, "Light threshold")       : let x = Spinbox(enabled: connected, signal: light_threshold)
+                (Compact, "Area threshold min")    : let x = Spinbox(enabled: connected, signal: area_threshold_min)
+                (Compact, "Area threshold max")    : let x = Spinbox(enabled: connected, signal: area_threshold_max)
+                (Compact, "Can I habe da img pls") : let img_mode_btn = Button("👍", enabled: connected)
             }
         }
+
+        let ui_ctx = ui.async_context();
+
+        img_mode_btn.on_clicked(&ui, move |_| {
+            let timeout = Duration::from_millis(2000);
+            if let Some(device) = device.get_untracked() {
+                ui_ctx.spawn(async move {
+                    _ = retry(|| device.write_mode(ats_usb::packets::vm::Mode::Image), timeout, 3)
+                        .await
+                        .unwrap();
+                });
+            }
+        });
+
         (
             form,
             Self {
                 cid,
-                // resolution_x,
-                // resolution_y,
+                fps,
                 exposure_us,
-                // frame_period,
-                // brightness_threshold,
-                // noise_threshold,
-                // area_threshold_min,
-                // area_threshold_max,
-                // max_object_cnt,
-                // operation_mode,
-                // frame_subtraction,
                 gain,
+                area_threshold_min,
+                area_threshold_max,
+                light_threshold,
             },
         )
     }
@@ -101,57 +75,34 @@ impl PocSensorSettingsForm {
         let cid = retry(|| device.pag_chip_id(Port::Nf), timeout, 3)
             .await
             .unwrap()?;
-        // let res_x = retry(|| device.resolution_x(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let res_y = retry(|| device.resolution_y(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        let expo = retry(|| device.poc_exposure(Port::Nf), timeout, 3)
+        let fps = retry(|| device.pag_fps(Port::Nf), timeout, 3)
+            .await
+            .unwrap()?;
+        let expo = retry(|| device.pag_exposure(Port::Nf), timeout, 3)
             .await
             .unwrap()?;
         let _led_always_on = expo & (1 << 7) != 0;
-        // let frame_period = retry(|| device.frame_period(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let brightness_threshold = retry(|| device.brightness_threshold(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let noise_threshold = retry(|| device.noise_threshold(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let area_threshold_min = retry(|| device.area_threshold_min(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let area_threshold_max = device.area_threshold_max(self.port).await?;
-        // let max_object_cnt = retry(|| device.max_object_cnt(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let operation_mode = retry(|| device.operation_mode(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        // let frame_subtraction = retry(|| device.frame_subtraction(self.port), timeout, 3)
-        //     .await
-        //     .unwrap()?;
-        let gain = retry(|| device.poc_gain(Port::Nf), timeout, 3)
+        let area_threshold_min = retry(|| device.pag_area_lower(Port::Nf), timeout, 3)
+            .await
+            .unwrap()?;
+        let area_threshold_max = retry(|| device.pag_area_upper(Port::Nf), timeout, 3)
+            .await
+            .unwrap()?;
+        let light_threshold = retry(|| device.pag_light_threshold(Port::Nf), timeout, 3)
+            .await
+            .unwrap()?;
+        let gain = retry(|| device.pag_gain(Port::Nf), timeout, 3)
             .await
             .unwrap()?;
 
         self.cid.set(format!("0x{cid:04x}"));
-        // self.resolution_x.set(res_x.to_string());
-        // self.resolution_y.set(res_y.to_string());
+        self.fps.set(i32::from(fps));
         self.exposure_us.set(i32::from(u16::from(expo & !(1 << 7)) * 100));
-        // self.frame_period.set(frame_period.to_string());
-        // self.brightness_threshold
-        //     .set(brightness_threshold.to_string());
-        // self.noise_threshold.set(noise_threshold.to_string());
-        // self.area_threshold_min.set(area_threshold_min.to_string());
-        // self.area_threshold_max.set(area_threshold_max.to_string());
-        // self.max_object_cnt.set(max_object_cnt.to_string());
-
-        // self.operation_mode.set(i32::from(operation_mode));
-        // self.frame_subtraction.set(i32::from(frame_subtraction));
         self.gain.set(i32::from(gain));
+
+        self.area_threshold_min.set(i32::from(u16::from(area_threshold_min)));
+        self.area_threshold_max.set(i32::from(u16::from(area_threshold_max)));
+        self.light_threshold.set(i32::from(light_threshold));
         Ok(())
     }
 
@@ -203,6 +154,8 @@ impl PocSensorSettingsForm {
 
     /// Make sure to call `validate()` before calling this method.
     pub async fn apply(&self, device: &UsbDevice) -> Result<()> {
+        let fps = u8::try_from(self.fps.get_untracked()).unwrap();
+
         let gain = u8::try_from(self.gain.get_untracked()).unwrap();
 
         let exposure_us = self.exposure_us.get_untracked();
@@ -212,83 +165,36 @@ impl PocSensorSettingsForm {
         let led_always_on = true;
         let exposure = (exposure_us / 100) as u8 | ((led_always_on as u8) << 7);
 
+        let area_threshold_min = u16::try_from(self.area_threshold_min.get_untracked()).unwrap();
+        let area_threshold_max = u16::try_from(self.area_threshold_max.get_untracked()).unwrap();
+        let light_threshold = u8::try_from(self.light_threshold.get_untracked()).unwrap();
+
         tokio::try_join!(
-        //     device.set_resolution_x(
-        //         self.port,
-        //         self.resolution_x.with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_resolution_y(
-        //         self.port,
-        //         self.resolution_y.with_untracked(|v| v.parse().unwrap())
-        //     ),
-            device.set_poc_gain(Port::Nf, gain),
-            device.set_poc_exposure(
+            device.set_pag_fps(Port::Nf, fps),
+            device.set_pag_gain(Port::Nf, gain),
+            device.set_pag_exposure(
                 Port::Nf,
                 exposure,
             ),
-        //     device.set_brightness_threshold(
-        //         self.port,
-        //         self.brightness_threshold
-        //             .with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_noise_threshold(
-        //         self.port,
-        //         self.noise_threshold.with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_area_threshold_max(
-        //         self.port,
-        //         self.area_threshold_max
-        //             .with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_area_threshold_min(
-        //         self.port,
-        //         self.area_threshold_min
-        //             .with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_operation_mode(
-        //         self.port,
-        //         u8::try_from(self.operation_mode.get_untracked()).unwrap()
-        //     ),
-        //     device.set_max_object_cnt(
-        //         self.port,
-        //         self.max_object_cnt.with_untracked(|v| v.parse().unwrap())
-        //     ),
-        //     device.set_frame_subtraction(
-        //         self.port,
-        //         u8::try_from(self.frame_subtraction.get_untracked()).unwrap()
-        //     ),
-        //     device.set_frame_period(
-        //         self.port,
-        //         self.frame_period.with_untracked(|v| v.parse().unwrap())
-        //     ),
+            device.set_pag_area_lower(Port::Nf, area_threshold_min),
+            device.set_pag_area_upper(Port::Nf, area_threshold_max),
+            device.set_pag_light_threshold(Port::Nf, light_threshold),
         )?;
-        // tokio::try_join!(
-        //     device.set_bank1_sync_updated(self.port, 1),
-        //     device.set_bank0_sync_updated(self.port, 1),
-        // )?;
         Ok(())
     }
 
     pub fn clear(&self) {
         self.cid.update(String::clear);
-        // self.resolution_x.update(String::clear);
-        // self.resolution_y.update(String::clear);
+        self.fps.set(0);
         self.exposure_us.set(0);
-        // self.frame_period.update(String::clear);
-        // self.brightness_threshold.update(String::clear);
-        // self.noise_threshold.update(String::clear);
-        // self.area_threshold_min.update(String::clear);
-        // self.area_threshold_max.update(String::clear);
-        // self.max_object_cnt.update(String::clear);
-
-        // self.operation_mode.set(0);
-        // self.frame_subtraction.set(0);
         self.gain.set(0);
+
+        self.area_threshold_min.set(0);
+        self.area_threshold_max.set(0);
+        self.light_threshold.set(0);
     }
 
     pub fn load_defaults(&self) {
-        // self.resolution_x.update(|s| s.replace_range(.., "4095"));
-        // self.resolution_y.update(|s| s.replace_range(.., "4095"));
         // self.frame_period.update(|s| s.replace_range(.., "49780"));
         // self.brightness_threshold
         //     .update(|s| s.replace_range(.., "110"));
@@ -300,7 +206,12 @@ impl PocSensorSettingsForm {
         // self.operation_mode.set(0);
         // self.frame_subtraction.set(0);
 
+        self.fps.set(180);
+        self.exposure_us.set(2000);
         self.gain.set(2);
+        self.area_threshold_min.set(10);
+        self.area_threshold_max.set(u16::MAX.into());
+        self.light_threshold.set(120);
         // match self.port {
         //     Port::Nf => {
         //         self.area_threshold_min
