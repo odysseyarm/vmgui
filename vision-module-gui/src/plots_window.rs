@@ -1,8 +1,8 @@
-use std::{f64::consts::PI, ops::Range};
+use std::{cell::Cell, f64::consts::PI, ops::Range, rc::Rc};
 
 use ats_cv::telemetry::Series;
 use iui::{
-    controls::{Area, AreaDrawParams, AreaHandler, Window, WindowType},
+    controls::{Area, AreaDrawParams, AreaHandler, AreaKeyEvent, Window, WindowType},
     draw::plotters::PlottersBackend,
     UI,
 };
@@ -20,9 +20,12 @@ use crate::CloneButShorter;
 
 pub fn plots_window(ui: &UI) -> Window {
     let mut window = Window::new(ui, "le plot", 640, 480, WindowType::NoMenubar);
+    let paused = Rc::new(Cell::new(false));
     crate::layout! { ui,
         let vbox = VerticalBox(padded: false) {
-            Stretchy : let area = Area(Box::new(MainCanvas))
+            Stretchy : let area = Area(Box::new(MainCanvas {
+                paused: paused.c(),
+            }))
         }
     }
     window.set_child(&ui, vbox);
@@ -38,9 +41,12 @@ pub fn plots_window(ui: &UI) -> Window {
         let window = window.c();
         let ui = ui.c();
         let area = area.c();
+        let paused = paused.c();
         move || {
-            if window.visible(&ui) {
-                area.queue_redraw_all(&ui);
+            if !paused.get() {
+                if window.visible(&ui) {
+                    area.queue_redraw_all(&ui);
+                }
             }
             true
         }
@@ -49,7 +55,9 @@ pub fn plots_window(ui: &UI) -> Window {
     window
 }
 
-struct MainCanvas;
+struct MainCanvas {
+    paused: Rc<Cell<bool>>,
+}
 
 impl AreaHandler for MainCanvas {
     fn draw(&mut self, _area: &Area, draw_params: &AreaDrawParams) {
@@ -78,6 +86,20 @@ impl AreaHandler for MainCanvas {
         position_chart(&subplots[9]);
         accel_bias_uncertainty_chart(&subplots[10]);
         orientation_uncertainty_chart(&subplots[11]);
+    }
+
+    fn key_event(&mut self, _area: &Area, area_key_event: &AreaKeyEvent) -> bool {
+        if area_key_event.up {
+            match area_key_event.ext_key {
+                _ => match area_key_event.key {
+                    b' ' => {
+                        self.paused.set(!self.paused.get());
+                    },
+                    _ => {},
+                },
+            }
+        }
+        true
     }
 }
 
