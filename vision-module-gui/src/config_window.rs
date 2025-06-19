@@ -439,6 +439,7 @@ struct GeneralSettingsForm {
     device_uuid: RwSignal<[u8; 6]>,
     device_pid: RwSignal<u16>,
     impact_threshold: RwSignal<i32>,
+    suppress_ms: RwSignal<i32>,
     accel_config: RwSignal<AccelConfig>,
     gyro_config: RwSignal<GyroConfig>,
     nf_intrinsics: RwSignal<RosOpenCvIntrinsics<f32>>,
@@ -458,6 +459,7 @@ impl GeneralSettingsForm {
         let device_pid = create_rw_signal(0u16);
         let connected = move || device.with(|d| d.is_some());
         let impact_threshold = create_rw_signal(0);
+        let suppress_ms = create_rw_signal(0);
         let accel_config = create_rw_signal(AccelConfig::default());
         let gyro_config = create_rw_signal(GyroConfig::default());
         let nf_intrinsics =
@@ -484,6 +486,7 @@ impl GeneralSettingsForm {
                     }
                 })
                 (Compact, "Impact threshold") : let x = Spinbox(enabled: connected, signal: impact_threshold)
+                (Compact, "Suppress (ms)") : let x = Spinbox(enabled: connected, signal: suppress_ms)
                 (Compact, "Accelerometer Config") : let x = HorizontalBox(padded: true) {
                     Compact : let upload_accel_config = Button("Upload")
                     Compact : let download_accel_config = Button("Download")
@@ -545,6 +548,7 @@ impl GeneralSettingsForm {
             form,
             Self {
                 impact_threshold,
+                suppress_ms,
                 accel_config,
                 gyro_config,
                 nf_intrinsics,
@@ -564,6 +568,8 @@ impl GeneralSettingsForm {
 
         self.impact_threshold
             .set(i32::from(config.impact_threshold));
+        self.suppress_ms
+            .set(i32::from(config.suppress_ms));
         self.accel_config.set(config.accel_config);
         self.gyro_config.set(config.gyro_config);
         self.nf_intrinsics.set(config.camera_model_nf.clone());
@@ -612,12 +618,16 @@ impl GeneralSettingsForm {
         if !(0..256).contains(&self.impact_threshold.get_untracked()) {
             errors.push("impact threshold: must be between 0 and 255".into());
         }
+        if !(0..256).contains(&self.suppress_ms.get_untracked()) {
+            errors.push("suppress (ms): must be between 0 and 255".into());
+        }
     }
 
     /// Make sure to call `validate()` before calling this method.
     async fn apply(&self, device: &UsbDevice) -> Result<()> {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
+            suppress_ms: self.suppress_ms.get_untracked() as u8,
             accel_config: self.accel_config.get_untracked(),
             gyro_config: self.gyro_config.get_untracked(),
             camera_model_nf: self.nf_intrinsics.get_untracked(),
@@ -628,6 +638,7 @@ impl GeneralSettingsForm {
         {
             let general_config = &mut self.mot_runner.lock().general_config;
             general_config.impact_threshold = config.impact_threshold;
+            general_config.suppress_ms = config.suppress_ms;
             general_config.accel_config = config.accel_config;
             general_config.gyro_config = config.gyro_config;
             general_config.camera_model_nf = config.camera_model_nf;
@@ -644,6 +655,7 @@ impl GeneralSettingsForm {
 
     fn load_defaults(&self) {
         self.impact_threshold.set(5);
+        self.suppress_ms.set(100);
         self.accel_config.set(AccelConfig::default());
         self.gyro_config.set(GyroConfig::default());
         self.nf_intrinsics
