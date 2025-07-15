@@ -247,6 +247,7 @@ fn socket_serve_thread(mut sock: UdpStream, state: Arc<Mutex<State>>) {
                     49.,
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
+                suppress_ms: 0,
             })),
             PacketData::ReadConfigResponse(_) => unreachable!(),
             PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(Default::default())),

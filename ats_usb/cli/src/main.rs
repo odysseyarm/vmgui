@@ -372,7 +372,11 @@ fn get_serialport_devices() -> Vec<String> {
     .filter(|port| {
         match &port.port_type {
             SerialPortType::UsbPort(port_info) => {
-                if port_info.vid == 0x1915 && (port_info.pid == 0x520F || port_info.pid == 0x5210 || port_info.pid == 0x5211) {
+                if port_info.vid == 0x1915
+                    && (port_info.pid == 0x520F
+                        || port_info.pid == 0x5210
+                        || port_info.pid == 0x5211)
+                {
                     if let Some(i) = port_info.interface {
                         // interface 0: cdc acm module
                         // interface 1: cdc acm module functional subordinate interface

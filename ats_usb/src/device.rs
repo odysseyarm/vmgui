@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use protodongers::PocMarkersReport;
+use protodongers::{PocMarkersReport, VendorData};
 use serial2;
 use std::{
     any::Any,
@@ -51,8 +51,7 @@ pub struct UsbDevice {
     thread_state: Weak<State>,
 }
 
-#[derive(PartialEq, Eq)]
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(PartialEq, Eq, FromPrimitive, ToPrimitive)]
 pub enum ProductId {
     PajUsb = 0x520F,
     PajAts = 0x5210,
@@ -474,7 +473,13 @@ impl UsbDevice {
             padded[..data_len].copy_from_slice(data);
             padded
         };
-        let data = PacketData::Vendor(tag, (data_len as u8, data_padded));
+        let data = PacketData::Vendor(
+            tag,
+            VendorData {
+                len: data_len as u8,
+                data: data_padded,
+            },
+        );
         let pkt = Packet { id: 255, data };
         self.to_thread.send(pkt).await?;
         Ok(())

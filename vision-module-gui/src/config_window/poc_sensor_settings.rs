@@ -3,7 +3,9 @@ use std::time::Duration;
 use anyhow::Result;
 use ats_usb::{device::UsbDevice, packets::vm::Port};
 use iui::{controls::Form, UI};
-use leptos_reactive::{create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith};
+use leptos_reactive::{
+    create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith,
+};
 
 use super::retry;
 
@@ -48,9 +50,13 @@ impl PocSensorSettingsForm {
             let timeout = Duration::from_millis(2000);
             if let Some(device) = device.get_untracked() {
                 ui_ctx.spawn(async move {
-                    _ = retry(|| device.write_mode(ats_usb::packets::vm::Mode::Image), timeout, 3)
-                        .await
-                        .unwrap();
+                    _ = retry(
+                        || device.write_mode(ats_usb::packets::vm::Mode::Image),
+                        timeout,
+                        3,
+                    )
+                    .await
+                    .unwrap();
                 });
             }
         });
@@ -97,11 +103,14 @@ impl PocSensorSettingsForm {
 
         self.cid.set(format!("0x{cid:04x}"));
         self.fps.set(i32::from(fps));
-        self.exposure_us.set(i32::from(u16::from(expo & !(1 << 7)) * 100));
+        self.exposure_us
+            .set(i32::from(u16::from(expo & !(1 << 7)) * 100));
         self.gain.set(i32::from(gain));
 
-        self.area_threshold_min.set(i32::from(u16::from(area_threshold_min)));
-        self.area_threshold_max.set(i32::from(u16::from(area_threshold_max)));
+        self.area_threshold_min
+            .set(i32::from(u16::from(area_threshold_min)));
+        self.area_threshold_max
+            .set(i32::from(u16::from(area_threshold_max)));
         self.light_threshold.set(i32::from(light_threshold));
         Ok(())
     }
@@ -172,10 +181,7 @@ impl PocSensorSettingsForm {
         tokio::try_join!(
             device.set_pag_fps(Port::Nf, fps),
             device.set_pag_gain(Port::Nf, gain),
-            device.set_pag_exposure(
-                Port::Nf,
-                exposure,
-            ),
+            device.set_pag_exposure(Port::Nf, exposure,),
             device.set_pag_area_lower(Port::Nf, area_threshold_min),
             device.set_pag_area_upper(Port::Nf, area_threshold_max),
             device.set_pag_light_threshold(Port::Nf, light_threshold),

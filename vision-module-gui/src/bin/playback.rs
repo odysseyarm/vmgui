@@ -529,6 +529,7 @@ impl State {
                     49.,
                 ),
                 stereo_iso: nalgebra::Isometry3::identity(),
+                suppress_ms: 0,
             },
             props: Props {
                 uuid: [42, 69, 3, 7, 9, 13],

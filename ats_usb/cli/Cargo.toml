@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-argmin = "0.10.0"
-argmin-math = { version = "0.4.0", features = ["nalgebra_latest"] }
-argmin-observer-slog = "0.1.0"
+argmin = { git = "https://github.com/argmin-rs/argmin", rev = "f5c3fd3953771ee41d1e6425b3421de2b8ed7b24" }
+argmin-math = { git = "https://github.com/argmin-rs/argmin", rev = "f5c3fd3953771ee41d1e6425b3421de2b8ed7b24", features = ["nalgebra_latest"] }
+argmin-observer-slog = { git = "https://github.com/argmin-rs/argmin", rev = "f5c3fd3953771ee41d1e6425b3421de2b8ed7b24" }
 ats_usb = { version = "0.1.0", path = ".." }
 clap = { version = "4.5.11", features = ["derive"] }
 executors = "0.9.0"
 futures = "0.3.30"
-nalgebra = "0.32.5"
+nalgebra = "0.33"
 serde = "1.0.204"
 serde_json = "1.0.121"
 serialport = { version = "4.3.0", features = ["usbportinfo-interface"] }
