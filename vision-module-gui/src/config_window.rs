@@ -64,9 +64,12 @@ pub fn config_window(
             }
         }
     }
-    let (wf_form, wf_settings) = paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
-    let (nf_form, nf_settings) = paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
-    let (poc_form, poc_settings) = poc_sensor_settings::PocSensorSettingsForm::new(&ui, device.read_only());
+    let (wf_form, wf_settings) =
+        paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
+    let (nf_form, nf_settings) =
+        paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
+    let (poc_form, poc_settings) =
+        poc_sensor_settings::PocSensorSettingsForm::new(&ui, device.read_only());
     tab_group.append(&ui, "General", general_form);
     tab_group.append(&ui, "Wide field", wf_form.c());
     tab_group.append(&ui, "Near field", nf_form.c());
@@ -87,7 +90,8 @@ pub fn config_window(
             let mut poc_form = poc_form.c();
             general_settings.device_pid.with(|pid| {
                 match num_traits::FromPrimitive::from_u16(*pid) {
-                    Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => {
+                    Some(ats_usb::device::ProductId::PajUsb)
+                    | Some(ats_usb::device::ProductId::PajAts) => {
                         nf_form.show(&ui);
                         wf_form.show(&ui);
                         poc_form.hide(&ui);
@@ -144,8 +148,11 @@ pub fn config_window(
                 };
                 match usb_device {
                     Ok(usb_device) => {
-                        match num_traits::FromPrimitive::from_u16(general_settings.load_from_device(&usb_device, true).await?) {
-                            Some(ats_usb::device::ProductId::PajAts) | Some(ats_usb::device::ProductId::PajUsb) => {
+                        match num_traits::FromPrimitive::from_u16(
+                            general_settings.load_from_device(&usb_device, true).await?,
+                        ) {
+                            Some(ats_usb::device::ProductId::PajAts)
+                            | Some(ats_usb::device::ProductId::PajUsb) => {
                                 wf_settings.load_from_device(&usb_device).await?;
                                 nf_settings.load_from_device(&usb_device).await?;
                             }
@@ -216,11 +223,11 @@ pub fn config_window(
             .filter(|port| {
                 match &port.port_type {
                     UsbPort(port_info) => {
-                        if port_info.vid == 0x1915 && (
-                            port_info.pid == 0x520F
-                            || port_info.pid == 0x5210
-                            || port_info.pid == 0x5211
-                        ) {
+                        if port_info.vid == 0x1915
+                            && (port_info.pid == 0x520F
+                                || port_info.pid == 0x5210
+                                || port_info.pid == 0x5211)
+                        {
                             if let Some(i) = port_info.interface {
                                 // interface 0: cdc acm module
                                 // interface 1: cdc acm module functional subordinate interface
@@ -276,7 +283,8 @@ pub fn config_window(
             }
 
             match num_traits::FromPrimitive::from_u16(general_settings.device_pid.get_untracked()) {
-                Some(ats_usb::device::ProductId::PajUsb) | Some(ats_usb::device::ProductId::PajAts) => {
+                Some(ats_usb::device::ProductId::PajUsb)
+                | Some(ats_usb::device::ProductId::PajAts) => {
                     wf_settings.validate(&mut errors);
                     if !errors.is_empty() {
                         let mut message = String::new();
@@ -305,13 +313,21 @@ pub fn config_window(
 
                     if let Err(e) = wf_settings.apply(&device).await {
                         config_win
-                            .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
+                            .modal_err_async(
+                                &ui,
+                                "Failed to apply wide field settings",
+                                &e.to_string(),
+                            )
                             .await;
                         return false;
                     };
                     if let Err(e) = nf_settings.apply(&device).await {
                         config_win
-                            .modal_err_async(&ui, "Failed to apply near field settings", &e.to_string())
+                            .modal_err_async(
+                                &ui,
+                                "Failed to apply near field settings",
+                                &e.to_string(),
+                            )
                             .await;
                         return false;
                     };
@@ -331,12 +347,16 @@ pub fn config_window(
                     }
                     if let Err(e) = poc_settings.apply(&device).await {
                         config_win
-                            .modal_err_async(&ui, "Failed to apply wide field settings", &e.to_string())
+                            .modal_err_async(
+                                &ui,
+                                "Failed to apply wide field settings",
+                                &e.to_string(),
+                            )
                             .await;
                         return false;
                     };
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
             if let Err(e) = general_settings.apply(&device).await {
                 config_win
@@ -568,8 +588,7 @@ impl GeneralSettingsForm {
 
         self.impact_threshold
             .set(i32::from(config.impact_threshold));
-        self.suppress_ms
-            .set(i32::from(config.suppress_ms));
+        self.suppress_ms.set(i32::from(config.suppress_ms));
         self.accel_config.set(config.accel_config);
         self.gyro_config.set(config.gyro_config);
         self.nf_intrinsics.set(config.camera_model_nf.clone());

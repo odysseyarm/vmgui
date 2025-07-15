@@ -94,8 +94,8 @@ impl AreaHandler for MainCanvas {
                 _ => match area_key_event.key {
                     b' ' => {
                         self.paused.set(!self.paused.get());
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 },
             }
         }

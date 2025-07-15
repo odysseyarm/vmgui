@@ -3,7 +3,10 @@ use std::time::Duration;
 use anyhow::Result;
 use ats_usb::{device::UsbDevice, packets::vm::Port};
 use iui::{controls::Form, UI};
-use leptos_reactive::{create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith, SignalWithUntracked};
+use leptos_reactive::{
+    create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate,
+    SignalWith, SignalWithUntracked,
+};
 
 use super::retry;
 
