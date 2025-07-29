@@ -298,7 +298,7 @@ async fn normal_streaming(
         _ = tokio::signal::ctrl_c() => {},
         _ = async {
             let mut prev = None;
-            let mut odr_average = None;
+            let mut sample_interval_average = None;
             let mut prev_timestamp = None;
             loop {
                 let v = s.next().await.unwrap();
@@ -327,10 +327,10 @@ async fn normal_streaming(
                     }
                 };
                 if let Some(dt) = dt {
-                    match odr_average {
-                        None => odr_average = Some(1. / dt),
+                    match sample_interval_average {
+                        None => sample_interval_average = Some(dt),
                         Some(a) => {
-                            odr_average = Some(0.7 / 0.8 * a + 0.1 / 0.8 * (1.0 / dt));
+                            sample_interval_average = Some(0.7 / 0.8 * a + 0.1 / 0.8 * dt);
                         }
                     }
                 }
@@ -341,7 +341,7 @@ async fn normal_streaming(
                 };
                 prev_timestamp = Some(v.timestamp);
 
-                println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}, ts = {:9}, elapsed = {:7}, ODR = {:7.3?}", v.accel, v.accel.magnitude(), v.gyro, v.timestamp, elapsed, odr_average);
+                println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}, ts = {:9}, elapsed = {:7}, ODR = {:7.3?}", v.accel, v.accel.magnitude(), v.gyro, v.timestamp, elapsed, sample_interval_average.map(|s| 1.0 / s));
                 count += 1.0;
                 accel_sum += v.accel;
                 gyro_sum += v.gyro;
