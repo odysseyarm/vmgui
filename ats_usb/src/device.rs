@@ -32,10 +32,7 @@ use crate::{
     udp_stream::UdpStream,
 };
 
-pub const SLIP_FRAME_END: u8 = 0xc0;
-const SLIP_FRAME_ESC: u8 = 0xdb;
-const SLIP_FRAME_ESC_END: u8 = 0xdc;
-const SLIP_FRAME_ESC_ESC: u8 = 0xdd;
+pub const COBS_DELIMITER: u8 = 0x00;
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -139,7 +136,7 @@ impl UsbDevice {
                     std::thread::sleep(Duration::from_millis(100));
                 }
             }
-            let mut buf = vec![0xff];
+            let mut buf = vec![];
             Packet {
                 id: 0,
                 data: PacketData::StreamUpdate(StreamUpdate {
@@ -148,6 +145,8 @@ impl UsbDevice {
                 }),
             }
             .serialize(&mut buf);
+            buf = cobs::encode_vec(&buf);
+            buf.push(COBS_DELIMITER);
             read_port.write_all(&buf).unwrap();
             let mut drained = 0;
             loop {
@@ -243,22 +242,29 @@ impl UsbDevice {
         let (sender, mut receiver) = mpsc::channel::<Packet>(16);
         let mut writer = writer;
         std::thread::spawn(move || {
-            let mut buf = vec![];
+            let mut raw = Vec::with_capacity(1024); // unframed payload
+            let mut enc = Vec::with_capacity(1100); // framed: COBS + delimiter
+
             loop {
                 let Some(pkt) = receiver.blocking_recv() else {
                     break;
                 };
 
-                buf.clear();
-                buf.push(0xff);
-                pkt.serialize(&mut buf);
+                raw.clear();
+                pkt.serialize(&mut raw);
 
-                debug!("write id={} len={} ty={:?}", pkt.id, buf.len(), pkt.ty());
-                let r = writer.write_all(&buf).and_then(|_| writer.flush());
-                if let Err(e) = r {
+                enc.clear();
+                enc.extend_from_slice(&cobs::encode_vec(&raw));
+                enc.push(COBS_DELIMITER);
+
+                debug!("write id={} len={} ty={:?}", pkt.id, enc.len(), pkt.ty());
+                trace!("write {:02X?}", &enc);
+
+                if let Err(e) = writer.write_all(&enc).and_then(|_| writer.flush()) {
                     error!("device thread failed to write: {e}");
                 }
             }
+
             info!("device writer thread exiting");
         });
 
@@ -284,22 +290,34 @@ impl UsbDevice {
                 }
                 let reply: Result<_, std::io::Error> = (|| {
                     buf.clear();
-                    let bytes_read = reader.read_until(SLIP_FRAME_END, &mut buf)?;
+
+                    // Read one COBS frame (up to and including the 0x00 delimiter)
+                    let bytes_read = reader.read_until(COBS_DELIMITER, &mut buf)?;
                     if bytes_read == 0 {
-                        // eof
                         return Err(std::io::Error::new(ErrorKind::BrokenPipe, "disconnected"));
                     }
-                    buf.pop();
-                    if buf.contains(&SLIP_FRAME_ESC) {
-                        match decode_slip_frame(&mut buf) {
-                            Err(e) => return Ok(Err(e)),
-                            Ok(_) => (),
-                        };
+
+                    // Drop the trailing delimiter
+                    if buf.last() == Some(&COBS_DELIMITER) {
+                        buf.pop();
                     }
+
+                    // Decode COBS in-place; shrink vec to decoded length
+                    let decoded_len = match cobs::decode_in_place(&mut buf[..]) {
+                        Ok(n) => n,
+                        Err(_) => {
+                            return Ok(Err(anyhow::anyhow!("COBS decode failed for frame: {:02X?}", &buf)));
+                        }
+                    };
+                    buf.truncate(decoded_len);
+
                     trace!("read frame len={}", buf.len());
-                    Ok(Packet::parse(&mut &buf[..])
-                        .with_context(|| format!("failed to parse packet: {:?}", buf.clone()))
-                        .inspect(|p| trace!("read id={} type={:?}", p.id, p.ty())))
+
+                    Ok(
+                        Packet::parse(&mut &buf[..])
+                            .with_context(|| format!("failed to parse packet: {:?}", buf.clone()))
+                            .inspect(|p| trace!("read id={} type={:?}", p.id, p.ty()))
+                    )
                 })();
                 let reply = match reply {
                     // IO error
@@ -606,67 +624,6 @@ impl UsbDevice {
     }
 }
 
-pub fn encode_slip_frame(buf: &mut Vec<u8>) {
-    let mut i = 0;
-    while i < buf.len() {
-        match buf[i] {
-            SLIP_FRAME_END => {
-                buf[i] = SLIP_FRAME_ESC;
-                buf.insert(i + 1, SLIP_FRAME_ESC_END);
-                i += 1;
-            }
-            SLIP_FRAME_ESC => {
-                buf[i] = SLIP_FRAME_ESC;
-                buf.insert(i + 1, SLIP_FRAME_ESC_ESC);
-                i += 1;
-            }
-            x => {
-                buf[i] = x;
-            }
-        }
-        i += 1;
-    }
-    buf.push(SLIP_FRAME_END);
-}
-
-// TODO there's probably a faster SIMD way
-pub fn decode_slip_frame(buf: &mut Vec<u8>) -> Result<()> {
-    let mut j = 0;
-    let mut esc = false;
-    for i in 0..buf.len() {
-        match buf[i] {
-            self::SLIP_FRAME_ESC => {
-                if esc {
-                    anyhow::bail!("double esc");
-                }
-                esc = true;
-            }
-            self::SLIP_FRAME_ESC_END if esc => {
-                buf[j] = SLIP_FRAME_END;
-                j += 1;
-                esc = false;
-            }
-            self::SLIP_FRAME_ESC_ESC if esc => {
-                buf[j] = SLIP_FRAME_ESC;
-                j += 1;
-                esc = false;
-            }
-            x => {
-                if esc {
-                    anyhow::bail!("invalid esc");
-                }
-                buf[j] = x;
-                j += 1;
-            }
-        }
-    }
-    if esc {
-        anyhow::bail!("trailing esc");
-    }
-    buf.resize(j, 0);
-    Ok(())
-}
-
 pub struct PacketStream {
     stream_type: PacketType,
     slot: ResponseSlot,
@@ -777,14 +734,4 @@ impl UsbDevice {
     write_register_spec!(set_pag_area_upper: u16 = 0x00; [0x6A, 0x6B]);
     read_register_spec!(pag_light_threshold: u8 = 0x00; [0x6C]);
     write_register_spec!(set_pag_light_threshold: u8 = 0x00; [0x6C]);
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_decode_slip() {
-        let mut slip_encoded = vec![0x01, 0xDB, 0xDC, 0xDB, 0xDD];
-        super::decode_slip_frame(&mut slip_encoded).unwrap();
-        assert_eq!([0x01, 0xC0, 0xDB], slip_encoded[..]);
-    }
 }
