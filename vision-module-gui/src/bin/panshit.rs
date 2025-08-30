@@ -1,4 +1,3 @@
-use ats_usb::device::{decode_slip_frame, SLIP_FRAME_END};
 use ats_usb::packets::vm::{Packet, PacketData, Port, Register};
 use std::net::{Ipv4Addr, SocketAddr};
 // use multicast_socket::MulticastSocket;
@@ -47,7 +46,6 @@ fn main() {
     let client: UdpSocket = client.into();
 
     let mut data = vec![0; 1472];
-    let mut slip_buf = vec![];
     let mut total_accel_samples = 0;
     let start_time = std::time::Instant::now();
     let mut total_combined_marker_samples = 0;
@@ -84,37 +82,41 @@ fn main() {
         }
     }
 
+    let mut cobs_buf: Vec<u8> = Vec::with_capacity(4096);
+
     loop {
         let resp = client.recv_from(&mut data);
         if let Ok((len, addr)) = resp {
-            // if let Ok(msg) = client.receive() {
-            // data = msg.data;
-            let data = &data[..len];
-            println!("Received {:?} from {addr}", &data);
-            // let addr = msg.origin_address;
-            // println!("Received {:?} from {addr}", &data);
-            if data[1] != 0 || data[0] == 255 {
-                continue;
-            }
+            let chunk = &data[..len];
+            println!("Received {:?} from {addr}", chunk);
 
-            // check if &data[2..len] contains end of slip frame
-            let data = &data[2..len];
+            // Accumulate incoming bytes; may contain partial or multiple frames
+            cobs_buf.extend_from_slice(chunk);
 
-            slip_buf.extend_from_slice(&data);
-            while slip_buf.contains(&SLIP_FRAME_END) {
-                let end_idx = slip_buf.iter().position(|&x| x == SLIP_FRAME_END).unwrap();
-                let mut slice_vec = &mut slip_buf[..end_idx].to_vec();
-                if let Ok(()) = decode_slip_frame(slice_vec) {
-                    process_one(
-                        start_time,
-                        &mut slice_vec,
-                        &mut total_accel_samples,
-                        &mut total_combined_marker_samples,
-                        addr,
-                    );
-                    slip_buf.drain(0..end_idx + 1);
-                } else {
-                    slip_buf.drain(0..end_idx + 1);
+            // Process all complete COBS frames (0x00-delimited)
+            while let Some(end_idx) = cobs_buf.iter().position(|&b| b == 0x00) {
+                // drain inclusive of delimiter
+                let mut frame = cobs_buf.drain(..=end_idx).collect::<Vec<u8>>();
+                frame.pop(); // remove trailing 0x00 delimiter
+
+                if frame.is_empty() {
+                    continue;
+                }
+
+                // Decode into a new Vec (works across cobs versions)
+                match cobs::decode_vec(&frame) {
+                    Ok(mut decoded) => {
+                        process_one(
+                            start_time,
+                            &mut decoded,
+                            &mut total_accel_samples,
+                            &mut total_combined_marker_samples,
+                            addr,
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("COBS decode error: {e:?}; dropping frame");
+                    }
                 }
             }
         }

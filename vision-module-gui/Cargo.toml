@@ -45,3 +45,4 @@ bevy_infinite_grid = { git = "https://github.com/XYCaptain/bevy_infinite_grid.gi
 bevy_atmosphere = { version = "0.9.1", optional = true }
 num-traits = "0.2.19"
 num-derive = "0.4.2"
+cobs = "0.4.0"

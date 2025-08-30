@@ -21,6 +21,7 @@ tracing = "0.1.40"
 protodongers = { git = "https://github.com/odysseyarm/protodonge-rs", features = ["std", "serde"] }
 num-traits = "0.2.19"
 num-derive = "0.4.2"
+cobs = "0.4.0"
 
 [features]
 pyo3 = ["protodongers/pyo3"]

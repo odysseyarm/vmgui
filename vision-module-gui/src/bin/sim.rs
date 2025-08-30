@@ -7,13 +7,10 @@ use std::{
     time::Duration,
 };
 
-use ats_usb::{
-    device::encode_slip_frame,
-    packets::vm::{
+use ats_usb::packets::vm::{
         CombinedMarkersReport, GeneralConfig, ObjectReport, Packet, PacketData, PacketType,
-        ReadRegisterResponse, StreamUpdateAction,
-    },
-};
+        ReadRegisterResponse, StreamUpdateAction, Version,
+    };
 use iui::{
     controls::{
         Area, AreaDrawParams, AreaHandler, AreaKeyEvent, AreaMouseEvent, Modifiers, Window,
@@ -184,6 +181,10 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             PacketData::ReadConfigResponse(_) => unreachable!(),
             PacketData::ReadProps() => Some(PacketData::ReadPropsResponse(Default::default())),
             PacketData::ReadPropsResponse(_) => unreachable!(),
+            PacketData::ReadVersion() => Some(PacketData::ReadVersionResponse(
+                    Version { protocol_semver: [0, 1, 0], firmware_semver: [0, 1, 0] }
+            )),
+            PacketData::ReadVersionResponse(_) => unreachable!(),
             PacketData::Ack() => unreachable!(),
             PacketData::WriteMode(_) => None,
             PacketData::Vendor(_, _) => None,
@@ -192,8 +193,8 @@ fn socket_serve_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
         if let Some(data) = response {
             buf.clear();
             Packet { id: pkt.id, data }.serialize(&mut buf);
-            encode_slip_frame(&mut buf);
-            sock.write_all(&buf).unwrap();
+            let vec = cobs::encode_vec(&mut buf);
+            sock.write_all(&vec).unwrap();
         }
     }
 }
@@ -244,8 +245,8 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
                 data: PacketData::ObjectReport(object_report),
             }
             .serialize(&mut buf);
-            encode_slip_frame(&mut buf);
-            sock.write_all(&buf).unwrap();
+            let vec = cobs::encode_vec(&mut buf);
+            sock.write_all(&vec).unwrap();
         }
 
         if let Some(id) = state.stream_combined_markers {
@@ -285,8 +286,8 @@ fn socket_stream_thread(mut sock: TcpStream, state: Arc<Mutex<State>>) {
             };
             buf.clear();
             pkt.serialize(&mut buf);
-            encode_slip_frame(&mut buf);
-            sock.write_all(&buf).unwrap();
+            let vec = cobs::encode_vec(&mut buf);
+            sock.write_all(&vec).unwrap();
         }
     }
 }
