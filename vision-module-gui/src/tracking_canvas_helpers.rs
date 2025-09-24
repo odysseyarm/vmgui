@@ -328,7 +328,7 @@ fn draw_not_raw(
     wf_path: &Path,
     _nf_grid_path: &Path,
     _ch_path: &Path,
-    screen: Option<&(u8, ats_cv::ScreenCalibration<f32>)>,
+    screen: Option<&(u8, ats_common::ScreenCalibration<f32>)>,
 ) {
     nf_path.end(ctx);
     wf_path.end(ctx);

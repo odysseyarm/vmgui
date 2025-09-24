@@ -1,8 +1,8 @@
 use crate::{CloneButShorter, Marker, MotState, TestFrame};
 use ahrs::Ahrs;
 use arrayvec::ArrayVec;
-use ats_cv::foveated::MARKER_PATTERN_LEN;
-use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates, ScreenCalibration};
+use ats_common::MARKER_PATTERN_LEN;
+use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates};
 use ats_usb::device::UsbDevice;
 use ats_usb::packets::vm::{CombinedMarkersReport, GeneralConfig, MotData};
 use iui::concurrent::Context;
@@ -119,7 +119,7 @@ pub struct MotRunner {
     pub ui_ctx: Context,
     pub wfnf_realign: bool,
     pub screen_calibrations:
-        ArrayVec<(u8, ScreenCalibration<f32>), { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize }>,
+        ArrayVec<(u8, ats_common::ScreenCalibration<f32>), { (ats_common::MAX_SCREEN_ID + 1) as usize }>,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {

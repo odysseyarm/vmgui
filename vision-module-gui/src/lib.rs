@@ -1,6 +1,6 @@
 use arrayvec::ArrayVec;
 use ats_cv::foveated::FoveatedAimpointState;
-use ats_cv::foveated::MARKER_PATTERN_LEN;
+use ats_common::MARKER_PATTERN_LEN;
 use ats_usb::packets::vm::MotData;
 use nalgebra::Isometry3;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
@@ -42,9 +42,9 @@ pub struct ScreenInfo {
     pub marker_points: [nalgebra::Point3<f32>; MARKER_PATTERN_LEN],
 }
 
-impl From<ScreenInfo> for ats_cv::ScreenCalibration<f32> {
+impl From<ScreenInfo> for ats_common::ScreenCalibration<f32> {
     fn from(screen_info: ScreenInfo) -> Self {
-        ats_cv::ScreenCalibration {
+        ats_common::ScreenCalibration {
             rotation: Default::default(),
             homography: {
                 nalgebra::Matrix3::new(
