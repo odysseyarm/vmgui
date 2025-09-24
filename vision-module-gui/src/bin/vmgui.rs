@@ -39,7 +39,7 @@ use {
 
 use vision_module_gui::consts::APP_INFO;
 
-use ats_cv::ScreenCalibration;
+use ats_common::ScreenCalibration;
 
 // Things to avoid doing
 // * Accessing signals outside of the main thread
@@ -237,8 +237,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let screen_calibrations: arrayvec::ArrayVec<
         (u8, ScreenCalibration<f32>),
-        { (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize },
-    > = (0..{ (ats_cv::foveated::MAX_SCREEN_ID + 1) as usize })
+        { (ats_common::MAX_SCREEN_ID + 1) as usize },
+    > = (0..{ (ats_common::MAX_SCREEN_ID + 1) as usize })
         .filter_map(|i| {
             get_screens_dir().and_then(|config_dir| {
                 let screen_path = config_dir.join(std::format!("screen_{}.json", i));
