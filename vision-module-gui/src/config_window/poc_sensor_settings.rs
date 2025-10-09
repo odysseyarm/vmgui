@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use ats_usb::{device::UsbDevice, packets::vm::Port};
+use ats_usb::{device::VmDevice, packets::vm::Port};
 use iui::{controls::Form, UI};
 use leptos_reactive::{
     create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate, SignalWith,
@@ -21,7 +21,7 @@ pub struct PocSensorSettingsForm {
 }
 
 impl PocSensorSettingsForm {
-    pub fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>) -> (Form, Self) {
+    pub fn new(ui: &UI, device: ReadSignal<Option<VmDevice>>) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let cid = create_rw_signal(String::new());
         let fps = create_rw_signal(0);
@@ -75,7 +75,7 @@ impl PocSensorSettingsForm {
         )
     }
 
-    pub async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
+    pub async fn load_from_device(&self, device: &VmDevice) -> Result<()> {
         self.cid.set("Connecting...".into());
         let timeout = Duration::from_millis(2000);
         let cid = retry(|| device.pag_chip_id(Port::Nf), timeout, 3)
@@ -162,7 +162,7 @@ impl PocSensorSettingsForm {
     }
 
     /// Make sure to call `validate()` before calling this method.
-    pub async fn apply(&self, device: &UsbDevice) -> Result<()> {
+    pub async fn apply(&self, device: &VmDevice) -> Result<()> {
         let fps = u8::try_from(self.fps.get_untracked()).unwrap();
 
         let gain = u8::try_from(self.gain.get_untracked()).unwrap();

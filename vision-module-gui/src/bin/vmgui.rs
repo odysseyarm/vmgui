@@ -738,10 +738,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut file = File::create(path_buf).expect("Could not create file");
                 let mut bytes = Vec::new();
 
-                mot_runner
+                postcard::to_slice(&mot_runner
                     .lock()
-                    .general_config
-                    .serialize_to_vec(&mut bytes);
+                    .general_config, &mut bytes).unwrap();
 
                 for (timestamp, packet_data) in packets.iter() {
                     let packet = ats_usb::packets::vm::Packet {
@@ -749,7 +748,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                         id: 0,
                     };
                     bytes.extend_from_slice(&timestamp.to_le_bytes());
-                    packet.serialize(&mut bytes);
+                    postcard::to_slice(&packet, &mut bytes).unwrap();
                 }
 
                 file.write_all(&bytes).expect("Could not write to file");

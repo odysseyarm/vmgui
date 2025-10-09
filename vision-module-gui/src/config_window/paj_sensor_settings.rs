@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use ats_usb::{device::UsbDevice, packets::vm::Port};
+use ats_usb::{device::VmDevice, packets::vm::Port};
 use iui::{controls::Form, UI};
 use leptos_reactive::{
     create_rw_signal, ReadSignal, RwSignal, SignalGetUntracked, SignalSet, SignalUpdate,
@@ -30,7 +30,7 @@ pub struct PajSensorSettingsForm {
 }
 
 impl PajSensorSettingsForm {
-    pub fn new(ui: &UI, device: ReadSignal<Option<UsbDevice>>, port: Port) -> (Form, Self) {
+    pub fn new(ui: &UI, device: ReadSignal<Option<VmDevice>>, port: Port) -> (Form, Self) {
         let connected = move || device.with(|d| d.is_some());
         let pid = create_rw_signal(String::new());
         let resolution_x = create_rw_signal(String::new());
@@ -115,7 +115,7 @@ impl PajSensorSettingsForm {
         )
     }
 
-    pub async fn load_from_device(&self, device: &UsbDevice) -> Result<()> {
+    pub async fn load_from_device(&self, device: &VmDevice) -> Result<()> {
         self.pid.set("Connecting...".into());
         let timeout = Duration::from_millis(2000);
         let pid = retry(|| device.product_id(self.port), timeout, 3)
@@ -227,7 +227,7 @@ impl PajSensorSettingsForm {
     }
 
     /// Make sure to call `validate()` before calling this method.
-    pub async fn apply(&self, device: &UsbDevice) -> Result<()> {
+    pub async fn apply(&self, device: &VmDevice) -> Result<()> {
         let gain = usize::try_from(self.gain.get_untracked()).unwrap();
         let gain = GAIN_TABLE[gain].1;
 

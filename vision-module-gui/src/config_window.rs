@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
-    device::UsbDevice,
+    device::VmDevice,
     packets::vm::{AccelConfig, GeneralConfig, GyroConfig, Port},
 };
 use iui::{
@@ -18,10 +18,9 @@ use leptos_reactive::{
     create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGet, SignalGetUntracked,
     SignalSet, SignalWith, SignalWithUntracked,
 };
+use nusb::{DeviceInfo, MaybeFuture as _};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
-use serialport::SerialPortInfo;
-use serialport::SerialPortType::UsbPort;
 
 pub fn config_window(
     ui: &UI,
@@ -31,7 +30,7 @@ pub fn config_window(
     _tokio_handle: &tokio::runtime::Handle,
 ) -> (
     Window,
-    ReadSignal<Option<UsbDevice>>,
+    ReadSignal<Option<VmDevice>>,
     ReadSignal<AccelConfig>,
 ) {
     let ui_ctx = ui.async_context();
@@ -113,7 +112,7 @@ pub fn config_window(
 
     config_win.set_child(&ui, vbox);
 
-    let device_list = create_rw_signal(Vec::<SerialPortInfo>::new());
+    let device_list = create_rw_signal(Vec::<DeviceInfo>::new());
     let device_combobox_on_selected = {
         let ui = ui.c();
         let config_win = config_win.c();
@@ -133,18 +132,13 @@ pub fn config_window(
             let general_settings = general_settings.c();
             let task = async move {
                 let usb_device = if let Some(_device) = _device {
-                    match &_device.port_type {
-                        UsbPort(port_info) => Ok(UsbDevice::connect_serial(
-                            &_device.port_name,
-                            port_info.pid == ats_usb::device::ProductId::PajAts as u16,
-                        )
-                        .await?),
-                        _ => Err(anyhow::anyhow!("Not a USB device")),
-                    }
+                    Ok(VmDevice::connect_usb(_device).await.unwrap())
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
-                    Ok(UsbDevice::connect_tcp(sim_addr)?)
+                    unimplemented!();
+                    // Ok(VmDevice::connect_tcp(sim_addr)?)
                 } else {
-                    Ok(UsbDevice::connect_hub("0.0.0.0:0", udp_addr.as_ref().unwrap()).await?)
+                    unimplemented!();
+                    // Ok(VmDevice::connect_hub("0.0.0.0:0", udp_addr.as_ref().unwrap()).await?)
                 };
                 match usb_device {
                     Ok(usb_device) => {
@@ -193,7 +187,7 @@ pub fn config_window(
             device_combobox.clear(&ui);
             device_list.with(|device_list| {
                 for device in device_list {
-                    device_combobox.append(&ui, &display_for_serial_port(&device));
+                    device_combobox.append(&ui, &display_for_device_info(device));
                 }
             });
             if let Some(sim_addr) = &simulator_addr {
@@ -211,38 +205,20 @@ pub fn config_window(
         let simulator_addr = simulator_addr.c();
         let udp_addr = udp_addr.c();
         move || {
-            let ports = serialport::available_ports();
-            let ports: Vec<_> = match ports {
+            let devices = nusb::list_devices().wait();
+            let ports: Vec<_> = match devices {
                 Ok(p) => p,
                 Err(e) => {
-                    config_win.modal_err(&ui, "Failed to list serial ports", &e.to_string());
+                    config_win.modal_err(&ui, "Failed to list usb devices", &e.to_string());
                     return;
                 }
             }
             .into_iter()
-            .filter(|port| {
-                match &port.port_type {
-                    UsbPort(port_info) => {
-                        if port_info.vid == 0x1915
-                            && (port_info.pid == 0x520F
-                                || port_info.pid == 0x5210
-                                || port_info.pid == 0x5211)
-                        {
-                            if let Some(i) = port_info.interface {
-                                // interface 0: cdc acm module
-                                // interface 1: cdc acm module functional subordinate interface
-                                // interface 2: cdc acm dfu
-                                // interface 3: cdc acm dfu subordinate interface
-                                i == 0
-                            } else {
-                                true
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                }
+            .filter(|info| {
+                info.vendor_id() == 0x1915
+                 && (info.product_id() == 0x520F
+                     || info.product_id() == 0x5210
+                     || info.product_id() == 0x5211)
             })
             .collect();
             device_list.set(ports.c());
@@ -267,7 +243,7 @@ pub fn config_window(
         let config_win = config_win.c();
         let ui = ui.c();
         let general_settings = general_settings.c();
-        move |device: UsbDevice| async move {
+        move |device: VmDevice| async move {
             let mut errors = vec![];
             general_settings.validate(&mut errors);
             if !errors.is_empty() {
@@ -471,7 +447,7 @@ struct GeneralSettingsForm {
 impl GeneralSettingsForm {
     fn new(
         ui: &UI,
-        device: ReadSignal<Option<UsbDevice>>,
+        device: ReadSignal<Option<VmDevice>>,
         mot_runner: Arc<Mutex<MotRunner>>,
         win: Window,
     ) -> (Form, Self) {
@@ -581,7 +557,7 @@ impl GeneralSettingsForm {
         )
     }
 
-    async fn load_from_device(&self, device: &UsbDevice, first_load: bool) -> Result<u16> {
+    async fn load_from_device(&self, device: &VmDevice, first_load: bool) -> Result<u16> {
         let timeout = Duration::from_millis(5000);
         let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
         let props = retry(|| device.read_props(), timeout, 3).await.unwrap()?;
@@ -643,7 +619,7 @@ impl GeneralSettingsForm {
     }
 
     /// Make sure to call `validate()` before calling this method.
-    async fn apply(&self, device: &UsbDevice) -> Result<()> {
+    async fn apply(&self, device: &VmDevice) -> Result<()> {
         let config = GeneralConfig {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             suppress_ms: self.suppress_ms.get_untracked() as u8,
@@ -1011,17 +987,12 @@ fn set_gyro_download_handler(
     });
 }
 
-fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
-    let usb_port = match &port_info.port_type {
-        serialport::SerialPortType::UsbPort(u) => u,
-        _ => return port_info.port_name.clone(),
-    };
-
+fn display_for_device_info(info: &DeviceInfo) -> String {
     let mut out = String::new();
-    if let Some(m) = &usb_port.manufacturer {
+    if let Some(m) = info.manufacturer_string() {
         out.push_str(m);
     }
-    if let Some(p) = &usb_port.product {
+    if let Some(p) = info.product_string() {
         if !out.is_empty() {
             out.push_str(" - ");
         }
@@ -1030,7 +1001,7 @@ fn display_for_serial_port(port_info: &SerialPortInfo) -> String {
     if !out.is_empty() {
         out.push_str(" ");
     }
-    out.push_str(&format!("({:4x}:{:4x})", usb_port.vid, usb_port.pid));
+    out.push_str(&format!("({:4x}:{:4x})", info.vendor_id(), info.product_id()));
     out = out.replace('\x00', "");
     out
 }
