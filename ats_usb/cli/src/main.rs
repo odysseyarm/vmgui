@@ -149,7 +149,7 @@ async fn main() {
     let num_samples = args.n;
     let gravity = args.g;
 
-    let mut device = ats_usb::device::UsbDevice::connect_serial(path, false)
+    let mut device = ats_usb::device::UsbDevice::connect(info, false)
         .await
         .unwrap();
 

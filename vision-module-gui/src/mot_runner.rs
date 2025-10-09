@@ -3,7 +3,7 @@ use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_common::MARKER_PATTERN_LEN;
 use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates};
-use ats_usb::device::UsbDevice;
+use ats_usb::device::VmDevice;
 use ats_usb::packets::vm::{CombinedMarkersReport, GeneralConfig, MotData};
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
@@ -109,7 +109,7 @@ pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
 
 pub struct MotRunner {
     pub state: MotState,
-    pub device: Option<UsbDevice>,
+    pub device: Option<VmDevice>,
     pub general_config: GeneralConfig,
     pub record_impact: bool,
     pub record_packets: bool,

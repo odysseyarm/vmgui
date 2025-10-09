@@ -1,41 +1,24 @@
 use std::{process::ExitCode, time::UNIX_EPOCH};
 
 use ats_usb::{device::UsbDevice, packets::vm::Serialize as _};
-use serialport::SerialPortType;
+use nusb::{DeviceInfo, MaybeFuture as _};
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
-#[allow(unused_imports)]
+#[allow(unused_imdevices)]
 use tracing::Level;
-#[allow(unused_imports)]
+#[allow(unused_imdevices)]
 use tracing_subscriber::EnvFilter;
 
-fn get_ports() -> Vec<serialport::SerialPortInfo> {
-    let ports = serialport::available_ports().expect("Failed to list serial ports");
-    let ports = ports
+fn get_devices() -> Vec<DeviceInfo> {
+    let devices = nusb::list_devices().wait();
+    let devices = devices
+        .unwrap()
         .into_iter()
-        .filter(|port| {
-            match &port.port_type {
-                SerialPortType::UsbPort(port_info) => {
-                    if port_info.vid == 0x1915 && port_info.pid == 0x520F || port_info.pid == 0x5210
-                    {
-                        if let Some(i) = port_info.interface {
-                            // interface 0: cdc acm module
-                            // interface 1: cdc acm module functional subordinate interface
-                            // interface 2: cdc acm dfu
-                            // interface 3: cdc acm dfu subordinate interface
-                            i == 0
-                        } else {
-                            true
-                        }
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            }
+        .filter(|info| {
+            info.vendor_id() == 0x1915 && info.product_id() == 0x520F || info.product_id() == 0x5210
         })
         .collect();
-    ports
+    devices
 }
 
 fn stdin_thread(sender: Sender<()>) {
@@ -62,20 +45,20 @@ async fn main() -> ExitCode {
     let port_name = if let Some(port_name) = port_arg {
         port_name
     } else {
-        let ports = get_ports();
-        if ports.is_empty() {
+        let devices = get_devices();
+        if devices.is_empty() {
             eprintln!("No device found, please connect one");
             return ExitCode::FAILURE;
         }
-        if ports.len() > 1 {
+        if devices.len() > 1 {
             eprintln!("Mutiple devices found, please specify one");
             return ExitCode::FAILURE;
         };
-        ports[0].port_name.clone()
+        devices[0].port_name.clone()
     };
 
     eprintln!("Connecting to {}", port_name);
-    let device = UsbDevice::connect_serial(&port_name, false).await.unwrap();
+    let device = UsbDevice::connect(&port_name).await.unwrap();
     eprintln!("Connected");
 
     let general_config = device.read_config().await.unwrap();
@@ -114,14 +97,14 @@ async fn main() -> ExitCode {
         }
     }
     let mut bytes = vec![];
-    general_config.serialize_to_vec(&mut bytes);
+    postcard::to_slice(&general_config, &mut bytes);
     for (timestamp, packet_data) in packets.iter() {
         let packet = ats_usb::packets::vm::Packet {
             data: packet_data.clone(),
             id: 0,
         };
         bytes.extend_from_slice(&timestamp.to_le_bytes());
-        packet.serialize(&mut bytes);
+        postcard::to_slice(&packet, &mut bytes);
     }
 
     eprintln!("Saving to {output_path}");
