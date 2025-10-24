@@ -1,6 +1,6 @@
 use std::{process::ExitCode, time::UNIX_EPOCH};
 
-use ats_usb::{device::UsbDevice, packets::vm::Serialize as _};
+use ats_usb::device::VmDevice;
 use nusb::{DeviceInfo, MaybeFuture as _};
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
@@ -42,8 +42,14 @@ async fn main() -> ExitCode {
     //     .init();
     let output_path = std::env::args().nth(1).expect("No output path");
     let port_arg = std::env::args().nth(2);
-    let port_name = if let Some(port_name) = port_arg {
-        port_name
+    let device_info = if port_arg.is_some() {
+        eprintln!("Port argument is no longer supported, using first available device");
+        let devices = get_devices();
+        if devices.is_empty() {
+            eprintln!("No device found, please connect one");
+            return ExitCode::FAILURE;
+        }
+        devices.into_iter().next().unwrap()
     } else {
         let devices = get_devices();
         if devices.is_empty() {
@@ -51,17 +57,16 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         if devices.len() > 1 {
-            eprintln!("Mutiple devices found, please specify one");
-            return ExitCode::FAILURE;
+            eprintln!("Multiple devices found, using first one");
         };
-        devices[0].port_name.clone()
+        devices.into_iter().next().unwrap()
     };
 
-    eprintln!("Connecting to {}", port_name);
-    let device = UsbDevice::connect(&port_name).await.unwrap();
+    eprintln!("Connecting to device");
+    let device = VmDevice::connect_usb(device_info).await.unwrap();
     eprintln!("Connected");
 
-    let general_config = device.read_config().await.unwrap();
+    let general_config = device.read_all_config().await.unwrap();
     eprintln!("Successfully read config");
 
     let (snd, mut stdin_line) = mpsc::channel(50);
@@ -97,14 +102,14 @@ async fn main() -> ExitCode {
         }
     }
     let mut bytes = vec![];
-    postcard::to_slice(&general_config, &mut bytes);
+    postcard::to_slice(&general_config, &mut bytes).unwrap();
     for (timestamp, packet_data) in packets.iter() {
         let packet = ats_usb::packets::vm::Packet {
             data: packet_data.clone(),
             id: 0,
         };
         bytes.extend_from_slice(&timestamp.to_le_bytes());
-        postcard::to_slice(&packet, &mut bytes);
+        postcard::to_slice(&packet, &mut bytes).unwrap();
     }
 
     eprintln!("Saving to {output_path}");

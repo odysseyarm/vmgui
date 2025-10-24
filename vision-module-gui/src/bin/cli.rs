@@ -1,28 +1,46 @@
 use std::process::ExitCode;
 
-use ats_usb::{device::UsbDevice, packets::vm::Port};
+use ats_usb::{device::VmDevice, packets::vm::Port};
+use nusb::MaybeFuture as _;
 
 fn print_help() {
-    eprintln!("Usage: ./cli [options] <address>");
+    eprintln!("Usage: ./cli <usb>");
     eprintln!();
-    eprintln!("Options:");
-    eprintln!("    -s  Connect over serial");
-    eprintln!("    -t  Connect over tcp");
-    eprintln!("    -u  Connect over udp");
+    eprintln!("Connect to first available USB device and read product IDs");
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
     let args = std::env::args().collect::<Vec<_>>();
-    if args.len() < 3 {
+    if args.len() < 2 {
         print_help();
         return ExitCode::FAILURE;
     }
+
     let device = match &*args[1] {
-        "-s" => UsbDevice::connect_serial(&args[2], false).await.unwrap(),
-        "-sw" => UsbDevice::connect_serial(&args[2], true).await.unwrap(),
-        "-t" => UsbDevice::connect_tcp(&args[2]).unwrap(),
-        "-u" => UsbDevice::connect_hub("0.0.0.0:0", &args[2]).await.unwrap(),
+        "usb" => {
+            // Find first available device
+            let devices: Vec<_> = nusb::list_devices()
+                .wait()
+                .unwrap()
+                .into_iter()
+                .filter(|info| {
+                    info.vendor_id() == 0x1915
+                        && (info.product_id() == 0x520F
+                            || info.product_id() == 0x5210
+                            || info.product_id() == 0x5211)
+                })
+                .collect();
+
+            if devices.is_empty() {
+                eprintln!("No device found");
+                return ExitCode::FAILURE;
+            }
+
+            VmDevice::connect_usb(devices.into_iter().next().unwrap())
+                .await
+                .unwrap()
+        }
         _ => {
             print_help();
             return ExitCode::FAILURE;

@@ -3,8 +3,8 @@ use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_common::MARKER_PATTERN_LEN;
 use ats_cv::{calculate_rotational_offset, to_normalized_image_coordinates};
-use ats_usb::device::VmDevice;
-use ats_usb::packets::vm::{CombinedMarkersReport, GeneralConfig, MotData};
+use ats_usb::device::{GeneralSettings, VmDevice};
+use ats_usb::packets::vm::{CombinedMarkersReport, MotData};
 use iui::concurrent::Context;
 use leptos_reactive::RwSignal;
 use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
@@ -110,7 +110,7 @@ pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
 pub struct MotRunner {
     pub state: MotState,
     pub device: Option<VmDevice>,
-    pub general_config: GeneralConfig,
+    pub general_config: GeneralSettings,
     pub record_impact: bool,
     pub record_packets: bool,
     pub datapoints: Arc<Mutex<Vec<crate::TestFrame>>>,
@@ -118,8 +118,10 @@ pub struct MotRunner {
     pub ui_update: RwSignal<()>,
     pub ui_ctx: Context,
     pub wfnf_realign: bool,
-    pub screen_calibrations:
-        ArrayVec<(u8, ats_common::ScreenCalibration<f32>), { (ats_common::MAX_SCREEN_ID + 1) as usize }>,
+    pub screen_calibrations: ArrayVec<
+        (u8, ats_common::ScreenCalibration<f32>),
+        { (ats_common::MAX_SCREEN_ID + 1) as usize },
+    >,
 }
 
 pub async fn run(runner: Arc<Mutex<MotRunner>>) {

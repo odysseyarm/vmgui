@@ -321,7 +321,7 @@ fn draw_raw(
 fn draw_not_raw(
     ctx: &DrawContext,
     state: &MotState,
-    config: &ats_usb::packets::vm::GeneralConfig,
+    config: &ats_usb::device::GeneralSettings,
     draw_tf: Transform2<f64>,
     gravity_rot: Rotation2<f64>,
     nf_path: &Path,
