@@ -7,7 +7,7 @@ use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
     device::VmDevice,
-    packets::vm::{AccelConfig, GeneralConfig, GyroConfig, Port},
+    packets::vm::{AccelConfig, ConfigKind, GeneralConfig, GyroConfig, Port, PropKind},
 };
 use iui::{
     controls::{Button, Form},
@@ -216,9 +216,9 @@ pub fn config_window(
             .into_iter()
             .filter(|info| {
                 info.vendor_id() == 0x1915
-                 && (info.product_id() == 0x520F
-                     || info.product_id() == 0x5210
-                     || info.product_id() == 0x5211)
+                    && (info.product_id() == 0x520F
+                        || info.product_id() == 0x5210
+                        || info.product_id() == 0x5211)
             })
             .collect();
             device_list.set(ports.c());
@@ -559,24 +559,45 @@ impl GeneralSettingsForm {
 
     async fn load_from_device(&self, device: &VmDevice, first_load: bool) -> Result<u16> {
         let timeout = Duration::from_millis(5000);
-        let config = retry(|| device.read_config(), timeout, 3).await.unwrap()?;
-        let props = retry(|| device.read_props(), timeout, 3).await.unwrap()?;
+
+        // Read all config values at once
+        let config = retry(|| device.read_all_config(), timeout, 3)
+            .await
+            .unwrap()?;
+
+        // Read individual prop fields
+        let uuid_prop = retry(|| device.read_prop(PropKind::Uuid), timeout, 3)
+            .await
+            .unwrap()?;
+        let product_id_prop = retry(|| device.read_prop(PropKind::ProductId), timeout, 3)
+            .await
+            .unwrap()?;
+
+        // Extract values from enum variants
+        let uuid = match uuid_prop {
+            ats_usb::packets::vm::Props::Uuid(val) => val,
+            _ => panic!("Unexpected prop variant"),
+        };
+        let product_id = match product_id_prop {
+            ats_usb::packets::vm::Props::ProductId(val) => val,
+            _ => panic!("Unexpected prop variant"),
+        };
 
         self.impact_threshold
             .set(i32::from(config.impact_threshold));
         self.suppress_ms.set(i32::from(config.suppress_ms));
-        self.accel_config.set(config.accel_config);
-        self.gyro_config.set(config.gyro_config);
+        self.accel_config.set(config.accel_config.clone());
+        self.gyro_config.set(config.gyro_config.clone());
         self.nf_intrinsics.set(config.camera_model_nf.clone());
         self.wf_intrinsics.set(config.camera_model_wf.clone());
         self.stereo_iso.set(config.stereo_iso.clone());
-        self.device_uuid.set(props.uuid);
-        self.device_pid.set(props.product_id);
+        self.device_uuid.set(uuid);
+        self.device_pid.set(product_id);
 
         if first_load {
             self.mot_runner.lock().general_config = config;
         }
-        Ok(props.product_id)
+        Ok(product_id)
     }
 
     fn validate(&self, errors: &mut Vec<String>) {
@@ -620,7 +641,7 @@ impl GeneralSettingsForm {
 
     /// Make sure to call `validate()` before calling this method.
     async fn apply(&self, device: &VmDevice) -> Result<()> {
-        let config = GeneralConfig {
+        let config = ats_usb::device::GeneralSettings {
             impact_threshold: self.impact_threshold.get_untracked() as u8,
             suppress_ms: self.suppress_ms.get_untracked() as u8,
             accel_config: self.accel_config.get_untracked(),
@@ -629,7 +650,30 @@ impl GeneralSettingsForm {
             camera_model_wf: self.wf_intrinsics.get_untracked(),
             stereo_iso: self.stereo_iso.get_untracked(),
         };
-        device.write_config(config.clone()).await?;
+
+        // Write each config field separately using the new API
+        device
+            .write_config(GeneralConfig::ImpactThreshold(config.impact_threshold))
+            .await?;
+        device
+            .write_config(GeneralConfig::SuppressMs(config.suppress_ms))
+            .await?;
+        device
+            .write_config(GeneralConfig::AccelConfig(config.accel_config))
+            .await?;
+        device
+            .write_config(GeneralConfig::GyroConfig(config.gyro_config.clone()))
+            .await?;
+        device
+            .write_config(GeneralConfig::CameraModelNf(config.camera_model_nf.clone()))
+            .await?;
+        device
+            .write_config(GeneralConfig::CameraModelWf(config.camera_model_wf.clone()))
+            .await?;
+        device
+            .write_config(GeneralConfig::StereoIso(config.stereo_iso.clone()))
+            .await?;
+
         {
             let general_config = &mut self.mot_runner.lock().general_config;
             general_config.impact_threshold = config.impact_threshold;
@@ -1001,7 +1045,11 @@ fn display_for_device_info(info: &DeviceInfo) -> String {
     if !out.is_empty() {
         out.push_str(" ");
     }
-    out.push_str(&format!("({:4x}:{:4x})", info.vendor_id(), info.product_id()));
+    out.push_str(&format!(
+        "({:4x}:{:4x})",
+        info.vendor_id(),
+        info.product_id()
+    ));
     out = out.replace('\x00', "");
     out
 }

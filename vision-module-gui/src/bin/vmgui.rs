@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use app_dirs2::{get_app_root, AppDataType};
-use ats_usb::packets::vm::{GeneralConfig, Serialize as _};
+use ats_usb::device::GeneralSettings;
 use iui::controls::{Area, FileTypeFilter, HorizontalBox};
 use iui::prelude::*;
 use leptos_reactive::{
@@ -276,7 +276,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         packets: packets.c(),
         ui_update: ui_update.c(),
         ui_ctx,
-        general_config: GeneralConfig::default(),
+        general_config: GeneralSettings::default(),
         wfnf_realign: true,
         screen_calibrations,
     }));
@@ -738,9 +738,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut file = File::create(path_buf).expect("Could not create file");
                 let mut bytes = Vec::new();
 
-                postcard::to_slice(&mot_runner
-                    .lock()
-                    .general_config, &mut bytes).unwrap();
+                postcard::to_slice(&mot_runner.lock().general_config, &mut bytes).unwrap();
 
                 for (timestamp, packet_data) in packets.iter() {
                     let packet = ats_usb::packets::vm::Packet {

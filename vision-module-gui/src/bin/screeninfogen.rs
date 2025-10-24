@@ -1,5 +1,5 @@
 use app_dirs2::{get_app_root, AppDataType};
-use ats_cv::foveated::MARKER_PATTERN_LEN;
+use ats_common::MARKER_PATTERN_LEN;
 use nalgebra::{ComplexField, Point3, RealField, Scalar};
 use vision_module_gui::consts::APP_INFO;
 use vision_module_gui::ScreenInfo;
@@ -125,7 +125,7 @@ pub fn main() {
     }
 
     // ScreenCalibration
-    let screen_calibration: ats_cv::ScreenCalibration<f32> = screen_info.into();
+    let screen_calibration: ats_common::ScreenCalibration<f32> = screen_info.into();
     match get_app_root(AppDataType::UserConfig, &APP_INFO)
         .ok()
         .and_then(|config_dir| {

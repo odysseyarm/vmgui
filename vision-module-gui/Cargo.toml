@@ -10,7 +10,7 @@ default-run = "vmgui"
 bevy = ["dep:bevy", "dep:bevy_infinite_grid", "dep:bevy_atmosphere"]
 
 [dependencies]
-ahrs = { version = "0.7.0", features = ["field_access"] }
+ahrs = { version = "0.8.0", features = ["field_access"] }
 anyhow = "1.0.75"
 arrayvec = "0.7.4"
 crossbeam = "0.8.4"
@@ -18,7 +18,7 @@ csv = "1.3.0"
 iui = { path = "../libui-rs/iui", features = ["plotters"] }
 ui-sys = { path = "../libui-rs/ui-sys" }
 leptos_reactive = {  version = "0.6.4", features = ["serde"] }
-nalgebra = { version = "0.33", features = ["serde-serialize"] }
+nalgebra = { version = "0.34", features = ["serde-serialize"] }
 serde = "1.0.193"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
 ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git", features = ["telemetry"] }
@@ -31,8 +31,8 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 enumn = "0.1.13"
 parking_lot = "0.12.1"
-opencv-ros-camera = { version = "0.15" }
-cam-geom = { version = "0.15" }
+opencv-ros-camera = { version = "0.16" }
+cam-geom = { version = "0.16" }
 socket2 = "0.6.0"
 plotters = { version = "0.3.6", default-features = false, features = ["line_series", "point_series", "surface_series", "colormaps", "full_palette"] }
 app_dirs2 = "2.5.5"

@@ -1,4 +1,10 @@
 use anyhow::{anyhow, Context, Result};
+use num_derive::{FromPrimitive, ToPrimitive};
+use nusb::{
+    io::{EndpointRead, EndpointWrite},
+    transfer::{Bulk, In, Out},
+    DeviceInfo,
+};
 use protodongers::{PocMarkersReport, VendorData};
 use std::{
     any::Any,
@@ -13,21 +19,69 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt}, net::{ToSocketAddrs, UdpSocket, lookup_host}, sync::{mpsc, oneshot}, time::sleep
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    net::{lookup_host, ToSocketAddrs, UdpSocket},
+    sync::{mpsc, oneshot},
+    time::sleep,
 };
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, instrument, trace, warn};
-use num_derive::{FromPrimitive, ToPrimitive};
-use nusb::{DeviceInfo, io::{EndpointRead, EndpointWrite}, transfer::{Bulk, In, Out}};
 
-use crate::{
-    packets::vm::{
-        AccelReport, CombinedMarkersReport, GeneralConfig, ImpactReport, MotData, ObjectReport,
-        Packet, PacketData, PacketType, Port, Props, Register, StreamUpdate, WriteRegister,
-    },
+use crate::packets::vm::{
+    AccelConfig, AccelReport, CombinedMarkersReport, ConfigKind, GeneralConfig, GyroConfig,
+    ImpactReport, MotData, ObjectReport, Packet, PacketData, PacketType, Port, PropKind, Props,
+    Register, StreamUpdate, WriteRegister,
 };
+use nalgebra::Isometry3;
+use opencv_ros_camera::RosOpenCvIntrinsics;
+
+fn default_camera_intrinsics() -> RosOpenCvIntrinsics<f32> {
+    // Create a default camera with identity-like parameters
+    // Using a simple pinhole camera model with no distortion
+    use ats_common::ocv_types::{MinimalCameraCalibrationParams, OpenCVMatrix3, OpenCVMatrix5x1};
+    MinimalCameraCalibrationParams {
+        camera_matrix: OpenCVMatrix3 {
+            data: [
+                500.0, 0.0, 320.0, // fx, 0, cx
+                0.0, 500.0, 240.0, // 0, fy, cy
+                0.0, 0.0, 1.0, // 0, 0, 1
+            ],
+        },
+        dist_coeffs: OpenCVMatrix5x1 {
+            data: [0.0, 0.0, 0.0, 0.0, 0.0], // no distortion
+        },
+    }
+    .into()
+}
 
 pub const COBS_DELIMITER: u8 = 0x00;
+
+/// A struct that holds all configuration values together
+/// This is needed because the new protodonge API returns individual config items as enum variants
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct GeneralSettings {
+    pub impact_threshold: u8,
+    pub suppress_ms: u8,
+    pub accel_config: AccelConfig,
+    pub gyro_config: GyroConfig,
+    pub camera_model_nf: RosOpenCvIntrinsics<f32>,
+    pub camera_model_wf: RosOpenCvIntrinsics<f32>,
+    pub stereo_iso: Isometry3<f32>,
+}
+
+impl Default for GeneralSettings {
+    fn default() -> Self {
+        Self {
+            impact_threshold: 100,
+            suppress_ms: 100,
+            accel_config: AccelConfig::default(),
+            gyro_config: GyroConfig::default(),
+            camera_model_nf: default_camera_intrinsics(),
+            camera_model_wf: default_camera_intrinsics(),
+            stereo_iso: Isometry3::identity(),
+        }
+    }
+}
 
 #[derive(Default)]
 enum ResponseChannel {
@@ -144,15 +198,25 @@ impl PacketTransport {
                     Err(e) => {
                         use std::io::ErrorKind::*;
                         match e.kind() {
-                            TimedOut | WouldBlock => { io_errs = 0; continue; }
+                            TimedOut | WouldBlock => {
+                                io_errs = 0;
+                                continue;
+                            }
                             BrokenPipe | UnexpectedEof | ConnectionReset => break,
                             _ => {
-                                if io_errs < 3 { warn!("usb read error (ignored): {e}"); io_errs += 1; continue; }
-                                error!("usb read error: {e}"); break;
+                                if io_errs < 3 {
+                                    warn!("usb read error (ignored): {e}");
+                                    io_errs += 1;
+                                    continue;
+                                }
+                                error!("usb read error: {e}");
+                                break;
                             }
                         }
                     }
-                    Ok(_) => { io_errs = 0; }
+                    Ok(_) => {
+                        io_errs = 0;
+                    }
                 }
                 if let Err(e) = reader.consume_end() {
                     warn!("usb consume_end failed: {e:?}");
@@ -160,7 +224,9 @@ impl PacketTransport {
                 }
                 match postcard::from_bytes::<Packet>(&buf) {
                     Ok(pkt) => {
-                        if incoming_tx.send(pkt).await.is_err() { break; }
+                        if incoming_tx.send(pkt).await.is_err() {
+                            break;
+                        }
                     }
                     Err(e) => error!("postcard decode failed: {e:?}"),
                 }
@@ -168,15 +234,24 @@ impl PacketTransport {
             info!("usb reader exits");
         });
 
-        PacketTransport { writer, incoming_rx }
+        PacketTransport {
+            writer,
+            incoming_rx,
+        }
     }
-        
-    pub async fn send(&self, pkt: Packet) -> Result<(), tokio::sync::mpsc::error::SendError<Packet>> {
+
+    pub async fn send(
+        &self,
+        pkt: Packet,
+    ) -> Result<(), tokio::sync::mpsc::error::SendError<Packet>> {
         self.writer.send(pkt).await
     }
 
     pub fn split(self) -> (PacketTransportTx, ReceiverStream<Packet>) {
-        let PacketTransport { writer, incoming_rx } = self;
+        let PacketTransport {
+            writer,
+            incoming_rx,
+        } = self;
         let tx_only = PacketTransportTx { writer };
         (tx_only, ReceiverStream::new(incoming_rx))
     }
@@ -223,14 +298,17 @@ impl VmDevice {
             info!("dispatcher exits");
         });
 
-        VmDevice { transport: tx_only, thread_state }
+        VmDevice {
+            transport: tx_only,
+            thread_state,
+        }
     }
 
     pub async fn connect_usb(info: DeviceInfo) -> Result<Self> {
         let dev = info.open().await?;
         let iface = dev.claim_interface(0).await?;
 
-        let in_ep  = iface.endpoint::<Bulk, In >(0x81)?.reader(4096);
+        let in_ep = iface.endpoint::<Bulk, In>(0x81)?.reader(4096);
         let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
 
         let transport = PacketTransport::usb(in_ep, out_ep);
@@ -249,9 +327,7 @@ impl VmDevice {
         Ok(r)
     }
 
-    fn get_oneshot_slot(
-        &self,
-    ) -> anyhow::Result<(ResponseSlot, oneshot::Receiver<PacketData>)> {
+    fn get_oneshot_slot(&self) -> anyhow::Result<(ResponseSlot, oneshot::Receiver<PacketData>)> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             let mut response_channels = thread_state.response_channels.lock().unwrap();
             for (i, c) in response_channels.iter_mut().enumerate() {
@@ -345,9 +421,9 @@ impl VmDevice {
         Ok(())
     }
 
-    pub async fn read_config(&self) -> Result<GeneralConfig> {
+    pub async fn read_config(&self, kind: crate::packets::vm::ConfigKind) -> Result<GeneralConfig> {
         let r = self
-            .request(PacketData::ReadConfig())
+            .request(PacketData::ReadConfig(kind))
             .await?
             .read_config_response()
             .with_context(|| "unexpected response")?;
@@ -362,14 +438,56 @@ impl VmDevice {
         Ok(())
     }
 
-    pub async fn read_props(&self) -> Result<Props> {
+    pub async fn read_prop(&self, kind: crate::packets::vm::PropKind) -> Result<Props> {
         let r = self
-            .request(PacketData::ReadProps())
+            .request(PacketData::ReadProp(kind))
             .await?
-            .read_props_response()
+            .read_prop_response()
             .with_context(|| "unexpected response")?;
-        info!("props: {:?}", r);
+        info!("prop: {:?}", r);
         Ok(r)
+    }
+
+    /// Read all configuration values and return them as a single struct
+    pub async fn read_all_config(&self) -> Result<GeneralSettings> {
+        let impact_threshold = self.read_config(ConfigKind::ImpactThreshold).await?;
+        let suppress_ms = self.read_config(ConfigKind::SuppressMs).await?;
+        let accel_config = self.read_config(ConfigKind::AccelConfig).await?;
+        let gyro_config = self.read_config(ConfigKind::GyroConfig).await?;
+        let camera_model_nf = self.read_config(ConfigKind::CameraModelNf).await?;
+        let camera_model_wf = self.read_config(ConfigKind::CameraModelWf).await?;
+        let stereo_iso = self.read_config(ConfigKind::StereoIso).await?;
+
+        Ok(GeneralSettings {
+            impact_threshold: match impact_threshold {
+                GeneralConfig::ImpactThreshold(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for ImpactThreshold"),
+            },
+            suppress_ms: match suppress_ms {
+                GeneralConfig::SuppressMs(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for SuppressMs"),
+            },
+            accel_config: match accel_config {
+                GeneralConfig::AccelConfig(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for AccelConfig"),
+            },
+            gyro_config: match gyro_config {
+                GeneralConfig::GyroConfig(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for GyroConfig"),
+            },
+            camera_model_nf: match camera_model_nf {
+                GeneralConfig::CameraModelNf(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for CameraModelNf"),
+            },
+            camera_model_wf: match camera_model_wf {
+                GeneralConfig::CameraModelWf(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for CameraModelWf"),
+            },
+            stereo_iso: match stereo_iso {
+                GeneralConfig::StereoIso(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for StereoIso"),
+            },
+        })
     }
 
     pub async fn get_frame(&self) -> Result<([MotData; 16], [MotData; 16])> {
@@ -390,7 +508,8 @@ impl VmDevice {
                 return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
             }
             let (slot, receiver) = self.get_stream_slot(100)?;
-            self.transport.writer
+            self.transport
+                .writer
                 .send(Packet {
                     id: slot.id,
                     data: PacketData::StreamUpdate(StreamUpdate {
@@ -449,7 +568,8 @@ impl VmDevice {
     }
 
     pub async fn flash_settings(&self) -> Result<()> {
-        self.transport.writer
+        self.transport
+            .writer
             .send(Packet {
                 id: 255,
                 data: PacketData::FlashSettings(),
