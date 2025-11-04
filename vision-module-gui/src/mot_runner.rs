@@ -13,6 +13,7 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio_stream::StreamExt;
+use tracing::info;
 
 pub fn transform_aimpoint_to_identity(
     center_aim: Point2<f64>,
@@ -108,7 +109,7 @@ pub fn sort_points<T: Scalar + PartialOrd>(a: &mut [Point2<T>]) {
 }
 
 pub struct MotRunner {
-    pub state: MotState,
+    pub state: crate::MotState,
     pub device: Option<VmDevice>,
     pub general_config: GeneralSettings,
     pub record_impact: bool,
@@ -436,13 +437,16 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
         if let Some(_prev_timestamp) = prev_timestamp {
             if accel.timestamp < _prev_timestamp {
                 prev_timestamp = None;
+                if accel.timestamp < _prev_timestamp {
+                    prev_timestamp = None;
+                    continue;
+                }
                 continue;
             }
         }
 
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = accel.timestamp as u64 - prev_timestamp as u64;
-            // println!("elapsed: {}", elapsed);
             runner.state.fv_state.predict(
                 -accel.accel.xzy(),
                 -accel.gyro.xzy(),

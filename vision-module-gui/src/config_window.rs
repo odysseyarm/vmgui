@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
-    device::VmDevice,
+    device::{VmDevice, VmConnectionInfo, HubDevice},
     packets::vm::{AccelConfig, ConfigKind, GeneralConfig, GyroConfig, Port, PropKind},
 };
 use iui::{
@@ -112,7 +112,7 @@ pub fn config_window(
 
     config_win.set_child(&ui, vbox);
 
-    let device_list = create_rw_signal(Vec::<DeviceInfo>::new());
+    let device_list = create_rw_signal(Vec::<VmConnectionInfo>::new());
     let device_combobox_on_selected = {
         let ui = ui.c();
         let config_win = config_win.c();
@@ -132,7 +132,8 @@ pub fn config_window(
             let general_settings = general_settings.c();
             let task = async move {
                 let usb_device = if let Some(_device) = _device {
-                    Ok(VmDevice::connect_usb(_device).await.unwrap())
+                    eprintln!("Attempting to connect to device...");
+                    _device.connect().await
                 } else if let Some(sim_addr) = sim_addr.as_ref() {
                     unimplemented!();
                     // Ok(VmDevice::connect_tcp(sim_addr)?)
@@ -187,7 +188,7 @@ pub fn config_window(
             device_combobox.clear(&ui);
             device_list.with(|device_list| {
                 for device in device_list {
-                    device_combobox.append(&ui, &display_for_device_info(device));
+                    device_combobox.append(&ui, &display_for_vm_connection(device));
                 }
             });
             if let Some(sim_addr) = &simulator_addr {
@@ -204,9 +205,12 @@ pub fn config_window(
         let ui = ui.c();
         let simulator_addr = simulator_addr.c();
         let udp_addr = udp_addr.c();
+        let ui_ctx = ui.async_context();
+        let device_combobox_on_selected = device_combobox_on_selected.c();
         move || {
+            eprintln!("=== refresh_device_list called ===");
             let devices = nusb::list_devices().wait();
-            let ports: Vec<_> = match devices {
+            let usb_devices: Vec<_> = match devices {
                 Ok(p) => p,
                 Err(e) => {
                     config_win.modal_err(&ui, "Failed to list usb devices", &e.to_string());
@@ -221,18 +225,114 @@ pub fn config_window(
                         || info.product_id() == 0x5211)
             })
             .collect();
-            device_list.set(ports.c());
-            if simulator_addr.is_some() {
-                device_combobox.set_selected(&ui, ports.len() as i32);
-                device_combobox_on_selected(ports.len() as i32);
-            } else if udp_addr.is_some() {
-                device_combobox.set_selected(&ui, ports.len() as i32);
-                device_combobox_on_selected(ports.len() as i32);
-            } else if ports.len() > 0 {
-                device_combobox.set_selected(&ui, 0);
-                device_combobox_on_selected(0);
+
+            eprintln!("Found {} USB devices", usb_devices.len());
+
+            // Build list of VmConnectionInfo entries
+            let mut vm_connections: Vec<VmConnectionInfo> = Vec::new();
+
+            // Add direct USB vision modules (0x520F and 0x5211)
+            for info in &usb_devices {
+                if info.product_id() == 0x520F || info.product_id() == 0x5211 {
+                    vm_connections.push(VmConnectionInfo::DirectUsb(info.clone()));
+                }
+            }
+
+            // Find hub devices (0x5210)
+            let hub_devices: Vec<_> = usb_devices.iter()
+                .filter(|info| info.product_id() == 0x5210)
+                .cloned()
+                .collect();
+
+            eprintln!("Found {} hub devices", hub_devices.len());
+
+            if !hub_devices.is_empty() {
+                // Set initial list with just direct USB devices
+                device_list.set(vm_connections.clone());
+                
+                // Get count before moving
+                let initial_num_devices = vm_connections.len();
+                
+                // Query hub devices asynchronously and update the list
+                let device_list = device_list.c();
+                
+                eprintln!("Spawning hub query task...");
+                ui_ctx.spawn(async move {
+                    eprintln!("Hub query task started");
+                    let mut all_connections = vm_connections;
+                    let mut active_hubs = Vec::new();  // Keep hubs alive
+
+                    // Query each hub for connected devices
+                    for hub_info in hub_devices {
+                        eprintln!("Attempting to connect to hub...");
+                        match HubDevice::connect_usb(hub_info.clone()).await {
+                            Ok(hub) => {
+                                eprintln!("Hub connected successfully, requesting devices...");
+                                match hub.request_devices().await {
+                                    Ok(devices) => {
+                                        eprintln!("Hub query successful, found {} device(s)", devices.len());
+                                        for device_addr in devices {
+                                            eprintln!("  Device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                                                device_addr[0], device_addr[1], device_addr[2],
+                                                device_addr[3], device_addr[4], device_addr[5]);
+                                            all_connections.push(VmConnectionInfo::ViaHub {
+                                                hub: hub.clone(),
+                                                device_addr,
+                                            });
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to query hub devices: {}", e);
+                                    }
+                                }
+                                // Keep the hub alive by storing it
+                                active_hubs.push(hub);
+                                eprintln!("Hub kept alive for future connections");
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to connect to hub: {}", e);
+                            }
+                        }
+                    }
+
+                    eprintln!("Updating device list with {} total devices", all_connections.len());
+                    // Update device list with all connections (direct + hub)
+                    device_list.set(all_connections);
+                    
+                    // Keep hubs alive by leaking them (they need to stay alive for the lifetime of the app)
+                    std::mem::forget(active_hubs);
+                    eprintln!("Hub query task completed, hubs kept alive");
+                });
+                // Initial selection with direct USB only
+                if simulator_addr.is_some() {
+                    device_combobox.set_selected(&ui, initial_num_devices as i32);
+                    device_combobox_on_selected(initial_num_devices as i32);
+                } else if udp_addr.is_some() {
+                    device_combobox.set_selected(&ui, initial_num_devices as i32);
+                    device_combobox_on_selected(initial_num_devices as i32);
+                } else if initial_num_devices > 0 {
+                    device_combobox.set_selected(&ui, 0);
+                    device_combobox_on_selected(0);
+                } else {
+                    device_combobox_on_selected(-1);
+                }
             } else {
-                device_combobox_on_selected(-1);
+                // No hubs found, just use direct USB connections
+                let num_devices = vm_connections.len();
+                device_list.set(vm_connections);
+                
+                if simulator_addr.is_some() {
+                    device_combobox.set_selected(&ui, num_devices as i32);
+                    device_combobox_on_selected(num_devices as i32);
+                } else if udp_addr.is_some() {
+                    device_combobox.set_selected(&ui, num_devices as i32);
+                    device_combobox_on_selected(num_devices as i32);
+                } else if num_devices > 0 {
+                    device_combobox.set_selected(&ui, 0);
+                    device_combobox_on_selected(0);
+                } else {
+                    device_combobox_on_selected(-1);
+                }
             }
         }
     };
@@ -559,30 +659,34 @@ impl GeneralSettingsForm {
 
     async fn load_from_device(&self, device: &VmDevice, first_load: bool) -> Result<u16> {
         let timeout = Duration::from_millis(5000);
-
         // Read all config values at once
-        let config = retry(|| device.read_all_config(), timeout, 3)
-            .await
-            .unwrap()?;
+        let config = match retry(|| device.read_all_config(), timeout, 3).await {
+            Some(Ok(cfg)) => cfg,
+            Some(Err(e)) => return Err(e.into()),
+            None => return Err(anyhow::anyhow!("Timeout reading device config after 3 attempts")),
+        };
 
         // Read individual prop fields
-        let uuid_prop = retry(|| device.read_prop(PropKind::Uuid), timeout, 3)
-            .await
-            .unwrap()?;
-        let product_id_prop = retry(|| device.read_prop(PropKind::ProductId), timeout, 3)
-            .await
-            .unwrap()?;
+        let uuid_prop = match retry(|| device.read_prop(PropKind::Uuid), timeout, 3).await {
+            Some(Ok(p)) => p,
+            Some(Err(e)) => return Err(e.into()),
+            None => return Err(anyhow::anyhow!("Timeout reading UUID after 3 attempts")),
+        };
+        let product_id_prop = match retry(|| device.read_prop(PropKind::ProductId), timeout, 3).await {
+            Some(Ok(p)) => p,
+            Some(Err(e)) => return Err(e.into()),
+            None => return Err(anyhow::anyhow!("Timeout reading ProductId after 3 attempts")),
+        };
 
         // Extract values from enum variants
         let uuid = match uuid_prop {
             ats_usb::packets::vm::Props::Uuid(val) => val,
-            _ => panic!("Unexpected prop variant"),
+            _ => return Err(anyhow::anyhow!("Unexpected prop variant for Uuid")),
         };
         let product_id = match product_id_prop {
             ats_usb::packets::vm::Props::ProductId(val) => val,
-            _ => panic!("Unexpected prop variant"),
+            _ => return Err(anyhow::anyhow!("Unexpected prop variant for ProductId")),
         };
-
         self.impact_threshold
             .set(i32::from(config.impact_threshold));
         self.suppress_ms.set(i32::from(config.suppress_ms));
@@ -1031,28 +1135,44 @@ fn set_gyro_download_handler(
     });
 }
 
-fn display_for_device_info(info: &DeviceInfo) -> String {
-    let mut out = String::new();
-    if let Some(m) = info.manufacturer_string() {
-        out.push_str(m);
-    }
-    if let Some(p) = info.product_string() {
-        if !out.is_empty() {
-            out.push_str(" - ");
+fn display_for_vm_connection(conn: &VmConnectionInfo) -> String {
+    match conn {
+        VmConnectionInfo::DirectUsb(info) => {
+            let mut out = String::new();
+            if let Some(m) = info.manufacturer_string() {
+                out.push_str(m);
+            }
+            if let Some(p) = info.product_string() {
+                if !out.is_empty() {
+                    out.push_str(" - ");
+                }
+                out.push_str(p);
+            }
+            if !out.is_empty() {
+                out.push_str(" ");
+            }
+            out.push_str(&format!(
+                "({:04x}:{:04x})",
+                info.vendor_id(),
+                info.product_id()
+            ));
+            out = out.replace('\x00', "");
+            out
         }
-        out.push_str(p);
+        VmConnectionInfo::ViaHub { device_addr, .. } => {
+            format!(
+                "VM via Hub ({:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X})",
+                device_addr[0],
+                device_addr[1],
+                device_addr[2],
+                device_addr[3],
+                device_addr[4],
+                device_addr[5]
+            )
+        }
     }
-    if !out.is_empty() {
-        out.push_str(" ");
-    }
-    out.push_str(&format!(
-        "({:4x}:{:4x})",
-        info.vendor_id(),
-        info.product_id()
-    ));
-    out = out.replace('\x00', "");
-    out
 }
+
 
 /// Retry an asynchronous operation up to `limit` times.
 async fn retry<F, G>(mut op: F, timeout: Duration, limit: usize) -> Option<G::Output>

@@ -1,0 +1,3 @@
+* .claude:
+  + CONFIG_WINDOW_CHANGES.md
+  + HUB_SUPPORT_STATUS.md
