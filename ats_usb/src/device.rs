@@ -5,32 +5,29 @@ use nusb::{
     transfer::{Bulk, In, Out},
     DeviceInfo,
 };
-use protodongers::{PocMarkersReport, VendorData};
+use protodongers::{
+    hub::{ClearBondsError, PairingError},
+    PocMarkersReport, VendorData,
+};
 use std::{
-    any::Any,
-    borrow::Cow,
-    net::TcpStream,
     pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, Weak,
     },
     task::Poll,
-    time::Duration,
 };
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::{lookup_host, ToSocketAddrs, UdpSocket},
+    io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, oneshot},
-    time::sleep,
 };
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::packets::vm::{
     AccelConfig, AccelReport, CombinedMarkersReport, ConfigKind, GeneralConfig, GyroConfig,
-    ImpactReport, MotData, ObjectReport, Packet, PacketData, PacketType, Port, PropKind, Props,
-    Register, StreamUpdate, WriteRegister,
+    ImpactReport, MotData, ObjectReport, Packet, PacketData, PacketType, Port, Props, Register,
+    StreamUpdate, WriteRegister,
 };
 use nalgebra::Isometry3;
 use opencv_ros_camera::RosOpenCvIntrinsics;
@@ -240,6 +237,61 @@ impl PacketTransport {
         }
     }
 
+    /// Create a PacketTransport that routes VM packets through a HubDevice
+    pub fn hub(hub: HubDevice, device_addr: [u8; 6]) -> Self {
+        let (writer, mut writer_rx) = mpsc::channel::<Packet>(64);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<Packet>(128);
+
+        let hub_clone = hub.clone();
+
+        // Writer task: wraps outgoing VM packets in HubMsg::SendTo
+        tokio::spawn(async move {
+            while let Some(pkt) = writer_rx.recv().await {
+                info!("hub writer: sending packet to device {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                    device_addr[0], device_addr[1], device_addr[2], device_addr[3], device_addr[4], device_addr[5]);
+                if let Err(e) = hub.send_to(device_addr, pkt).await {
+                    error!("hub send_to failed: {e}");
+                    break;
+                }
+            }
+            info!("hub writer task exits");
+        });
+
+        // Reader task: unwraps incoming HubMsg::DevicePacket for our device
+        tokio::spawn(async move {
+            loop {
+                match hub_clone.receive_msg().await {
+                    Ok(msg) => {
+                        trace!("hub reader: received message");
+                        // Only forward packets from our target device
+                        if let crate::packets::hub::HubMsg::DevicePacket(dev_pkt) = msg {
+                            if dev_pkt.dev == device_addr {
+                                trace!("hub reader: forwarding packet from our device");
+                                if incoming_tx.send(dev_pkt.pkt).await.is_err() {
+                                    break;
+                                }
+                            } else {
+                                trace!("hub reader: ignoring packet from other device");
+                            }
+                        } else {
+                            trace!("hub reader: ignoring non-DevicePacket message");
+                        }
+                    }
+                    Err(e) => {
+                        error!("hub receive_msg failed: {e}");
+                        break;
+                    }
+                }
+            }
+            info!("hub reader task exits");
+        });
+
+        PacketTransport {
+            writer,
+            incoming_rx,
+        }
+    }
+
     pub async fn send(
         &self,
         pkt: Packet,
@@ -278,12 +330,16 @@ impl VmDevice {
         tokio::spawn(async move {
             use tokio_stream::StreamExt;
             while let Some(reply) = incoming.next().await {
+                trace!("Packet received: id={}, data={:?}", reply.id, &reply.data);
                 let mut chans = state_cloned.response_channels.lock().unwrap();
                 let slot = &mut chans[usize::from(reply.id)];
                 let data = reply.data;
 
                 let err = match std::mem::take(slot) {
-                    ResponseChannel::None => None,
+                    ResponseChannel::None => {
+                        warn!("Packet received for unregistered slot {}", reply.id);
+                        None
+                    }
                     ResponseChannel::Oneshot(tx) => tx.send(data).err().map(|e| format!("{e:?}")),
                     ResponseChannel::Stream(tx) => {
                         let e = tx.try_send(data).err().map(|e| format!("{e:?}"));
@@ -312,6 +368,11 @@ impl VmDevice {
         let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
 
         let transport = PacketTransport::usb(in_ep, out_ep);
+        Ok(Self::from_transport(transport))
+    }
+    /// Create a VmDevice that communicates with a vision module through a hub/dongle
+    pub async fn connect_via_hub(hub: HubDevice, device_addr: [u8; 6]) -> Result<Self> {
+        let transport = PacketTransport::hub(hub, device_addr);
         Ok(Self::from_transport(transport))
     }
 
@@ -508,6 +569,10 @@ impl VmDevice {
                 return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
             }
             let (slot, receiver) = self.get_stream_slot(100)?;
+            info!(
+                "Requesting stream: type={:?}, slot_id={}",
+                stream_type, slot.id
+            );
             self.transport
                 .writer
                 .send(Packet {
@@ -696,4 +761,301 @@ impl VmDevice {
     write_register_spec!(set_pag_area_upper: u16 = 0x00; [0x6A, 0x6B]);
     read_register_spec!(pag_light_threshold: u8 = 0x00; [0x6C]);
     write_register_spec!(set_pag_light_threshold: u8 = 0x00; [0x6C]);
+}
+
+// Hub Device for dongle-fw
+
+use crate::packets::hub::{HubMsg, SendTo, MAX_DEVICES};
+use heapless::Vec as HVec;
+
+pub struct HubTransport {
+    writer: mpsc::Sender<HubMsg>,
+    incoming_rx: mpsc::Receiver<HubMsg>,
+}
+
+impl HubTransport {
+    pub fn usb(mut in_ep: EndpointRead<Bulk>, mut out_ep: EndpointWrite<Bulk>) -> Self {
+        let (writer, mut writer_rx) = mpsc::channel::<HubMsg>(64);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<HubMsg>(128);
+
+        // Writer task
+        tokio::spawn(async move {
+            let mut raw = Vec::with_capacity(1024);
+            while let Some(msg) = writer_rx.recv().await {
+                raw.clear();
+                if let Err(e) = postcard::to_io(&msg, &mut raw) {
+                    error!("hub postcard serialize failed: {e}");
+                    continue;
+                }
+                if let Err(e) = out_ep.write_all(&raw).await {
+                    error!("hub usb write_all failed: {e}");
+                    continue;
+                }
+                if let Err(e) = out_ep.flush_end_async().await {
+                    error!("hub usb flush_end failed: {e:?}");
+                    continue;
+                }
+            }
+            info!("hub usb writer exits");
+        });
+
+        // Reader task
+        tokio::spawn(async move {
+            let mut reader = in_ep.until_short_packet();
+            let mut io_errs = 0u8;
+            loop {
+                let mut buf = Vec::with_capacity(256);
+                match reader.read_to_end(&mut buf).await {
+                    Err(e) => {
+                        use std::io::ErrorKind::*;
+                        match e.kind() {
+                            TimedOut | WouldBlock => {
+                                io_errs = 0;
+                                continue;
+                            }
+                            BrokenPipe | UnexpectedEof | ConnectionReset => break,
+                            _ => {
+                                if io_errs < 3 {
+                                    warn!("hub usb read error (ignored): {e}");
+                                    io_errs += 1;
+                                    continue;
+                                }
+                                error!("hub usb read error: {e}");
+                                break;
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        io_errs = 0;
+                    }
+                }
+                if let Err(e) = reader.consume_end() {
+                    warn!("hub usb consume_end failed: {e:?}");
+                    continue;
+                }
+                match postcard::from_bytes::<HubMsg>(&buf) {
+                    Ok(msg) => {
+                        if incoming_tx.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => error!("hub postcard decode failed: {e:?}"),
+                }
+            }
+            info!("hub usb reader exits");
+        });
+
+        HubTransport {
+            writer,
+            incoming_rx,
+        }
+    }
+
+    pub fn split(self) -> (mpsc::Sender<HubMsg>, ReceiverStream<HubMsg>) {
+        let HubTransport {
+            writer,
+            incoming_rx,
+        } = self;
+        (writer, ReceiverStream::new(incoming_rx))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HubDevice {
+    writer: mpsc::Sender<HubMsg>,
+    response_rx: Arc<tokio::sync::Mutex<ReceiverStream<HubMsg>>>,
+}
+
+impl HubDevice {
+    pub fn from_transport(transport: HubTransport) -> Self {
+        let (writer, incoming) = transport.split();
+        HubDevice {
+            writer,
+            response_rx: Arc::new(tokio::sync::Mutex::new(incoming)),
+        }
+    }
+
+    pub async fn connect_usb(info: DeviceInfo) -> Result<Self> {
+        let dev = info.open().await?;
+        let iface = dev.claim_interface(0).await?;
+
+        let in_ep = iface.endpoint::<Bulk, In>(0x81)?.reader(4096);
+        let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
+
+        let transport = HubTransport::usb(in_ep, out_ep);
+        Ok(Self::from_transport(transport))
+    }
+
+    async fn send_msg(&self, msg: HubMsg) -> Result<()> {
+        self.writer
+            .send(msg)
+            .await
+            .map_err(|e| anyhow!("send failed: {e}"))?;
+        Ok(())
+    }
+
+    pub async fn receive_msg(&self) -> Result<HubMsg> {
+        use tokio_stream::StreamExt;
+        let mut rx = self.response_rx.lock().await;
+        rx.next().await.ok_or_else(|| anyhow!("channel closed"))
+    }
+
+    pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
+        self.send_msg(HubMsg::RequestDevices).await?;
+
+        match self.receive_msg().await? {
+            HubMsg::DevicesSnapshot(devices) => Ok(devices),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    pub async fn send_to(&self, dev: [u8; 6], pkt: Packet) -> Result<()> {
+        let msg = HubMsg::SendTo(SendTo { dev, pkt });
+        self.send_msg(msg).await
+    }
+
+    pub async fn read_version(&self) -> Result<crate::packets::hub::Version> {
+        self.send_msg(HubMsg::ReadVersion()).await?;
+
+        match self.receive_msg().await? {
+            HubMsg::ReadVersionResponse(version) => Ok(version),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /*
+        pub async fn add_scan_target(&self, address: [u8; 6]) -> Result<()> {
+            self.send_msg(HubMsg::AddScanTarget(address)).await?;
+
+            match self.receive_msg().await? {
+                HubMsg::AddScanTargetResponse(result) => {
+                    use crate::packets::hub::AddScanTargetResult;
+                    match result {
+                        AddScanTargetResult::Success => Ok(()),
+                        AddScanTargetResult::ScanListFull => Err(anyhow!("Scan list full")),
+                        AddScanTargetResult::InvalidAddress => Err(anyhow!("Invalid address")),
+                    }
+                }
+                other => Err(anyhow!("unexpected response: {other:?}")),
+            }
+        }
+
+        pub async fn remove_scan_target(&self, address: [u8; 6]) -> Result<()> {
+            self.send_msg(HubMsg::RemoveScanTarget(address)).await?;
+
+            match self.receive_msg().await? {
+                HubMsg::RemoveScanTargetResponse(result) => {
+                    use crate::packets::hub::RemoveScanTargetResult;
+                    match result {
+                        RemoveScanTargetResult::Success => Ok(()),
+                        RemoveScanTargetResult::NotFound => Err(anyhow!("Scan target not found")),
+                    }
+                }
+                other => Err(anyhow!("unexpected response: {other:?}")),
+            }
+        }
+    }
+    */
+
+    /// Start pairing mode on the dongle with a timeout (ms).
+    pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
+        use crate::packets::hub::StartPairing;
+        self.send_msg(HubMsg::StartPairing(StartPairing { timeout_ms }))
+            .await?;
+        match self.receive_msg().await? {
+            HubMsg::StartPairingResponse => Ok(()),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Cancel pairing mode on the dongle.
+    pub async fn cancel_pairing(&self) -> Result<()> {
+        self.send_msg(HubMsg::CancelPairing).await?;
+        match self.receive_msg().await? {
+            HubMsg::PairingResult(Err(PairingError::Cancelled)) => Ok(()),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Wait for a pairing event from the dongle.
+    pub async fn wait_pairing_event(&self) -> Result<PairingEvent> {
+        loop {
+            match self.receive_msg().await? {
+                HubMsg::PairingResult(Ok(addr)) => return Ok(PairingEvent::Result(addr)),
+                HubMsg::PairingResult(Err(PairingError::Timeout)) => {
+                    return Ok(PairingEvent::Timeout)
+                }
+                HubMsg::PairingResult(Err(PairingError::Cancelled)) => {
+                    return Ok(PairingEvent::Cancelled)
+                }
+                _ => {
+                    // Ignore unrelated events
+                }
+            }
+        }
+    }
+
+    pub async fn clear_bonds(&self) -> Result<()> {
+        self.send_msg(HubMsg::ClearBonds).await?;
+        match self.receive_msg().await? {
+            HubMsg::ClearBondsResponse(Ok(())) => Ok(()),
+            HubMsg::ClearBondsResponse(Err(ClearBondsError::Failed)) => {
+                Err(anyhow!("Failed to clear bonds"))
+            }
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairingEvent {
+    Result([u8; 6]),
+    Timeout,
+    Cancelled,
+}
+
+/// Represents either a direct USB connection or a hub-mediated connection to a vision module
+#[derive(Clone, Debug)]
+pub enum VmConnectionInfo {
+    DirectUsb(DeviceInfo),
+    ViaHub {
+        hub: HubDevice,
+        device_addr: [u8; 6],
+    },
+}
+
+impl VmConnectionInfo {
+    /// Connect to the vision module using the appropriate method
+    pub async fn connect(self) -> Result<VmDevice> {
+        match self {
+            VmConnectionInfo::DirectUsb(info) => VmDevice::connect_usb(info).await,
+            VmConnectionInfo::ViaHub { hub, device_addr } => {
+                VmDevice::connect_via_hub(hub, device_addr).await
+            }
+        }
+    }
+
+    /// Get a display string for this device
+    pub fn display_string(&self) -> String {
+        match self {
+            VmConnectionInfo::DirectUsb(info) => {
+                format!(
+                    "Vision Module {:04X}:{:04X}",
+                    info.vendor_id(),
+                    info.product_id()
+                )
+            }
+            VmConnectionInfo::ViaHub { device_addr, .. } => {
+                format!(
+                    "VM via Hub {:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                    device_addr[0],
+                    device_addr[1],
+                    device_addr[2],
+                    device_addr[3],
+                    device_addr[4],
+                    device_addr[5]
+                )
+            }
+        }
+    }
 }

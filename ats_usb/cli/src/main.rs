@@ -5,6 +5,7 @@ use argmin_observer_slog::SlogLogger;
 use clap::Parser;
 use futures::StreamExt;
 use nalgebra::{SVector, Vector3};
+use nusb::MaybeFuture as _;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serialport::SerialPortType;
@@ -149,7 +150,25 @@ async fn main() {
     let num_samples = args.n;
     let gravity = args.g;
 
-    let mut device = ats_usb::device::UsbDevice::connect(info, false)
+    // Find USB device
+    let devices: Vec<_> = nusb::list_devices()
+        .wait()
+        .unwrap()
+        .into_iter()
+        .filter(|info| {
+            info.vendor_id() == 0x1915
+                && (info.product_id() == 0x520F
+                    || info.product_id() == 0x5210
+                    || info.product_id() == 0x5211)
+        })
+        .collect();
+
+    if devices.is_empty() {
+        eprintln!("No USB device found");
+        return;
+    }
+
+    let mut device = ats_usb::device::VmDevice::connect_usb(devices.into_iter().next().unwrap())
         .await
         .unwrap();
 
@@ -169,7 +188,7 @@ async fn main() {
 }
 
 async fn calculate_and_save_bias_scale(
-    device: &mut ats_usb::device::UsbDevice,
+    device: &mut ats_usb::device::VmDevice,
     accel_path: &str,
     num_samples: usize,
     g: f64,
@@ -250,11 +269,11 @@ async fn calculate_and_save_bias_scale(
 }
 
 async fn calculate_and_save_gyro_bias(
-    device: &mut ats_usb::device::UsbDevice,
+    device: &mut ats_usb::device::VmDevice,
     gyro_path: &str,
     num_samples: usize,
 ) {
-    let mut gyro_sum = Vector3::zeros();
+    let mut gyro_sum = Vector3::<f64>::zeros();
 
     println!("Please make sure the device is held firmly in place.");
     println!("Press Enter when ready to start collecting samples for gyroscope calibration.");
@@ -290,8 +309,8 @@ async fn calculate_and_save_gyro_bias(
 async fn normal_streaming(
     s: &mut (impl futures::Stream<Item = ats_usb::packets::vm::AccelReport> + Unpin),
 ) {
-    let mut accel_sum = Vector3::zeros();
-    let mut gyro_sum = Vector3::zeros();
+    let mut accel_sum = Vector3::<f64>::zeros();
+    let mut gyro_sum = Vector3::<f64>::zeros();
     let mut count = 0.0;
 
     tokio::select! {
@@ -343,8 +362,8 @@ async fn normal_streaming(
 
                 println!("accel = {:8.4?}, ||accel|| = {:7.4}, gyro = {:8.4?}, ts = {:9}, elapsed = {:7}, ODR = {:7.3?}", v.accel, v.accel.magnitude(), v.gyro, v.timestamp, elapsed, sample_interval_average.map(|s| 1.0 / s));
                 count += 1.0;
-                accel_sum += v.accel;
-                gyro_sum += v.gyro;
+                accel_sum += v.accel.cast::<f64>();
+                gyro_sum += v.gyro.cast::<f64>();
             }
         } => {},
     }
