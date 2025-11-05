@@ -670,6 +670,7 @@ dependencies = [
  "argmin 0.11.0",
  "ats_common",
  "enumn",
+ "futures",
  "heapless 0.9.1",
  "minicbor",
  "nalgebra 0.34.1",

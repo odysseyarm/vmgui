@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
-    device::{VmDevice, VmConnectionInfo, HubDevice},
+    device::{HubDevice, VmConnectionInfo, VmDevice},
     packets::vm::{AccelConfig, ConfigKind, GeneralConfig, GyroConfig, Port, PropKind},
 };
 use iui::{
@@ -239,7 +239,8 @@ pub fn config_window(
             }
 
             // Find hub devices (0x5210)
-            let hub_devices: Vec<_> = usb_devices.iter()
+            let hub_devices: Vec<_> = usb_devices
+                .iter()
                 .filter(|info| info.product_id() == 0x5210)
                 .cloned()
                 .collect();
@@ -249,13 +250,13 @@ pub fn config_window(
             if !hub_devices.is_empty() {
                 // Set initial list with just direct USB devices
                 device_list.set(vm_connections.clone());
-                
+
                 // Get count before moving
                 let initial_num_devices = vm_connections.len();
-                
+
                 // Query hub devices asynchronously and update the list
                 let device_list = device_list.c();
-                
+
                 eprintln!("Spawning hub query task...");
                 ui_ctx.spawn(async move {
                     eprintln!("Hub query task started");
@@ -298,7 +299,7 @@ pub fn config_window(
                     eprintln!("Updating device list with {} total devices", all_connections.len());
                     // Update device list with all connections (direct + hub)
                     device_list.set(all_connections);
-                    
+
                     // Keep hubs alive by leaking them (they need to stay alive for the lifetime of the app)
                     std::mem::forget(active_hubs);
                     eprintln!("Hub query task completed, hubs kept alive");
@@ -320,7 +321,7 @@ pub fn config_window(
                 // No hubs found, just use direct USB connections
                 let num_devices = vm_connections.len();
                 device_list.set(vm_connections);
-                
+
                 if simulator_addr.is_some() {
                     device_combobox.set_selected(&ui, num_devices as i32);
                     device_combobox_on_selected(num_devices as i32);
@@ -659,11 +660,16 @@ impl GeneralSettingsForm {
 
     async fn load_from_device(&self, device: &VmDevice, first_load: bool) -> Result<u16> {
         let timeout = Duration::from_millis(5000);
+
         // Read all config values at once
         let config = match retry(|| device.read_all_config(), timeout, 3).await {
             Some(Ok(cfg)) => cfg,
             Some(Err(e)) => return Err(e.into()),
-            None => return Err(anyhow::anyhow!("Timeout reading device config after 3 attempts")),
+            None => {
+                return Err(anyhow::anyhow!(
+                    "Timeout reading device config after 3 attempts"
+                ))
+            }
         };
 
         // Read individual prop fields
@@ -672,11 +678,16 @@ impl GeneralSettingsForm {
             Some(Err(e)) => return Err(e.into()),
             None => return Err(anyhow::anyhow!("Timeout reading UUID after 3 attempts")),
         };
-        let product_id_prop = match retry(|| device.read_prop(PropKind::ProductId), timeout, 3).await {
-            Some(Ok(p)) => p,
-            Some(Err(e)) => return Err(e.into()),
-            None => return Err(anyhow::anyhow!("Timeout reading ProductId after 3 attempts")),
-        };
+        let product_id_prop =
+            match retry(|| device.read_prop(PropKind::ProductId), timeout, 3).await {
+                Some(Ok(p)) => p,
+                Some(Err(e)) => return Err(e.into()),
+                None => {
+                    return Err(anyhow::anyhow!(
+                        "Timeout reading ProductId after 3 attempts"
+                    ))
+                }
+            };
 
         // Extract values from enum variants
         let uuid = match uuid_prop {
@@ -1172,7 +1183,6 @@ fn display_for_vm_connection(conn: &VmConnectionInfo) -> String {
         }
     }
 }
-
 
 /// Retry an asynchronous operation up to `limit` times.
 async fn retry<F, G>(mut op: F, timeout: Duration, limit: usize) -> Option<G::Output>

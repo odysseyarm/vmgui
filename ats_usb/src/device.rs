@@ -368,12 +368,19 @@ impl VmDevice {
         let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
 
         let transport = PacketTransport::usb(in_ep, out_ep);
-        Ok(Self::from_transport(transport))
+        let device = Self::from_transport(transport);
+        device.clear_all_streams().await.unwrap();
+        Ok(device)
     }
+
     /// Create a VmDevice that communicates with a vision module through a hub/dongle
     pub async fn connect_via_hub(hub: HubDevice, device_addr: [u8; 6]) -> Result<Self> {
         let transport = PacketTransport::hub(hub, device_addr);
-        Ok(Self::from_transport(transport))
+        let device = Self::from_transport(transport);
+        device.clear_all_streams().await.unwrap();
+        // TODO with Ack we don't have to do this
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        Ok(device)
     }
 
     pub async fn send(&self, pkt: Packet) -> Result<(), mpsc::error::SendError<Packet>> {
@@ -649,11 +656,47 @@ impl VmDevice {
         self.transport.writer.send(pkt).await?;
         Ok(())
     }
+
+    pub async fn clear_all_streams(&self) -> Result<()> {
+        if let Some(thread_state) = self.thread_state.upgrade() {
+            for stream_type in 0u8..=4u8 {
+                let packet_type = match stream_type {
+                    0 => PacketType::ObjectReport(),
+                    1 => PacketType::CombinedMarkersReport(),
+                    2 => PacketType::PocMarkersReport(),
+                    3 => PacketType::AccelReport(),
+                    4 => PacketType::ImpactReport(),
+                    _ => continue,
+                };
+
+                if thread_state.streams_active[packet_type].load(Ordering::Relaxed) {
+                    info!("Clearing active stream: {:?}", packet_type);
+                    thread_state.streams_active[packet_type].store(false, Ordering::Relaxed);
+                }
+            }
+            let mut chans = thread_state.response_channels.lock().unwrap();
+            for chan in chans.iter_mut() {
+                *chan = ResponseChannel::None;
+            }
+        }
+        let _ = self
+            .transport
+            .writer
+            .send(Packet {
+                id: 255,
+                data: PacketData::StreamUpdate(StreamUpdate {
+                    packet_id: PacketType::End(),
+                    action: crate::packets::vm::StreamUpdateAction::DisableAll,
+                }),
+            })
+            .await;
+        Ok(())
+    }
 }
 
 pub struct PacketStream {
-    stream_type: PacketType,
     slot: ResponseSlot,
+    stream_type: PacketType,
     sender: mpsc::Sender<Packet>,
     receiver: ReceiverStream<PacketData>,
 }
@@ -903,9 +946,22 @@ impl HubDevice {
     pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
         self.send_msg(HubMsg::RequestDevices).await?;
 
-        match self.receive_msg().await? {
-            HubMsg::DevicesSnapshot(devices) => Ok(devices),
-            other => Err(anyhow!("unexpected response: {other:?}")),
+        let total_timeout = tokio::time::Duration::from_secs(1);
+
+        let receive_until_snapshot = async {
+            loop {
+                match self.receive_msg().await {
+                    Ok(HubMsg::DevicesSnapshot(devices)) => return Ok(devices),
+                    Ok(_other) => continue,
+                    Err(e) => return Err(anyhow!("receive_msg error: {e}")),
+                }
+            }
+        };
+
+        match tokio::time::timeout(total_timeout, receive_until_snapshot).await {
+            Ok(Ok(devices)) => Ok(devices),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(anyhow!("timeout waiting for DevicesSnapshot")),
         }
     }
 
@@ -922,40 +978,6 @@ impl HubDevice {
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
-
-    /*
-        pub async fn add_scan_target(&self, address: [u8; 6]) -> Result<()> {
-            self.send_msg(HubMsg::AddScanTarget(address)).await?;
-
-            match self.receive_msg().await? {
-                HubMsg::AddScanTargetResponse(result) => {
-                    use crate::packets::hub::AddScanTargetResult;
-                    match result {
-                        AddScanTargetResult::Success => Ok(()),
-                        AddScanTargetResult::ScanListFull => Err(anyhow!("Scan list full")),
-                        AddScanTargetResult::InvalidAddress => Err(anyhow!("Invalid address")),
-                    }
-                }
-                other => Err(anyhow!("unexpected response: {other:?}")),
-            }
-        }
-
-        pub async fn remove_scan_target(&self, address: [u8; 6]) -> Result<()> {
-            self.send_msg(HubMsg::RemoveScanTarget(address)).await?;
-
-            match self.receive_msg().await? {
-                HubMsg::RemoveScanTargetResponse(result) => {
-                    use crate::packets::hub::RemoveScanTargetResult;
-                    match result {
-                        RemoveScanTargetResult::Success => Ok(()),
-                        RemoveScanTargetResult::NotFound => Err(anyhow!("Scan target not found")),
-                    }
-                }
-                other => Err(anyhow!("unexpected response: {other:?}")),
-            }
-        }
-    }
-    */
 
     /// Start pairing mode on the dongle with a timeout (ms).
     pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
