@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
-    device::{HubDevice, VmConnectionInfo, VmDevice},
+    device::{MuxDevice, VmConnectionInfo, VmDevice},
     packets::vm::{AccelConfig, ConfigKind, GeneralConfig, GyroConfig, Port, PropKind},
 };
 use iui::{
@@ -113,6 +113,7 @@ pub fn config_window(
     config_win.set_child(&ui, vbox);
 
     let device_list = create_rw_signal(Vec::<VmConnectionInfo>::new());
+    let selected_index = create_rw_signal::<Option<i32>>(None);
     let device_combobox_on_selected = {
         let ui = ui.c();
         let config_win = config_win.c();
@@ -120,7 +121,7 @@ pub fn config_window(
         let udp_addr = udp_addr.c();
         let general_settings = general_settings.c();
         move |i| {
-            device.set(None);
+            selected_index.set(Some(i));
             general_settings.clear();
             wf_settings.clear();
             nf_settings.clear();
@@ -130,7 +131,18 @@ pub fn config_window(
             let sim_addr = sim_addr.c();
             let udp_addr = udp_addr.c();
             let general_settings = general_settings.c();
+            let device_signal = device.c();  // Clone the signal for the async task
             let task = async move {
+                // Clean up old device if it exists, BEFORE connecting to new one
+                if let Some(old_device) = device_signal.get_untracked() {
+                    eprintln!("Cleaning up previous device connection...");
+                    let _ = old_device.clear_all_streams().await;
+                    eprintln!("Previous device cleaned up (slot reservation prevents conflicts)");
+                }
+                
+                // NOW set device to None after cleanup
+                device_signal.set(None);
+                
                 let usb_device = if let Some(_device) = _device {
                     eprintln!("Attempting to connect to device...");
                     _device.connect().await
@@ -143,23 +155,53 @@ pub fn config_window(
                 };
                 match usb_device {
                     Ok(usb_device) => {
-                        match num_traits::FromPrimitive::from_u16(
-                            general_settings.load_from_device(&usb_device, true).await?,
-                        ) {
+                        eprintln!("Connection successful, disabling any active streams...");
+                        // Disable all streams from previous session to prevent flooding
+                        if let Err(e) = usb_device.clear_all_streams().await {
+                            eprintln!("WARNING: Failed to disable streams: {:?}", e);
+                        }
+                        eprintln!("Streams disabled, loading general settings...");
+
+                        let product_id_result = general_settings.load_from_device(&usb_device, true).await;
+                        if let Err(ref e) = product_id_result {
+                            eprintln!("ERROR: Failed to load general settings: {:?}", e);
+                            return Err(anyhow::anyhow!("{:?}", e));
+                        }
+                        eprintln!("General settings loaded successfully");
+                        match num_traits::FromPrimitive::from_u16(product_id_result.unwrap()) {
                             Some(ats_usb::device::ProductId::PajAts)
                             | Some(ats_usb::device::ProductId::PajUsb) => {
-                                wf_settings.load_from_device(&usb_device).await?;
-                                nf_settings.load_from_device(&usb_device).await?;
+                                eprintln!("Loading WF settings...");
+                                if let Err(e) = wf_settings.load_from_device(&usb_device).await {
+                                    eprintln!("ERROR: Failed to load WF settings: {:?}", e);
+                                    return Err(e);
+                                }
+                                eprintln!("WF settings loaded, loading NF settings...");
+                                if let Err(e) = nf_settings.load_from_device(&usb_device).await {
+                                    eprintln!("ERROR: Failed to load NF settings: {:?}", e);
+                                    return Err(e);
+                                }
+                                eprintln!("NF settings loaded successfully");
                             }
                             Some(ats_usb::device::ProductId::PocAts) => {
-                                poc_settings.load_from_device(&usb_device).await?;
+                                eprintln!("Loading POC settings...");
+                                if let Err(e) = poc_settings.load_from_device(&usb_device).await {
+                                    eprintln!("ERROR: Failed to load POC settings: {:?}", e);
+                                    return Err(e);
+                                }
+                                eprintln!("POC settings loaded successfully");
                             }
                             None => {}
                         }
+                        eprintln!("All settings loaded, setting device...");
                         device.set(Some(usb_device));
+                        eprintln!("Device set successfully");
                         Result::<()>::Ok(())
                     }
-                    Err(e) => Err(e),
+                    Err(e) => {
+                        eprintln!("ERROR: Device connection failed: {:?}", e);
+                        Err(e)
+                    }
                 }
             };
             ui.spawn({
@@ -185,6 +227,7 @@ pub fn config_window(
         let udp_addr = udp_addr.c();
         move |_| {
             let mut device_combobox = device_combobox.c();
+            let saved_selection = selected_index.get_untracked();
             device_combobox.clear(&ui);
             device_list.with(|device_list| {
                 for device in device_list {
@@ -198,9 +241,12 @@ pub fn config_window(
                 device_combobox.append(&ui, &format!("M4Hub @ {udp_addr}"));
             }
             device_combobox.enable(&ui);
+            if let Some(idx) = saved_selection {
+                device_combobox.set_selected(&ui, idx);
+            }
         }
     });
-    let mut refresh_device_list = {
+    let refresh_device_list = {
         let config_win = config_win.c();
         let ui = ui.c();
         let simulator_addr = simulator_addr.c();
@@ -209,6 +255,7 @@ pub fn config_window(
         let device_combobox_on_selected = device_combobox_on_selected.c();
         move || {
             eprintln!("=== refresh_device_list called ===");
+
             let devices = nusb::list_devices().wait();
             let usb_devices: Vec<_> = match devices {
                 Ok(p) => p,
@@ -238,102 +285,139 @@ pub fn config_window(
                 }
             }
 
-            // Find hub devices (0x5210)
+            // Find mux devices (0x5210)
             let hub_devices: Vec<_> = usb_devices
                 .iter()
                 .filter(|info| info.product_id() == 0x5210)
                 .cloned()
                 .collect();
 
-            eprintln!("Found {} hub devices", hub_devices.len());
-
+            eprintln!("Found {} mux devices", hub_devices.len());
             if !hub_devices.is_empty() {
-                // Set initial list with just direct USB devices
-                device_list.set(vm_connections.clone());
-
-                // Get count before moving
-                let initial_num_devices = vm_connections.len();
-
-                // Query hub devices asynchronously and update the list
-                let device_list = device_list.c();
-
-                eprintln!("Spawning hub query task...");
-                ui_ctx.spawn(async move {
-                    eprintln!("Hub query task started");
-                    let mut all_connections = vm_connections;
-                    let mut active_hubs = Vec::new();  // Keep hubs alive
-
-                    // Query each hub for connected devices
-                    for hub_info in hub_devices {
-                        eprintln!("Attempting to connect to hub...");
-                        match HubDevice::connect_usb(hub_info.clone()).await {
-                            Ok(hub) => {
-                                eprintln!("Hub connected successfully, requesting devices...");
-                                match hub.request_devices().await {
-                                    Ok(devices) => {
-                                        eprintln!("Hub query successful, found {} device(s)", devices.len());
-                                        for device_addr in devices {
-                                            eprintln!("  Device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                                                device_addr[0], device_addr[1], device_addr[2],
-                                                device_addr[3], device_addr[4], device_addr[5]);
-                                            all_connections.push(VmConnectionInfo::ViaHub {
-                                                hub: hub.clone(),
-                                                device_addr,
-                                            });
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to query hub devices: {}", e);
-                                    }
-                                }
-                                // Keep the hub alive by storing it
-                                active_hubs.push(hub);
-                                eprintln!("Hub kept alive for future connections");
+                // Check if we have an existing mux connection in the device list
+                // This will be reused without disrupting any active device connections
+                let existing_mux_and_devices = device_list.with_untracked(|list| {
+                    let mut mux = None;
+                    let mut mux_devices = Vec::new();
+                    for conn in list {
+                        if let VmConnectionInfo::ViaMux {
+                            mux: m,
+                            device_addr,
+                        } = conn
+                        {
+                            if mux.is_none() {
+                                mux = Some(m.clone());
                             }
-                            Err(e) => {
-                                eprintln!("Failed to connect to hub: {}", e);
-                            }
+                            mux_devices.push(*device_addr);
                         }
                     }
-
-                    eprintln!("Updating device list with {} total devices", all_connections.len());
-                    // Update device list with all connections (direct + hub)
-                    device_list.set(all_connections);
-
-                    // Keep hubs alive by leaking them (they need to stay alive for the lifetime of the app)
-                    std::mem::forget(active_hubs);
-                    eprintln!("Hub query task completed, hubs kept alive");
+                    mux.map(|m| (m, mux_devices))
                 });
-                // Initial selection with direct USB only
-                if simulator_addr.is_some() {
-                    device_combobox.set_selected(&ui, initial_num_devices as i32);
-                    device_combobox_on_selected(initial_num_devices as i32);
-                } else if udp_addr.is_some() {
-                    device_combobox.set_selected(&ui, initial_num_devices as i32);
-                    device_combobox_on_selected(initial_num_devices as i32);
-                } else if initial_num_devices > 0 {
-                    device_combobox.set_selected(&ui, 0);
-                    device_combobox_on_selected(0);
+
+                if let Some((existing_mux, existing_mux_devices)) = existing_mux_and_devices {
+                    eprintln!("Reusing existing mux connection for refresh (with {} existing mux devices)", existing_mux_devices.len());
+
+                    let device_list = device_list.c();
+
+                    ui_ctx.spawn(async move {
+                        eprintln!("Mux refresh task started (reusing connection)");
+                        let mut all_connections = vm_connections;
+
+                        eprintln!("Querying devices from existing mux...");
+                        match existing_mux.request_devices().await {
+                            Ok(devices) => {
+                                eprintln!(
+                                    "Mux query successful, found {} device(s)",
+                                    devices.len()
+                                );
+                                for device_addr in devices {
+                                    eprintln!(
+                                        "  Device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                                        device_addr[0],
+                                        device_addr[1],
+                                        device_addr[2],
+                                        device_addr[3],
+                                        device_addr[4],
+                                        device_addr[5]
+                                    );
+                                    all_connections.push(VmConnectionInfo::ViaMux {
+                                        mux: existing_mux.clone(),
+                                        device_addr,
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to query existing mux: {}", e);
+                                eprintln!(
+                                    "Preserving {} existing mux devices in the list",
+                                    existing_mux_devices.len()
+                                );
+                                for device_addr in existing_mux_devices {
+                                    all_connections.push(VmConnectionInfo::ViaMux {
+                                        mux: existing_mux.clone(),
+                                        device_addr,
+                                    });
+                                }
+                            }
+                        }
+
+                        eprintln!(
+                            "Updating device list with {} total devices",
+                            all_connections.len()
+                        );
+                        device_list.set(all_connections);
+                        eprintln!("Mux refresh task completed");
+                    });
                 } else {
-                    device_combobox_on_selected(-1);
+                    eprintln!("No existing mux connection, creating new one");
+
+                    // Query mux devices asynchronously and update the list
+                    let device_list = device_list.c();
+
+                    eprintln!("Spawning mux query task...");
+                    ui_ctx.spawn(async move {
+                        eprintln!("Mux query task started");
+                        let mut all_connections = vm_connections;
+
+                        // Query each mux for connected devices
+                        for hub_info in hub_devices {
+                            eprintln!("Attempting to connect to mux...");
+                            match MuxDevice::connect_usb(hub_info.clone()).await {
+                                Ok(hub) => {
+                                    eprintln!("Mux connected successfully, requesting devices...");
+                                    match hub.request_devices().await {
+                                        Ok(devices) => {
+                                            eprintln!("Mux query successful, found {} device(s)", devices.len());
+                                            for device_addr in devices {
+                                                eprintln!("  Device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                                                    device_addr[0], device_addr[1], device_addr[2],
+                                                    device_addr[3], device_addr[4], device_addr[5]);
+                                                all_connections.push(VmConnectionInfo::ViaMux {
+                                                    mux: hub.clone(),
+                                                    device_addr,
+                                                });
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Failed to query mux devices: {}", e);
+                                        }
+                                    }
+                                    eprintln!("Mux devices added to connection list");
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to connect to mux: {}", e);
+                                }
+                            }
+                        }
+
+                        eprintln!("Updating device list with {} total devices", all_connections.len());
+                        device_list.set(all_connections);
+                        eprintln!("Mux query task completed");
+                    });
                 }
             } else {
-                // No hubs found, just use direct USB connections
-                let num_devices = vm_connections.len();
+                // No muxes found, just use direct USB connections
                 device_list.set(vm_connections);
-
-                if simulator_addr.is_some() {
-                    device_combobox.set_selected(&ui, num_devices as i32);
-                    device_combobox_on_selected(num_devices as i32);
-                } else if udp_addr.is_some() {
-                    device_combobox.set_selected(&ui, num_devices as i32);
-                    device_combobox_on_selected(num_devices as i32);
-                } else if num_devices > 0 {
-                    device_combobox.set_selected(&ui, 0);
-                    device_combobox_on_selected(0);
-                } else {
-                    device_combobox_on_selected(-1);
-                }
             }
         }
     };
@@ -345,6 +429,8 @@ pub fn config_window(
         let ui = ui.c();
         let general_settings = general_settings.c();
         move |device: VmDevice| async move {
+            // Pause streams during Apply to avoid contention
+            let _ = device.clear_all_streams().await;
             let mut errors = vec![];
             general_settings.validate(&mut errors);
             if !errors.is_empty() {
@@ -1170,9 +1256,9 @@ fn display_for_vm_connection(conn: &VmConnectionInfo) -> String {
             out = out.replace('\x00', "");
             out
         }
-        VmConnectionInfo::ViaHub { device_addr, .. } => {
+        VmConnectionInfo::ViaMux { device_addr, .. } => {
             format!(
-                "VM via Hub ({:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X})",
+                "VM via Mux ({:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X})",
                 device_addr[0],
                 device_addr[1],
                 device_addr[2],

@@ -2,11 +2,11 @@ use anyhow::{anyhow, Context, Result};
 use num_derive::{FromPrimitive, ToPrimitive};
 use nusb::{
     io::{EndpointRead, EndpointWrite},
-    transfer::{Bulk, In, Out},
-    DeviceInfo,
+    transfer::{Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient},
+    Device, DeviceInfo, Interface,
 };
 use protodongers::{
-    hub::{ClearBondsError, PairingError},
+    control::usb_mux::{ClearBondsError, PairingError, UsbMuxCtrlMsg},
     PocMarkersReport, VendorData,
 };
 use std::{
@@ -147,6 +147,7 @@ impl std::ops::IndexMut<PacketType> for StreamsActive {
 pub struct PacketTransport {
     writer: mpsc::Sender<Packet>,
     incoming_rx: mpsc::Receiver<Packet>,
+    cancel: Arc<tokio_util::sync::CancellationToken>,
 }
 
 #[derive(Clone)]
@@ -165,6 +166,8 @@ impl PacketTransport {
     pub fn usb(mut in_ep: EndpointRead<Bulk>, mut out_ep: EndpointWrite<Bulk>) -> Self {
         let (writer, mut writer_rx) = mpsc::channel::<Packet>(64);
         let (incoming_tx, incoming_rx) = mpsc::channel::<Packet>(128);
+
+        let cancel_token = tokio_util::sync::CancellationToken::new();
 
         tokio::spawn(async move {
             let mut raw = Vec::with_capacity(1024);
@@ -234,61 +237,83 @@ impl PacketTransport {
         PacketTransport {
             writer,
             incoming_rx,
+            cancel: Arc::new(cancel_token),
         }
     }
 
-    /// Create a PacketTransport that routes VM packets through a HubDevice
-    pub fn hub(hub: HubDevice, device_addr: [u8; 6]) -> Self {
+    /// Create a PacketTransport that routes VM packets through a MuxDevice
+    pub fn mux(mux: MuxDevice, device_addr: [u8; 6]) -> Self {
+        use rand::Rng;
+        let transport_id: u32 = rand::thread_rng().gen();
+        debug!(
+            "PacketTransport::mux() [ID:{}] called for device {:02X}:{:02X}...",
+            transport_id, device_addr[0], device_addr[1]
+        );
         let (writer, mut writer_rx) = mpsc::channel::<Packet>(64);
         let (incoming_tx, incoming_rx) = mpsc::channel::<Packet>(128);
 
-        let hub_clone = hub.clone();
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let cancel_reader = cancel_token.clone();
 
-        // Writer task: wraps outgoing VM packets in HubMsg::SendTo
+        let mux_clone = mux.clone();
+
+        // Writer task: wraps outgoing VM packets in MuxMsg::SendTo
+        let transport_id_writer = transport_id;
         tokio::spawn(async move {
+            debug!("mux writer task started [ID:{}]", transport_id_writer);
             while let Some(pkt) = writer_rx.recv().await {
-                info!("hub writer: sending packet to device {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                info!("mux writer: sending packet to device {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                     device_addr[0], device_addr[1], device_addr[2], device_addr[3], device_addr[4], device_addr[5]);
-                if let Err(e) = hub.send_to(device_addr, pkt).await {
-                    error!("hub send_to failed: {e}");
+                if let Err(e) = mux.send_to(device_addr, pkt).await {
+                    error!("mux send_to failed: {e}");
                     break;
                 }
             }
-            info!("hub writer task exits");
+            debug!("mux writer task exits [ID:{}]", transport_id_writer);
         });
 
-        // Reader task: unwraps incoming HubMsg::DevicePacket for our device
+        // Reader task: unwraps incoming MuxMsg::DevicePacket for our device
+        let transport_id_reader = transport_id;
         tokio::spawn(async move {
+            debug!("mux reader task started [ID:{}]", transport_id_reader);
             loop {
-                match hub_clone.receive_msg().await {
-                    Ok(msg) => {
-                        trace!("hub reader: received message");
-                        // Only forward packets from our target device
-                        if let crate::packets::hub::HubMsg::DevicePacket(dev_pkt) = msg {
-                            if dev_pkt.dev == device_addr {
-                                trace!("hub reader: forwarding packet from our device");
-                                if incoming_tx.send(dev_pkt.pkt).await.is_err() {
-                                    break;
+                tokio::select! {
+                    result = mux_clone.receive_msg() => {
+                        match result {
+                            Ok(msg) => {
+                                // Only forward packets from our target device
+                                if let crate::packets::mux::MuxMsg::DevicePacket(dev_pkt) = msg {
+                                    if dev_pkt.dev == device_addr {
+                                        debug!("mux reader: [ID:{}] forwarding packet", transport_id_reader);
+                                        if incoming_tx.send(dev_pkt.pkt).await.is_err() {
+                                            break;
+                                        }
+                                    } else {
+                                        trace!("mux reader: ignoring packet from other device");
+                                    }
+                                } else {
+                                    trace!("mux reader: ignoring non-DevicePacket message");
                                 }
-                            } else {
-                                trace!("hub reader: ignoring packet from other device");
                             }
-                        } else {
-                            trace!("hub reader: ignoring non-DevicePacket message");
+                            Err(e) => {
+                                error!("mux receive_msg failed: {e}");
+                                break;
+                            }
                         }
                     }
-                    Err(e) => {
-                        error!("hub receive_msg failed: {e}");
+                    _ = cancel_reader.cancelled() => {
+                        debug!("mux reader: [ID:{}] cancelled, exiting", transport_id_reader);
                         break;
                     }
                 }
             }
-            info!("hub reader task exits");
+            debug!("mux reader task exits [ID:{}]", transport_id_reader);
         });
 
         PacketTransport {
             writer,
             incoming_rx,
+            cancel: Arc::new(cancel_token),
         }
     }
 
@@ -299,13 +324,20 @@ impl PacketTransport {
         self.writer.send(pkt).await
     }
 
-    pub fn split(self) -> (PacketTransportTx, ReceiverStream<Packet>) {
+    pub fn split(
+        self,
+    ) -> (
+        PacketTransportTx,
+        ReceiverStream<Packet>,
+        Arc<tokio_util::sync::CancellationToken>,
+    ) {
         let PacketTransport {
             writer,
             incoming_rx,
+            cancel,
         } = self;
         let tx_only = PacketTransportTx { writer };
-        (tx_only, ReceiverStream::new(incoming_rx))
+        (tx_only, ReceiverStream::new(incoming_rx), cancel)
     }
 }
 
@@ -313,11 +345,27 @@ impl PacketTransport {
 pub struct VmDevice {
     transport: PacketTransportTx,
     thread_state: Weak<State>,
+    cancel: Arc<tokio_util::sync::CancellationToken>, // Signals dispatcher to exit when VmDevice drops
+    transport_cancel: Arc<tokio_util::sync::CancellationToken>, // Signals mux reader to exit when VmDevice drops
+}
+
+impl Drop for VmDevice {
+    fn drop(&mut self) {
+        eprintln!("!!! VmDevice DROP called !!!");
+        // Only cancel if this is the last clone
+        if Arc::strong_count(&self.cancel) == 1 {
+            eprintln!("!!! VmDevice: Last clone dropping, canceling dispatcher !!!");
+            self.cancel.cancel(); // Cancel dispatcher
+            self.transport_cancel.cancel(); // Cancel mux reader
+        } else {
+            eprintln!("!!! VmDevice: Clone dropped, {} remaining !!!", Arc::strong_count(&self.cancel) - 1);
+        }
+    }
 }
 
 impl VmDevice {
     pub fn from_transport(transport: PacketTransport) -> Self {
-        let (tx_only, mut incoming) = transport.split();
+        let (tx_only, mut incoming, transport_cancel) = transport.split();
 
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
         let state = Arc::new(State {
@@ -327,36 +375,70 @@ impl VmDevice {
         let thread_state = Arc::downgrade(&state);
         let state_cloned = Arc::clone(&state);
 
-        tokio::spawn(async move {
-            use tokio_stream::StreamExt;
-            while let Some(reply) = incoming.next().await {
-                trace!("Packet received: id={}, data={:?}", reply.id, &reply.data);
-                let mut chans = state_cloned.response_channels.lock().unwrap();
-                let slot = &mut chans[usize::from(reply.id)];
-                let data = reply.data;
+        use rand::Rng;
+        let dispatcher_id: u32 = rand::thread_rng().gen();
+        debug!(
+            "Created new VmDevice State [Dispatcher ID:{}]",
+            dispatcher_id
+        );
+        let dispatcher_id_task = dispatcher_id;
 
-                let err = match std::mem::take(slot) {
-                    ResponseChannel::None => {
-                        warn!("Packet received for unregistered slot {}", reply.id);
-                        None
+        let cancel_token = tokio_util::sync::CancellationToken::new();
+        let cancel_token_task = cancel_token.clone();
+        tokio::spawn(async move {
+            debug!("Dispatcher: [ID:{}] task started", dispatcher_id_task);
+            use tokio_stream::StreamExt;
+            loop {
+                tokio::select! {
+                    Some(reply) = incoming.next() => {
+                        debug!("Dispatcher: [ID:{}] received packet id={}", dispatcher_id_task, reply.id);
+                        debug!("Dispatcher: [ID:{}] packet type = {:?}", dispatcher_id_task, std::mem::discriminant(&reply.data));
+                        let mut chans = state_cloned.response_channels.lock().unwrap();
+                        let slot = &mut chans[usize::from(reply.id)];
+                        debug!("Dispatcher: [ID:{}] slot state = {}", dispatcher_id_task, match slot {
+                            ResponseChannel::None => "None",
+                            ResponseChannel::Oneshot(_) => "Oneshot",
+                            ResponseChannel::Stream(_) => "Stream",
+                        });
+                        let data = reply.data;
+
+                        let err = match std::mem::take(slot) {
+                            ResponseChannel::None => {
+                                warn!("Packet received for unregistered slot {}", reply.id);
+                                None
+                            }
+                            ResponseChannel::Oneshot(tx) => {
+                                debug!("Dispatcher: [ID:{}] sending to oneshot channel", dispatcher_id_task);
+                                let result = tx.send(data).err().map(|e| format!("{e:?}"));
+                                debug!("Dispatcher: [ID:{}] oneshot send result = {:?}", dispatcher_id_task, if result.is_some() { "Error" } else { "Ok" });
+                                result
+                            }
+                            ResponseChannel::Stream(tx) => {
+                                let e = tx.try_send(data).err().map(|e| format!("{e:?}"));
+                                *slot = ResponseChannel::Stream(tx);
+                                e
+                            }
+                        };
+                        if let Some(e) = err {
+                            debug!("dispatcher failed to send reply: {e}");
+                        } else {
+                            debug!("Dispatcher: [ID:{}] successfully delivered packet id={}", dispatcher_id_task, reply.id);
+                        }
                     }
-                    ResponseChannel::Oneshot(tx) => tx.send(data).err().map(|e| format!("{e:?}")),
-                    ResponseChannel::Stream(tx) => {
-                        let e = tx.try_send(data).err().map(|e| format!("{e:?}"));
-                        *slot = ResponseChannel::Stream(tx);
-                        e
+                    _ = cancel_token_task.cancelled() => {
+                        debug!("Dispatcher: [ID:{}] cancelled, exiting", dispatcher_id_task);
+                        break;
                     }
-                };
-                if let Some(e) = err {
-                    debug!("dispatcher failed to send reply: {e}");
                 }
             }
-            info!("dispatcher exits");
+            debug!("Dispatcher: [ID:{}] task exits", dispatcher_id_task);
         });
 
         VmDevice {
             transport: tx_only,
             thread_state,
+            cancel: Arc::new(cancel_token),
+            transport_cancel,
         }
     }
 
@@ -369,17 +451,27 @@ impl VmDevice {
 
         let transport = PacketTransport::usb(in_ep, out_ep);
         let device = Self::from_transport(transport);
-        device.clear_all_streams().await.unwrap();
+        let _ = device.clear_all_streams().await;
         Ok(device)
     }
 
-    /// Create a VmDevice that communicates with a vision module through a hub/dongle
-    pub async fn connect_via_hub(hub: HubDevice, device_addr: [u8; 6]) -> Result<Self> {
-        let transport = PacketTransport::hub(hub, device_addr);
+    /// Create a VmDevice that communicates with a vision module through a mux/dongle
+    pub async fn connect_via_mux(mux: MuxDevice, device_addr: [u8; 6]) -> Result<Self> {
+        debug!("VmDevice::connect_via_mux() creating new device for {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            device_addr[0], device_addr[1], device_addr[2], device_addr[3], device_addr[4], device_addr[5]);
+        let transport = PacketTransport::mux(mux, device_addr);
         let device = Self::from_transport(transport);
-        device.clear_all_streams().await.unwrap();
-        // TODO with Ack we don't have to do this
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Send DisableAll command and wait for Ack
+        // This ensures any lingering streams from a previous session are stopped
+        // before we proceed with settings loading
+        debug!("Sending DisableAll to clear any active streams...");
+        device.request(PacketData::StreamUpdate(StreamUpdate {
+            packet_id: PacketType::End(),
+            action: crate::packets::vm::StreamUpdateAction::DisableAll,
+        })).await?;
+        debug!("Ready to proceed with settings loading (slot reservation prevents conflicts)");
+
         Ok(device)
     }
 
@@ -398,7 +490,21 @@ impl VmDevice {
     fn get_oneshot_slot(&self) -> anyhow::Result<(ResponseSlot, oneshot::Receiver<PacketData>)> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             let mut response_channels = thread_state.response_channels.lock().unwrap();
-            for (i, c) in response_channels.iter_mut().enumerate() {
+            // Slot reservation: IDs 0-207 for control, 208-255 for streaming
+            // Control requests (oneshot) use the low range
+            const CONTROL_ID_MAX: usize = 207;
+
+            let available = response_channels
+                .iter()
+                .take(CONTROL_ID_MAX + 1)
+                .filter(|c| matches!(c, ResponseChannel::None))
+                .count();
+            debug!("get_oneshot_slot: {} slots available", available);
+            for (i, c) in response_channels
+                .iter_mut()
+                .enumerate()
+                .take(CONTROL_ID_MAX + 1)
+            {
                 if let ResponseChannel::None = c {
                     let (send, receiver) = oneshot::channel();
                     *c = ResponseChannel::Oneshot(send);
@@ -412,6 +518,8 @@ impl VmDevice {
                     ));
                 }
             }
+        } else {
+            debug!("ERROR: thread_state upgrade failed - State was dropped!");
         }
         Err(anyhow::anyhow!("Failed to allocate request id"))
     }
@@ -422,7 +530,14 @@ impl VmDevice {
     ) -> Result<(ResponseSlot, mpsc::Receiver<PacketData>), anyhow::Error> {
         if let Some(thread_state) = self.thread_state.upgrade() {
             let mut response_channels = thread_state.response_channels.lock().unwrap();
-            for (i, c) in response_channels.iter_mut().enumerate() {
+            // Slot reservation: IDs 208-255 for streaming (48 slots), 0-207 for control
+            // Streaming requests use the high range
+            const STREAMING_ID_MIN: usize = 208;
+            for (i, c) in response_channels
+                .iter_mut()
+                .enumerate()
+                .skip(STREAMING_ID_MIN)
+            {
                 if let ResponseChannel::None = c {
                     let (send, receiver) = mpsc::channel(buffer);
                     *c = ResponseChannel::Stream(send);
@@ -658,6 +773,7 @@ impl VmDevice {
     }
 
     pub async fn clear_all_streams(&self) -> Result<()> {
+        // Mark all streams as inactive to stop new packets
         if let Some(thread_state) = self.thread_state.upgrade() {
             for stream_type in 0u8..=4u8 {
                 let packet_type = match stream_type {
@@ -674,22 +790,15 @@ impl VmDevice {
                     thread_state.streams_active[packet_type].store(false, Ordering::Relaxed);
                 }
             }
-            let mut chans = thread_state.response_channels.lock().unwrap();
-            for chan in chans.iter_mut() {
-                *chan = ResponseChannel::None;
-            }
         }
-        let _ = self
-            .transport
-            .writer
-            .send(Packet {
-                id: 255,
-                data: PacketData::StreamUpdate(StreamUpdate {
-                    packet_id: PacketType::End(),
-                    action: crate::packets::vm::StreamUpdateAction::DisableAll,
-                }),
-            })
-            .await;
+
+
+        // Send DisableAll command and wait for Ack
+        self.request(PacketData::StreamUpdate(StreamUpdate {
+            packet_id: PacketType::End(),
+            action: crate::packets::vm::StreamUpdateAction::DisableAll,
+        }))
+        .await?;
         Ok(())
     }
 }
@@ -720,16 +829,25 @@ impl Drop for PacketStream {
     fn drop(&mut self) {
         if let Some(thread_state) = self.slot.thread_state.upgrade() {
             thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
-            let _ = self
-                .sender
-                .try_send(Packet {
-                    id: 255,
-                    data: PacketData::StreamUpdate(StreamUpdate {
-                        packet_id: self.stream_type,
-                        action: crate::packets::vm::StreamUpdateAction::Disable,
-                    }),
-                })
-                .inspect_err(|e| warn!("Failed to stop stream: {e}"));
+            // Send Disable packet for this specific stream
+            // Note: This may not reach the VM if streams are flooding, but DisableAll
+            // will ensure all streams are stopped when the device is cleaned up
+            let sender = self.sender.clone();
+            let stream_type = self.stream_type;
+            tokio::spawn(async move {
+                let result = sender
+                    .send(Packet {
+                        id: 255,
+                        data: PacketData::StreamUpdate(StreamUpdate {
+                            packet_id: stream_type,
+                            action: crate::packets::vm::StreamUpdateAction::Disable,
+                        }),
+                    })
+                    .await;
+                if let Err(e) = result {
+                    warn!("Failed to send Disable packet for {:?}: {}", stream_type, e);
+                }
+            });
         }
     }
 }
@@ -806,20 +924,20 @@ impl VmDevice {
     write_register_spec!(set_pag_light_threshold: u8 = 0x00; [0x6C]);
 }
 
-// Hub Device for dongle-fw
+// mux Device for dongle-fw
 
-use crate::packets::hub::{HubMsg, SendTo, MAX_DEVICES};
+use crate::packets::mux::{MuxMsg, SendTo, MAX_DEVICES};
 use heapless::Vec as HVec;
 
-pub struct HubTransport {
-    writer: mpsc::Sender<HubMsg>,
-    incoming_rx: mpsc::Receiver<HubMsg>,
+pub struct MuxTransport {
+    writer: mpsc::Sender<MuxMsg>,
+    incoming_rx: mpsc::Receiver<MuxMsg>,
 }
 
-impl HubTransport {
+impl MuxTransport {
     pub fn usb(mut in_ep: EndpointRead<Bulk>, mut out_ep: EndpointWrite<Bulk>) -> Self {
-        let (writer, mut writer_rx) = mpsc::channel::<HubMsg>(64);
-        let (incoming_tx, incoming_rx) = mpsc::channel::<HubMsg>(128);
+        let (writer, mut writer_rx) = mpsc::channel::<MuxMsg>(64);
+        let (incoming_tx, incoming_rx) = mpsc::channel::<MuxMsg>(128);
 
         // Writer task
         tokio::spawn(async move {
@@ -827,19 +945,19 @@ impl HubTransport {
             while let Some(msg) = writer_rx.recv().await {
                 raw.clear();
                 if let Err(e) = postcard::to_io(&msg, &mut raw) {
-                    error!("hub postcard serialize failed: {e}");
+                    error!("mux postcard serialize failed: {e}");
                     continue;
                 }
                 if let Err(e) = out_ep.write_all(&raw).await {
-                    error!("hub usb write_all failed: {e}");
+                    error!("mux usb write_all failed: {e}");
                     continue;
                 }
                 if let Err(e) = out_ep.flush_end_async().await {
-                    error!("hub usb flush_end failed: {e:?}");
+                    error!("mux usb flush_end failed: {e:?}");
                     continue;
                 }
             }
-            info!("hub usb writer exits");
+            info!("mux usb writer exits");
         });
 
         // Reader task
@@ -859,11 +977,11 @@ impl HubTransport {
                             BrokenPipe | UnexpectedEof | ConnectionReset => break,
                             _ => {
                                 if io_errs < 3 {
-                                    warn!("hub usb read error (ignored): {e}");
+                                    warn!("mux usb read error (ignored): {e}");
                                     io_errs += 1;
                                     continue;
                                 }
-                                error!("hub usb read error: {e}");
+                                error!("mux usb read error: {e}");
                                 break;
                             }
                         }
@@ -873,29 +991,29 @@ impl HubTransport {
                     }
                 }
                 if let Err(e) = reader.consume_end() {
-                    warn!("hub usb consume_end failed: {e:?}");
+                    warn!("mux usb consume_end failed: {e:?}");
                     continue;
                 }
-                match postcard::from_bytes::<HubMsg>(&buf) {
+                match postcard::from_bytes::<MuxMsg>(&buf) {
                     Ok(msg) => {
                         if incoming_tx.send(msg).await.is_err() {
                             break;
                         }
                     }
-                    Err(e) => error!("hub postcard decode failed: {e:?}"),
+                    Err(e) => error!("mux postcard decode failed: {e:?}"),
                 }
             }
-            info!("hub usb reader exits");
+            info!("mux usb reader exits");
         });
 
-        HubTransport {
+        MuxTransport {
             writer,
             incoming_rx,
         }
     }
 
-    pub fn split(self) -> (mpsc::Sender<HubMsg>, ReceiverStream<HubMsg>) {
-        let HubTransport {
+    pub fn split(self) -> (mpsc::Sender<MuxMsg>, ReceiverStream<MuxMsg>) {
+        let MuxTransport {
             writer,
             incoming_rx,
         } = self;
@@ -904,32 +1022,141 @@ impl HubTransport {
 }
 
 #[derive(Clone, Debug)]
-pub struct HubDevice {
-    writer: mpsc::Sender<HubMsg>,
-    response_rx: Arc<tokio::sync::Mutex<ReceiverStream<HubMsg>>>,
+pub struct MuxDevice {
+    writer: mpsc::Sender<MuxMsg>,
+    response_rx: Arc<tokio::sync::Mutex<ReceiverStream<MuxMsg>>>,
+    dev: Device,
+    ctrl_if: Interface,
 }
 
-impl HubDevice {
-    pub fn from_transport(transport: HubTransport) -> Self {
+impl MuxDevice {
+    async fn ctrl_recv_polling(&self, timeout: std::time::Duration) -> Result<UsbMuxCtrlMsg> {
+        let idx = self.ctrl_if.interface_number() as u16;
+        let start = std::time::Instant::now();
+        loop {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow!("timeout waiting for ctrl event"));
+            }
+            let slice = (timeout - elapsed).min(std::time::Duration::from_millis(500));
+            match self
+                .ctrl_if
+                .control_in(
+                    ControlIn {
+                        control_type: ControlType::Vendor,
+                        recipient: Recipient::Interface,
+                        request: Self::USB_MUX_CTRL_REQ_RECV,
+                        value: 0,
+                        index: idx,
+                        length: 256,
+                    },
+                    slice,
+                )
+                .await
+            {
+                Ok(data) => {
+                    if data.is_empty() {
+                        continue;
+                    }
+                    break postcard::from_bytes::<UsbMuxCtrlMsg>(&data)
+                        .map_err(|e| anyhow!("ctrl decode failed: {e}"));
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+    }
+    // USB Mux control over EP0 (Interface recipient)
+    const USB_MUX_CTRL_REQ_SEND: u8 = 0x30; // vendor request to send ctrl msg
+    const USB_MUX_CTRL_REQ_RECV: u8 = 0x31; // vendor request to receive ctrl msg
+    const USB_MUX_CTRL_TYPE_OUT: u8 = 0x41; // Vendor|Interface|OUT
+    const USB_MUX_CTRL_TYPE_IN: u8 = 0xC1; // Vendor|Interface|IN
+
+    async fn ctrl_send(&self, msg: UsbMuxCtrlMsg) -> Result<()> {
+        use std::time::Duration;
+        let data = postcard::to_allocvec(&msg).map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
+        self.ctrl_if
+            .control_out(
+                ControlOut {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Interface,
+                    request: Self::USB_MUX_CTRL_REQ_SEND,
+                    value: 0,
+                    index: self.ctrl_if.interface_number() as u16,
+                    data: &data,
+                },
+                Duration::from_millis(1000),
+            )
+            .await
+            .map_err(|e| anyhow!("control_out failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn ctrl_recv(&self, timeout: std::time::Duration) -> Result<UsbMuxCtrlMsg> {
+        let data = self
+            .ctrl_if
+            .control_in(
+                ControlIn {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Interface,
+                    request: Self::USB_MUX_CTRL_REQ_RECV,
+                    value: 0,
+                    index: self.ctrl_if.interface_number() as u16,
+                    length: 256,
+                },
+                timeout,
+            )
+            .await
+            .map_err(|e| anyhow!("control_in failed: {e}"))?;
+        postcard::from_bytes::<UsbMuxCtrlMsg>(&data).map_err(|e| anyhow!("ctrl decode failed: {e}"))
+    }
+    pub fn from_transport(transport: MuxTransport, dev: Device, ctrl_if: Interface) -> Self {
         let (writer, incoming) = transport.split();
-        HubDevice {
+
+        MuxDevice {
             writer,
             response_rx: Arc::new(tokio::sync::Mutex::new(incoming)),
+            dev,
+            ctrl_if,
         }
     }
 
     pub async fn connect_usb(info: DeviceInfo) -> Result<Self> {
         let dev = info.open().await?;
-        let iface = dev.claim_interface(0).await?;
 
-        let in_ep = iface.endpoint::<Bulk, In>(0x81)?.reader(4096);
-        let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
+        // Probe interfaces to find the one that has our bulk endpoints (0x01 OUT, 0x81 IN).
+        for idx in 0u8..8 {
+            let iface = match dev.claim_interface(idx).await {
+                Ok(i) => i,
+                Err(_) => continue,
+            };
 
-        let transport = HubTransport::usb(in_ep, out_ep);
-        Ok(Self::from_transport(transport))
+            let in_ep = match iface.endpoint::<Bulk, In>(0x81) {
+                Ok(e) => e.reader(4096),
+                Err(_) => {
+                    drop(iface);
+                    continue;
+                }
+            };
+            let out_ep = match iface.endpoint::<Bulk, Out>(0x01) {
+                Ok(e) => e.writer(4096),
+                Err(_) => {
+                    drop(iface);
+                    continue;
+                }
+            };
+
+            let ctrl_if = iface.clone();
+            let transport = MuxTransport::usb(in_ep, out_ep);
+            return Ok(Self::from_transport(transport, dev, ctrl_if));
+        }
+        Err(anyhow!(
+            "failed to find mux interface with required endpoints"
+        ))
     }
 
-    async fn send_msg(&self, msg: HubMsg) -> Result<()> {
+    async fn send_msg(&self, msg: MuxMsg) -> Result<()> {
         self.writer
             .send(msg)
             .await
@@ -937,21 +1164,23 @@ impl HubDevice {
         Ok(())
     }
 
-    pub async fn receive_msg(&self) -> Result<HubMsg> {
+    pub async fn receive_msg(&self) -> Result<MuxMsg> {
         use tokio_stream::StreamExt;
         let mut rx = self.response_rx.lock().await;
-        rx.next().await.ok_or_else(|| anyhow!("channel closed"))
+        let msg = rx.next().await.ok_or_else(|| anyhow!("channel closed"))?;
+        debug!("MuxDevice::receive_msg got message");
+        Ok(msg)
     }
 
     pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
-        self.send_msg(HubMsg::RequestDevices).await?;
+        self.send_msg(MuxMsg::RequestDevices).await?;
 
         let total_timeout = tokio::time::Duration::from_secs(1);
 
         let receive_until_snapshot = async {
             loop {
                 match self.receive_msg().await {
-                    Ok(HubMsg::DevicesSnapshot(devices)) => return Ok(devices),
+                    Ok(MuxMsg::DevicesSnapshot(devices)) => return Ok(devices),
                     Ok(_other) => continue,
                     Err(e) => return Err(anyhow!("receive_msg error: {e}")),
                 }
@@ -966,65 +1195,68 @@ impl HubDevice {
     }
 
     pub async fn send_to(&self, dev: [u8; 6], pkt: Packet) -> Result<()> {
-        let msg = HubMsg::SendTo(SendTo { dev, pkt });
+        let msg = MuxMsg::SendTo(SendTo { dev, pkt });
         self.send_msg(msg).await
     }
 
-    pub async fn read_version(&self) -> Result<crate::packets::hub::Version> {
-        self.send_msg(HubMsg::ReadVersion()).await?;
+    pub async fn read_version(&self) -> Result<crate::packets::mux::Version> {
+        self.send_msg(MuxMsg::ReadVersion()).await?;
 
         match self.receive_msg().await? {
-            HubMsg::ReadVersionResponse(version) => Ok(version),
+            MuxMsg::ReadVersionResponse(version) => Ok(version),
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
 
     /// Start pairing mode on the dongle with a timeout (ms).
     pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
-        use crate::packets::hub::StartPairing;
-        self.send_msg(HubMsg::StartPairing(StartPairing { timeout_ms }))
+        use protodongers::control::usb_mux::StartPairing;
+        self.ctrl_send(UsbMuxCtrlMsg::StartPairing(StartPairing { timeout_ms }))
             .await?;
-        match self.receive_msg().await? {
-            HubMsg::StartPairingResponse => Ok(()),
-            other => Err(anyhow!("unexpected response: {other:?}")),
+        match self
+            .ctrl_recv_polling(std::time::Duration::from_secs(2))
+            .await?
+        {
+            UsbMuxCtrlMsg::StartPairingResponse => Ok(()),
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
 
     /// Cancel pairing mode on the dongle.
     pub async fn cancel_pairing(&self) -> Result<()> {
-        self.send_msg(HubMsg::CancelPairing).await?;
-        match self.receive_msg().await? {
-            HubMsg::PairingResult(Err(PairingError::Cancelled)) => Ok(()),
-            other => Err(anyhow!("unexpected response: {other:?}")),
-        }
+        self.ctrl_send(UsbMuxCtrlMsg::CancelPairing).await
     }
 
     /// Wait for a pairing event from the dongle.
     pub async fn wait_pairing_event(&self) -> Result<PairingEvent> {
         loop {
-            match self.receive_msg().await? {
-                HubMsg::PairingResult(Ok(addr)) => return Ok(PairingEvent::Result(addr)),
-                HubMsg::PairingResult(Err(PairingError::Timeout)) => {
+            match self
+                .ctrl_recv_polling(std::time::Duration::from_secs(120))
+                .await?
+            {
+                UsbMuxCtrlMsg::PairingResult(Ok(addr)) => return Ok(PairingEvent::Result(addr)),
+                UsbMuxCtrlMsg::PairingResult(Err(PairingError::Timeout)) => {
                     return Ok(PairingEvent::Timeout)
                 }
-                HubMsg::PairingResult(Err(PairingError::Cancelled)) => {
+                UsbMuxCtrlMsg::PairingResult(Err(PairingError::Cancelled)) => {
                     return Ok(PairingEvent::Cancelled)
                 }
-                _ => {
-                    // Ignore unrelated events
-                }
+                _ => { /* ignore unrelated ctrl msgs */ }
             }
         }
     }
 
     pub async fn clear_bonds(&self) -> Result<()> {
-        self.send_msg(HubMsg::ClearBonds).await?;
-        match self.receive_msg().await? {
-            HubMsg::ClearBondsResponse(Ok(())) => Ok(()),
-            HubMsg::ClearBondsResponse(Err(ClearBondsError::Failed)) => {
+        self.ctrl_send(UsbMuxCtrlMsg::ClearBonds).await?;
+        match self
+            .ctrl_recv_polling(std::time::Duration::from_secs(2))
+            .await?
+        {
+            UsbMuxCtrlMsg::ClearBondsResponse(Ok(())) => Ok(()),
+            UsbMuxCtrlMsg::ClearBondsResponse(Err(ClearBondsError::Failed)) => {
                 Err(anyhow!("Failed to clear bonds"))
             }
-            other => Err(anyhow!("unexpected response: {other:?}")),
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
 }
@@ -1036,12 +1268,12 @@ pub enum PairingEvent {
     Cancelled,
 }
 
-/// Represents either a direct USB connection or a hub-mediated connection to a vision module
+/// Represents either a direct USB connection or a mux-mediated connection to a vision module
 #[derive(Clone, Debug)]
 pub enum VmConnectionInfo {
     DirectUsb(DeviceInfo),
-    ViaHub {
-        hub: HubDevice,
+    ViaMux {
+        mux: MuxDevice,
         device_addr: [u8; 6],
     },
 }
@@ -1051,8 +1283,8 @@ impl VmConnectionInfo {
     pub async fn connect(self) -> Result<VmDevice> {
         match self {
             VmConnectionInfo::DirectUsb(info) => VmDevice::connect_usb(info).await,
-            VmConnectionInfo::ViaHub { hub, device_addr } => {
-                VmDevice::connect_via_hub(hub, device_addr).await
+            VmConnectionInfo::ViaMux { mux, device_addr } => {
+                VmDevice::connect_via_mux(mux, device_addr).await
             }
         }
     }
@@ -1067,9 +1299,9 @@ impl VmConnectionInfo {
                     info.product_id()
                 )
             }
-            VmConnectionInfo::ViaHub { device_addr, .. } => {
+            VmConnectionInfo::ViaMux { device_addr, .. } => {
                 format!(
-                    "VM via Hub {:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+                    "VM via Mux {:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
                     device_addr[0],
                     device_addr[1],
                     device_addr[2],

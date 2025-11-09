@@ -209,9 +209,18 @@ fn my_raycast_update(runner: &mut MotRunner) {
 }
 
 async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().device.c().unwrap();
-    let combined_markers_stream = device.stream_combined_markers().await.unwrap();
-    let poc_markers_stream = device.stream_poc_markers().await.unwrap();
+    let device = match runner.lock().device.as_ref() {
+        Some(d) => d.c(),
+        None => return,
+    };
+    let combined_markers_stream = match device.stream_combined_markers().await {
+        Ok(stream) => stream,
+        Err(e) => { tracing::error!("Failed to stream combined markers: {:?}", e); return; }
+    };
+    let poc_markers_stream = match device.stream_poc_markers().await {
+        Ok(stream) => stream,
+        Err(e) => { tracing::error!("Failed to stream poc markers: {:?}", e); return; }
+    };
 
     let mut markers_stream = combined_markers_stream.merge(poc_markers_stream.map(|x| x.into()));
 
@@ -412,8 +421,14 @@ fn transform_points(
 }
 
 async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().device.c().unwrap();
-    let mut accel_stream = device.stream_accel().await.unwrap();
+    let device = match runner.lock().device.as_ref() {
+        Some(d) => d.c(),
+        None => return,
+    };
+    let mut accel_stream = match device.stream_accel().await {
+        Ok(stream) => stream,
+        Err(e) => { tracing::error!("Failed to stream accel: {:?}", e); return; }
+    };
     let mut prev_timestamp = None;
     while let Some(accel) = accel_stream.next().await {
         let mut runner = runner.lock();
@@ -491,8 +506,14 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
 
 // todo use an aimpoint history to choose the aimpoint closest to the timestamp
 async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
-    let device = runner.lock().device.c().unwrap();
-    let mut impact_stream = device.stream_impact().await.unwrap();
+    let device = match runner.lock().device.as_ref() {
+        Some(d) => d.c(),
+        None => return,
+    };
+    let mut impact_stream = match device.stream_impact().await {
+        Ok(stream) => stream,
+        Err(e) => { tracing::error!("Failed to stream impact: {:?}", e); return; }
+    };
     while let Some(_impact) = impact_stream.next().await {
         let runner = runner.lock();
         if runner.record_impact {
