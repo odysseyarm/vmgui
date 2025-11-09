@@ -520,7 +520,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         let view = mot_runner.c();
         move |_| {
             let view = view.c();
-            view.lock().device = device_rs.get();
+            let new_device = device_rs.get();
+            eprintln!(">>> Device changed: {}", if new_device.is_some() { "Some(device)" } else { "None" });
+            view.lock().device = new_device;
         }
     });
 

@@ -1,13 +1,13 @@
-//! Hub CLI tool for managing the dongle
+//! Mux CLI tool for managing the dongle
 
 use std::process::ExitCode;
 
-use ats_usb::device::HubDevice;
+use ats_usb::device::MuxDevice;
 use clap::{Parser, Subcommand};
 use nusb::MaybeFuture as _;
 
 #[derive(Parser)]
-#[command(name = "hub-cli")]
+#[command(name = "mux-cli")]
 #[command(about = "CLI tool for managing the dongle", long_about = None)]
 struct Cli {
     /// Index of the device to use (use 'devices' command to list)
@@ -20,6 +20,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Print USB interfaces and endpoints for the dongle
+    UsbInfo,
     /// List all available dongles
     Devices,
     /// List currently connected BLE devices
@@ -48,7 +50,7 @@ fn list_dongles() -> Result<Vec<nusb::DeviceInfo>, String> {
     Ok(devices)
 }
 
-async fn connect_to_device(device_index: Option<usize>) -> Result<HubDevice, String> {
+async fn connect_to_device(device_index: Option<usize>) -> Result<MuxDevice, String> {
     let devices = list_dongles()?;
 
     if devices.is_empty() {
@@ -77,7 +79,7 @@ async fn connect_to_device(device_index: Option<usize>) -> Result<HubDevice, Str
         devices[0].clone()
     };
 
-    HubDevice::connect_usb(device_info)
+    MuxDevice::connect_usb(device_info)
         .await
         .map_err(|e| format!("Failed to connect to dongle: {e}"))
 }
@@ -115,7 +117,7 @@ async fn cmd_devices() -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_list(device: &HubDevice) -> Result<(), String> {
+async fn cmd_list(device: &MuxDevice) -> Result<(), String> {
     let devices = device
         .request_devices()
         .await
@@ -132,7 +134,7 @@ async fn cmd_list(device: &HubDevice) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_version(device: &HubDevice) -> Result<(), String> {
+async fn cmd_version(device: &MuxDevice) -> Result<(), String> {
     let version = device
         .read_version()
         .await
@@ -195,6 +197,7 @@ async fn main() -> ExitCode {
             };
             cmd_pair_cancel(&device).await
         }
+        Commands::UsbInfo => cmd_usb_info(cli.device).await,
         Commands::Clear => {
             let device = match connect_to_device(cli.device).await {
                 Ok(dev) => dev,
@@ -216,7 +219,7 @@ async fn main() -> ExitCode {
     }
 }
 
-async fn cmd_pair(device: &HubDevice, timeout: u32) -> Result<(), String> {
+async fn cmd_pair(device: &MuxDevice, timeout: u32) -> Result<(), String> {
     println!("Starting pairing for {} ms...", timeout);
     device
         .start_pairing(timeout)
@@ -243,7 +246,7 @@ async fn cmd_pair(device: &HubDevice, timeout: u32) -> Result<(), String> {
     }
 }
 
-async fn cmd_pair_cancel(device: &HubDevice) -> Result<(), String> {
+async fn cmd_pair_cancel(device: &MuxDevice) -> Result<(), String> {
     println!("Cancelling pairing mode...");
     device
         .cancel_pairing()
@@ -253,12 +256,57 @@ async fn cmd_pair_cancel(device: &HubDevice) -> Result<(), String> {
     Ok(())
 }
 
-async fn cmd_clear(device: &HubDevice) -> Result<(), String> {
+async fn cmd_clear(device: &MuxDevice) -> Result<(), String> {
     println!("Clearing bonds...");
     device
         .clear_bonds()
         .await
         .map_err(|e| format!("Failed to clear bonds: {e}"))?;
     println!("Bonds cleared");
+    Ok(())
+}
+
+async fn cmd_usb_info(device_index: Option<usize>) -> Result<(), String> {
+    use nusb::transfer::{Bulk, Interrupt, In, Out};
+    let devices = list_dongles()?;
+    if devices.is_empty() {
+        return Err("No dongle found (VID:0x1915 PID:0x5210)".to_string());
+    }
+    let device_info = if let Some(idx) = device_index {
+        devices.get(idx).cloned().ok_or_else(|| format!(
+            "Device index {} not found. Use 'devices' to list.", idx
+        ))?
+    } else {
+        if devices.len() > 1 {
+            return Err(format!(
+                "Multiple dongles found ({}). Please specify with --device <index>.",
+                devices.len()
+            ));
+        }
+        devices[0].clone()
+    };
+    let dev = device_info
+        .open()
+        .await
+        .map_err(|e| format!("Failed to open device: {e}"))?;
+    println!(
+        "Probing interfaces for VID:0x{:04X} PID:0x{:04X}",
+        device_info.vendor_id(),
+        device_info.product_id()
+    );
+    for idx in 0u8..8 {
+        match dev.claim_interface(idx).await {
+            Ok(iface) => {
+                let bulk_in = iface.endpoint::<Bulk, In>(0x81).is_ok();
+                let bulk_out = iface.endpoint::<Bulk, Out>(0x01).is_ok();
+                let intr_in = iface.endpoint::<Interrupt, In>(0x86).is_ok();
+                println!(
+                    "  iface {}: bulk_out 0x01={}, bulk_in 0x81={}, intr_in 0x86={}",
+                    idx, bulk_out, bulk_in, intr_in
+                );
+            }
+            Err(_) => {}
+        }
+    }
     Ok(())
 }
