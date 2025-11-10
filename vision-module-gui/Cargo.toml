@@ -23,7 +23,7 @@ serde = "1.0.193"
 serialport = { version = "4.2.2", features = ["usbportinfo-interface"] }
 serial2 = "0.2.19"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sync", "time"] }
-ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git", features = ["telemetry"] }
+ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git", rev = "7d32db258205812ec6e32b82d96e012fcf3648bc", features = ["telemetry"] }
 ats_common = { git = "https://github.com/odysseyarm/ats_common.git", features = ["std"] }
 ats_playback = { path = "../ats_playback" }
 ats_usb = { path = "../ats_usb" }

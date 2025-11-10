@@ -461,16 +461,37 @@ dependencies = [
 [[package]]
 name = "ats_cv"
 version = "0.1.0"
+source = "git+https://github.com/odysseyarm/ats_cv.git?rev=7d32db258205812ec6e32b82d96e012fcf3648bc#7d32db258205812ec6e32b82d96e012fcf3648bc"
 dependencies = [
  "arrayvec 0.7.6",
  "ats_common",
  "cam-geom 0.15.3",
  "cv",
- "eskf",
+ "eskf 0.3.0 (git+https://github.com/odysseyarm/ats_cv.git?rev=7d32db258205812ec6e32b82d96e012fcf3648bc)",
  "microfft",
  "nalgebra 0.33.2",
  "num",
  "opencv-ros-camera 0.15.2",
+ "serde",
+ "serde_json",
+ "simba 0.9.0",
+ "sqpnp",
+]
+
+[[package]]
+name = "ats_cv"
+version = "0.1.0"
+source = "git+https://github.com/odysseyarm/ats_cv#0ac2bbf2731a0a5897bfe9bbb8e68397b707ac99"
+dependencies = [
+ "arrayvec 0.7.6",
+ "ats_common",
+ "cam-geom 0.16.0",
+ "cv",
+ "eskf 0.3.0 (git+https://github.com/odysseyarm/ats_cv)",
+ "microfft",
+ "nalgebra 0.34.1",
+ "num",
+ "opencv-ros-camera 0.16.0",
  "serde",
  "serde_json",
  "simba 0.9.0",
@@ -488,7 +509,7 @@ dependencies = [
 name = "ats_playback_pyo3"
 version = "0.2.0"
 dependencies = [
- "ats_cv",
+ "ats_cv 0.1.0 (git+https://github.com/odysseyarm/ats_cv)",
  "ats_playback",
  "ats_usb",
  "pyo3",
@@ -1005,7 +1026,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f06daa26ffb82d90ba772256c0ba286f6c305c392f6976c9822717974805837c"
 dependencies = [
- "glam",
+ "glam 0.25.0",
  "serde",
 ]
 
@@ -1015,7 +1036,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0d7ef7f2a826d0b19f059035831ce00a5e930435cc53c61e045773d0483f67a"
 dependencies = [
- "glam",
+ "glam 0.25.0",
 ]
 
 [[package]]
@@ -1061,7 +1082,7 @@ dependencies = [
  "bevy_utils",
  "downcast-rs",
  "erased-serde",
- "glam",
+ "glam 0.25.0",
  "serde",
  "smol_str",
  "thiserror 1.0.69",
@@ -1561,6 +1582,18 @@ dependencies = [
  "approx 0.5.1",
  "itertools 0.14.0",
  "nalgebra 0.33.2",
+ "num-iter",
+]
+
+[[package]]
+name = "cam-geom"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d3530916214fe4fc844c3d54e1c5194c62985bd332e7b390458988bb828f89"
+dependencies = [
+ "approx 0.5.1",
+ "itertools 0.14.0",
+ "nalgebra 0.34.1",
  "num-iter",
 ]
 
@@ -2115,7 +2148,7 @@ checksum = "95ed933078d2e659745df651f4c180511cd582e5b9414ff896e7d50d207e3103"
 dependencies = [
  "const_panic",
  "encase_derive",
- "glam",
+ "glam 0.25.0",
  "thiserror 1.0.69",
 ]
 
@@ -2179,8 +2212,17 @@ dependencies = [
 [[package]]
 name = "eskf"
 version = "0.3.0"
+source = "git+https://github.com/odysseyarm/ats_cv.git?rev=7d32db258205812ec6e32b82d96e012fcf3648bc#7d32db258205812ec6e32b82d96e012fcf3648bc"
 dependencies = [
  "nalgebra 0.33.2",
+]
+
+[[package]]
+name = "eskf"
+version = "0.3.0"
+source = "git+https://github.com/odysseyarm/ats_cv#0ac2bbf2731a0a5897bfe9bbb8e68397b707ac99"
+dependencies = [
+ "nalgebra 0.34.1",
 ]
 
 [[package]]
@@ -2506,6 +2548,72 @@ dependencies = [
 
 [[package]]
 name = "glam"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "333928d5eb103c5d4050533cec0384302db6be8ef7d3cebd30ec6a35350353da"
+
+[[package]]
+name = "glam"
+version = "0.15.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3abb554f8ee44336b72d522e0a7fe86a29e09f839a36022fa869a7dfe941a54b"
+
+[[package]]
+name = "glam"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4126c0479ccf7e8664c36a2d719f5f2c140fbb4f9090008098d2c291fa5b3f16"
+
+[[package]]
+name = "glam"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01732b97afd8508eee3333a541b9f7610f454bb818669e66e90f5f57c93a776"
+
+[[package]]
+name = "glam"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "525a3e490ba77b8e326fb67d4b44b4bd2f920f44d4cc73ccec50adc68e3bee34"
+
+[[package]]
+name = "glam"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b8509e6791516e81c1a630d0bd7fbac36d2fa8712a9da8662e716b52d5051ca"
+
+[[package]]
+name = "glam"
+version = "0.20.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f43e957e744be03f5801a55472f593d43fabdebf25a4585db250f04d86b1675f"
+
+[[package]]
+name = "glam"
+version = "0.21.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "518faa5064866338b013ff9b2350dc318e14cc4fcd6cb8206d7e7c9886c98815"
+
+[[package]]
+name = "glam"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f597d56c1bd55a811a1be189459e8fad2bbc272616375602443bdfb37fa774"
+
+[[package]]
+name = "glam"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e4afd9ad95555081e109fe1d21f2a30c691b5f0919c67dfa690a2e1eb6bd51c"
+
+[[package]]
+name = "glam"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5418c17512bdf42730f9032c74e1ae39afc408745ebb2acf72fbc4691c17945"
+
+[[package]]
+name = "glam"
 version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
@@ -2513,6 +2621,30 @@ dependencies = [
  "bytemuck",
  "serde",
 ]
+
+[[package]]
+name = "glam"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e05e7e6723e3455f4818c7b26e855439f7546cf617ef669d1adedb8669e5cb9"
+
+[[package]]
+name = "glam"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
+
+[[package]]
+name = "glam"
+version = "0.29.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8babf46d4c1c9d92deac9f7be466f76dfc4482b6452fc5024b5e8daf6ffeb3ee"
+
+[[package]]
+name = "glam"
+version = "0.30.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd47b05dddf0005d850e5644cae7f2b14ac3df487979dbfff3b56f20b1a6ae46"
 
 [[package]]
 name = "glob"
@@ -2707,7 +2839,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f33ddb7f7143d9e703c072e88b98cd8b9719f174137a671429351bd2ee43c02a"
 dependencies = [
  "constgebra",
- "glam",
+ "glam 0.25.0",
 ]
 
 [[package]]
@@ -3280,7 +3412,7 @@ checksum = "7b5c17de023a86f59ed79891b2e5d5a94c705dbe904a5b5c9c952ea6221b03e4"
 dependencies = [
  "approx 0.5.1",
  "matrixmultiply",
- "nalgebra-macros",
+ "nalgebra-macros 0.2.2",
  "num-complex 0.4.6",
  "num-rational 0.4.2",
  "num-traits",
@@ -3297,7 +3429,40 @@ dependencies = [
  "approx 0.5.1",
  "bytemuck",
  "matrixmultiply",
- "nalgebra-macros",
+ "nalgebra-macros 0.2.2",
+ "num-complex 0.4.6",
+ "num-rational 0.4.2",
+ "num-traits",
+ "serde",
+ "simba 0.9.0",
+ "typenum",
+]
+
+[[package]]
+name = "nalgebra"
+version = "0.34.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4d5b3eff5cd580f93da45e64715e8c20a3996342f1e466599cf7a267a0c2f5f"
+dependencies = [
+ "approx 0.5.1",
+ "glam 0.14.0",
+ "glam 0.15.2",
+ "glam 0.16.0",
+ "glam 0.17.3",
+ "glam 0.18.0",
+ "glam 0.19.0",
+ "glam 0.20.5",
+ "glam 0.21.3",
+ "glam 0.22.0",
+ "glam 0.23.0",
+ "glam 0.24.2",
+ "glam 0.25.0",
+ "glam 0.27.0",
+ "glam 0.28.0",
+ "glam 0.29.3",
+ "glam 0.30.9",
+ "matrixmultiply",
+ "nalgebra-macros 0.3.0",
  "num-complex 0.4.6",
  "num-rational 0.4.2",
  "num-traits",
@@ -3311,6 +3476,17 @@ name = "nalgebra-macros"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "254a5372af8fc138e36684761d3c0cdb758a4410e938babcff1c860ce14ddbfc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.102",
+]
+
+[[package]]
+name = "nalgebra-macros"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "973e7178a678cfd059ccec50887658d482ce16b0aa9da3888ddeab5cd5eb4889"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3698,6 +3874,16 @@ dependencies = [
  "cam-geom 0.15.3",
  "nalgebra 0.33.2",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "opencv-ros-camera"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f043d084c2a00f326694f45ed1cbd1dc4a30cebb3675488f9e41ad097b3a45a"
+dependencies = [
+ "cam-geom 0.16.0",
+ "nalgebra 0.34.1",
 ]
 
 [[package]]
@@ -5138,7 +5324,7 @@ dependencies = [
  "app_dirs2",
  "arrayvec 0.7.6",
  "ats_common",
- "ats_cv",
+ "ats_cv 0.1.0 (git+https://github.com/odysseyarm/ats_cv.git?rev=7d32db258205812ec6e32b82d96e012fcf3648bc)",
  "ats_playback",
  "ats_usb",
  "bevy",
