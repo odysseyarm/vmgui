@@ -16,6 +16,7 @@ use std::{
         Arc, Mutex, Weak,
     },
     task::Poll,
+    time::Duration,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -358,9 +359,27 @@ impl Drop for VmDevice {
             self.cancel.cancel(); // Cancel dispatcher
             self.transport_cancel.cancel(); // Cancel mux reader
         } else {
-            eprintln!("!!! VmDevice: Clone dropped, {} remaining !!!", Arc::strong_count(&self.cancel) - 1);
+            eprintln!(
+                "!!! VmDevice: Clone dropped, {} remaining !!!",
+                Arc::strong_count(&self.cancel) - 1
+            );
         }
     }
+}
+
+/// Retry an asynchronous operation up to `limit` times.
+async fn retry<F, G>(mut op: F, timeout: Duration, limit: usize) -> Option<G::Output>
+where
+    F: FnMut() -> G,
+    G: std::future::Future,
+{
+    for _ in 0..limit {
+        match tokio::time::timeout(timeout, op()).await {
+            Ok(r) => return Some(r),
+            Err(_) => (),
+        }
+    }
+    None
 }
 
 impl VmDevice {
@@ -466,10 +485,22 @@ impl VmDevice {
         // This ensures any lingering streams from a previous session are stopped
         // before we proceed with settings loading
         debug!("Sending DisableAll to clear any active streams...");
-        device.request(PacketData::StreamUpdate(StreamUpdate {
-            packet_id: PacketType::End(),
-            action: crate::packets::vm::StreamUpdateAction::DisableAll,
-        })).await?;
+        if let None = retry(
+            async || {
+                device
+                    .request(PacketData::StreamUpdate(StreamUpdate {
+                        packet_id: PacketType::End(),
+                        action: crate::packets::vm::StreamUpdateAction::DisableAll,
+                    }))
+                    .await
+            },
+            Duration::from_millis(2000),
+            5,
+        )
+        .await
+        {
+            return Err(anyhow!("Failed to disable all streams"));
+        }
         debug!("Ready to proceed with settings loading (slot reservation prevents conflicts)");
 
         Ok(device)
@@ -792,13 +823,21 @@ impl VmDevice {
             }
         }
 
-
-        // Send DisableAll command and wait for Ack
-        self.request(PacketData::StreamUpdate(StreamUpdate {
-            packet_id: PacketType::End(),
-            action: crate::packets::vm::StreamUpdateAction::DisableAll,
-        }))
-        .await?;
+        if let None = retry(
+            async || {
+                self.request(PacketData::StreamUpdate(StreamUpdate {
+                    packet_id: PacketType::End(),
+                    action: crate::packets::vm::StreamUpdateAction::DisableAll,
+                }))
+                .await
+            },
+            Duration::from_millis(2000),
+            5,
+        )
+        .await
+        {
+            return Err(anyhow!("Failed to disable all streams"));
+        }
         Ok(())
     }
 }
@@ -830,22 +869,33 @@ impl Drop for PacketStream {
         if let Some(thread_state) = self.slot.thread_state.upgrade() {
             thread_state.streams_active[self.stream_type].store(false, Ordering::Relaxed);
             // Send Disable packet for this specific stream
-            // Note: This may not reach the VM if streams are flooding, but DisableAll
-            // will ensure all streams are stopped when the device is cleaned up
             let sender = self.sender.clone();
             let stream_type = self.stream_type;
             tokio::spawn(async move {
-                let result = sender
-                    .send(Packet {
-                        id: 255,
-                        data: PacketData::StreamUpdate(StreamUpdate {
-                            packet_id: stream_type,
-                            action: crate::packets::vm::StreamUpdateAction::Disable,
-                        }),
-                    })
-                    .await;
-                if let Err(e) = result {
-                    warn!("Failed to send Disable packet for {:?}: {}", stream_type, e);
+                match retry(
+                    async || {
+                        sender
+                            .send(Packet {
+                                id: 255,
+                                data: PacketData::StreamUpdate(StreamUpdate {
+                                    packet_id: stream_type,
+                                    action: crate::packets::vm::StreamUpdateAction::Disable,
+                                }),
+                            })
+                            .await
+                    },
+                    Duration::from_millis(2000),
+                    5,
+                )
+                .await
+                {
+                    Some(Ok(())) => {}
+                    Some(Err(e)) => {
+                        warn!("Failed to send Disable packet for {:?}, {}", stream_type, e);
+                    }
+                    None => {
+                        warn!("Failed to send Disable packet for {:?}", stream_type);
+                    }
                 }
             });
         }
@@ -1070,8 +1120,6 @@ impl MuxDevice {
     // USB Mux control over EP0 (Interface recipient)
     const USB_MUX_CTRL_REQ_SEND: u8 = 0x30; // vendor request to send ctrl msg
     const USB_MUX_CTRL_REQ_RECV: u8 = 0x31; // vendor request to receive ctrl msg
-    const USB_MUX_CTRL_TYPE_OUT: u8 = 0x41; // Vendor|Interface|OUT
-    const USB_MUX_CTRL_TYPE_IN: u8 = 0xC1; // Vendor|Interface|IN
 
     async fn ctrl_send(&self, msg: UsbMuxCtrlMsg) -> Result<()> {
         use std::time::Duration;
