@@ -414,7 +414,11 @@ fn socket_stream_thread(
         if let Some(prev_timestamp) = prev_timestamp {
             let elapsed = timestamp - prev_timestamp;
             if elapsed > 0 {
-                std::thread::sleep(Duration::from_secs_f64((elapsed as f64 / rate) / 1000.0));
+                let sleep_secs = (elapsed as f64 / rate) / 1000.0;
+                // Validate the sleep duration to prevent panic
+                if sleep_secs.is_finite() && sleep_secs >= 0.0 && sleep_secs <= 60.0 * 60.0 {
+                    std::thread::sleep(Duration::from_secs_f64(sleep_secs));
+                }
             }
         }
 
