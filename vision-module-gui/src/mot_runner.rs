@@ -13,7 +13,6 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio_stream::StreamExt;
-use tracing::info;
 
 pub fn transform_aimpoint_to_identity(
     center_aim: Point2<f64>,
@@ -215,11 +214,17 @@ async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
     };
     let combined_markers_stream = match device.stream_combined_markers().await {
         Ok(stream) => stream,
-        Err(e) => { tracing::error!("Failed to stream combined markers: {:?}", e); return; }
+        Err(e) => {
+            tracing::error!("Failed to stream combined markers: {:?}", e);
+            return;
+        }
     };
     let poc_markers_stream = match device.stream_poc_markers().await {
         Ok(stream) => stream,
-        Err(e) => { tracing::error!("Failed to stream poc markers: {:?}", e); return; }
+        Err(e) => {
+            tracing::error!("Failed to stream poc markers: {:?}", e);
+            return;
+        }
     };
 
     let mut markers_stream = combined_markers_stream.merge(poc_markers_stream.map(|x| x.into()));
@@ -427,7 +432,10 @@ async fn accel_stream(runner: Arc<Mutex<MotRunner>>) {
     };
     let mut accel_stream = match device.stream_accel().await {
         Ok(stream) => stream,
-        Err(e) => { tracing::error!("Failed to stream accel: {:?}", e); return; }
+        Err(e) => {
+            tracing::error!("Failed to stream accel: {:?}", e);
+            return;
+        }
     };
     let mut prev_timestamp = None;
     while let Some(accel) = accel_stream.next().await {
@@ -512,7 +520,10 @@ async fn impact_loop(runner: Arc<Mutex<MotRunner>>) {
     };
     let mut impact_stream = match device.stream_impact().await {
         Ok(stream) => stream,
-        Err(e) => { tracing::error!("Failed to stream impact: {:?}", e); return; }
+        Err(e) => {
+            tracing::error!("Failed to stream impact: {:?}", e);
+            return;
+        }
     };
     while let Some(_impact) = impact_stream.next().await {
         let runner = runner.lock();
