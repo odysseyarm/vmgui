@@ -6961,6 +6961,7 @@ checksum = "3eb8486b569e12e2c32ad3e204dbaba5e4b5b216e9367044f25f1dba42341773"
 [[package]]
 name = "protodongers"
 version = "0.1.0"
+source = "git+https://github.com/odysseyarm/protodonge-rs.git#cc7b531f02bc78205915425f3bd5b25b142f27bd"
 dependencies = [
  "ats_common",
  "enumn",
