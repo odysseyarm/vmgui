@@ -19,7 +19,7 @@ tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "rt", "sy
 tokio-stream = "0.1.14"
 tokio-util = "0.7"
 tracing = "0.1.40"
-protodongers = { path = "../../protodonge-rs", features = ["std", "serde-std", "minicbor"] }
+protodongers = { git = "https://github.com/odysseyarm/protodonge-rs.git", features = ["std", "serde-std", "minicbor"] }
 num-traits = "0.2.19"
 num-derive = "0.4.2"
 nusb = { version = "0.2.1", features = ["tokio"] }

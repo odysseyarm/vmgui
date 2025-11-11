@@ -263,7 +263,7 @@ impl PacketTransport {
         tokio::spawn(async move {
             debug!("mux writer task started [ID:{}]", transport_id_writer);
             while let Some(pkt) = writer_rx.recv().await {
-                info!("mux writer: sending packet to device {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                trace!("mux writer: sending packet to device {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                     device_addr[0], device_addr[1], device_addr[2], device_addr[3], device_addr[4], device_addr[5]);
                 if let Err(e) = mux.send_to(device_addr, pkt).await {
                     error!("mux send_to failed: {e}");
@@ -722,9 +722,10 @@ impl VmDevice {
                 return Err(anyhow!("cannot have more than one {stream_type:?} stream"));
             }
             let (slot, receiver) = self.get_stream_slot(100)?;
-            info!(
+            trace!(
                 "Requesting stream: type={:?}, slot_id={}",
-                stream_type, slot.id
+                stream_type,
+                slot.id
             );
             self.transport
                 .writer
@@ -1240,6 +1241,18 @@ impl MuxDevice {
             Ok(Err(e)) => Err(e),
             Err(_) => Err(anyhow!("timeout waiting for DevicesSnapshot")),
         }
+    }
+
+    /// Subscribe to device list changes. After calling this, the dongle will
+    /// automatically send DevicesSnapshot messages whenever devices connect or disconnect.
+    /// You should have a task calling receive_msg() to process these notifications.
+    pub async fn subscribe_device_list(&self) -> Result<()> {
+        self.send_msg(MuxMsg::SubscribeDeviceList).await
+    }
+
+    /// Unsubscribe from device list changes.
+    pub async fn unsubscribe_device_list(&self) -> Result<()> {
+        self.send_msg(MuxMsg::UnsubscribeDeviceList).await
     }
 
     pub async fn send_to(&self, dev: [u8; 6], pkt: Packet) -> Result<()> {
