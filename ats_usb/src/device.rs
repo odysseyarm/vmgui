@@ -3,7 +3,7 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use nusb::{
     io::{EndpointRead, EndpointWrite},
     transfer::{Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient},
-    Device, DeviceInfo, Interface,
+    DeviceInfo, Interface,
 };
 use protodongers::{
     control::usb_mux::{ClearBondsError, PairingError, UsbMuxCtrlMsg},
@@ -1110,7 +1110,6 @@ pub struct MuxDevice {
     snapshots_rx: Arc<tokio::sync::Mutex<ReceiverStream<HVec<[u8; 6], MAX_DEVICES>>>>,
     msg_rx: Arc<tokio::sync::Mutex<ReceiverStream<MuxMsg>>>,
     device_packets_tx: Arc<Mutex<HashMap<[u8; 6], mpsc::Sender<Packet>>>>,
-    dev: Device,
     ctrl_if: Interface,
 }
 
@@ -1176,25 +1175,7 @@ impl MuxDevice {
         Ok(())
     }
 
-    async fn ctrl_recv(&self, timeout: std::time::Duration) -> Result<UsbMuxCtrlMsg> {
-        let data = self
-            .ctrl_if
-            .control_in(
-                ControlIn {
-                    control_type: ControlType::Vendor,
-                    recipient: Recipient::Interface,
-                    request: Self::USB_MUX_CTRL_REQ_RECV,
-                    value: 0,
-                    index: self.ctrl_if.interface_number() as u16,
-                    length: 256,
-                },
-                timeout,
-            )
-            .await
-            .map_err(|e| anyhow!("control_in failed: {e}"))?;
-        postcard::from_bytes::<UsbMuxCtrlMsg>(&data).map_err(|e| anyhow!("ctrl decode failed: {e}"))
-    }
-    pub fn from_transport(transport: MuxTransport, dev: Device, ctrl_if: Interface) -> Self {
+    pub fn from_transport(transport: MuxTransport, ctrl_if: Interface) -> Self {
         let (writer, snapshots, control, device_packets_tx) = transport.split();
 
         MuxDevice {
@@ -1202,7 +1183,6 @@ impl MuxDevice {
             snapshots_rx: Arc::new(tokio::sync::Mutex::new(snapshots)),
             msg_rx: Arc::new(tokio::sync::Mutex::new(control)),
             device_packets_tx,
-            dev,
             ctrl_if,
         }
     }
@@ -1234,7 +1214,7 @@ impl MuxDevice {
 
             let ctrl_if = iface.clone();
             let transport = MuxTransport::usb(in_ep, out_ep);
-            return Ok(Self::from_transport(transport, dev, ctrl_if));
+            return Ok(Self::from_transport(transport, ctrl_if));
         }
         Err(anyhow!(
             "failed to find mux interface with required endpoints"
