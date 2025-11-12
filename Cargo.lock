@@ -624,11 +624,11 @@ dependencies = [
 [[package]]
 name = "ats_common"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/ats_common.git#44fad2c47d587a61769517031e11634e6b288520"
+source = "git+https://github.com/odysseyarm/ats_common.git#e7a0ebcefabd1bc2771d24de8cc36c7ee45441f4"
 dependencies = [
  "nalgebra 0.34.1",
  "num",
- "opencv-ros-camera",
+ "opencv-ros-camera 0.16.0 (git+https://github.com/Abrahamh08/opencv-ros-camera)",
  "serde",
  "serde_json",
  "simba 0.9.1",
@@ -647,7 +647,7 @@ dependencies = [
  "microfft",
  "nalgebra 0.34.1",
  "num",
- "opencv-ros-camera",
+ "opencv-ros-camera 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
  "simba 0.9.1",
@@ -677,7 +677,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "nusb",
- "opencv-ros-camera",
+ "opencv-ros-camera 0.16.0 (git+https://github.com/Abrahamh08/opencv-ros-camera)",
  "postcard",
  "protodongers",
  "rand 0.8.5",
@@ -6642,6 +6642,15 @@ checksum = "3f043d084c2a00f326694f45ed1cbd1dc4a30cebb3675488f9e41ad097b3a45a"
 dependencies = [
  "cam-geom",
  "nalgebra 0.34.1",
+]
+
+[[package]]
+name = "opencv-ros-camera"
+version = "0.16.0"
+source = "git+https://github.com/Abrahamh08/opencv-ros-camera#f105e8a556da7dd3d5ee90556f1582e5c4231588"
+dependencies = [
+ "cam-geom",
+ "nalgebra 0.34.1",
  "serde",
  "serde_yaml",
  "thiserror 2.0.17",
@@ -6961,7 +6970,7 @@ checksum = "3eb8486b569e12e2c32ad3e204dbaba5e4b5b216e9367044f25f1dba42341773"
 [[package]]
 name = "protodongers"
 version = "0.1.0"
-source = "git+https://github.com/odysseyarm/protodonge-rs.git#f34d2f38031224ae618aeeccf30bf5c98b98b758"
+source = "git+https://github.com/odysseyarm/protodonge-rs.git#9b769d1099fc77caaed28bbf16a6968dde19a6f3"
 dependencies = [
  "ats_common",
  "enumn",
@@ -6969,7 +6978,7 @@ dependencies = [
  "minicbor",
  "minicbor-serde",
  "nalgebra 0.34.1",
- "opencv-ros-camera",
+ "opencv-ros-camera 0.16.0 (git+https://github.com/Abrahamh08/opencv-ros-camera)",
  "pyo3",
  "serde",
  "serde_bytes",
@@ -8598,7 +8607,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "nusb",
- "opencv-ros-camera",
+ "opencv-ros-camera 0.16.0 (git+https://github.com/Abrahamh08/opencv-ros-camera)",
  "parking_lot",
  "pin-project",
  "plotters",

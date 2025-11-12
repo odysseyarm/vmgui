@@ -11,7 +11,7 @@ argmin = "0.11.0"
 ats_common = { git = "https://github.com/odysseyarm/ats_common.git", features = ["std"] }
 enumn = "0.1.13"
 nalgebra = "0.34"
-opencv-ros-camera = { version = "0.16" }
+opencv-ros-camera = { git = "https://github.com/Abrahamh08/opencv-ros-camera" }
 serde = "1.0.204"
 serde_json = "1.0.121"
 socket2 = "0.6.0"
