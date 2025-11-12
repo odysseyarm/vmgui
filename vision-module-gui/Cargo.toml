@@ -31,7 +31,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 enumn = "0.1.13"
 parking_lot = "0.12.1"
-opencv-ros-camera = { version = "0.16" }
+opencv-ros-camera = { git = "https://github.com/Abrahamh08/opencv-ros-camera" }
 cam-geom = { version = "0.16" }
 socket2 = "0.6.0"
 plotters = { version = "0.3.6", default-features = false, features = ["line_series", "point_series", "surface_series", "colormaps", "full_palette"] }
