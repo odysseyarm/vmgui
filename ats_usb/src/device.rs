@@ -256,7 +256,18 @@ impl PacketTransport {
         let cancel_token = tokio_util::sync::CancellationToken::new();
         let cancel_reader = cancel_token.clone();
 
-        let mux_clone = mux.clone();
+        // Register this device's packet channel
+        {
+            let mut channels = mux.device_packets_tx.lock().unwrap();
+            channels.insert(device_addr, incoming_tx.clone());
+            debug!(
+                "mux: [ID:{}] registered packet channel for device {:02X}:{:02X}...",
+                transport_id, device_addr[0], device_addr[1]
+            );
+        }
+
+        // Clone what we need before moving mux
+        let device_packets_tx = Arc::clone(&mux.device_packets_tx);
 
         // Writer task: wraps outgoing VM packets in MuxMsg::SendTo
         let transport_id_writer = transport_id;
@@ -273,42 +284,16 @@ impl PacketTransport {
             debug!("mux writer task exits [ID:{}]", transport_id_writer);
         });
 
-        // Reader task: unwraps incoming MuxMsg::DevicePacket for our device
-        let transport_id_reader = transport_id;
+        // Cleanup task - unregister when cancelled
+        let transport_id_cleanup = transport_id;
         tokio::spawn(async move {
-            debug!("mux reader task started [ID:{}]", transport_id_reader);
-            loop {
-                tokio::select! {
-                    result = mux_clone.receive_msg() => {
-                        match result {
-                            Ok(msg) => {
-                                // Only forward packets from our target device
-                                if let crate::packets::mux::MuxMsg::DevicePacket(dev_pkt) = msg {
-                                    if dev_pkt.dev == device_addr {
-                                        debug!("mux reader: [ID:{}] forwarding packet", transport_id_reader);
-                                        if incoming_tx.send(dev_pkt.pkt).await.is_err() {
-                                            break;
-                                        }
-                                    } else {
-                                        trace!("mux reader: ignoring packet from other device");
-                                    }
-                                } else {
-                                    trace!("mux reader: ignoring non-DevicePacket message");
-                                }
-                            }
-                            Err(e) => {
-                                error!("mux receive_msg failed: {e}");
-                                break;
-                            }
-                        }
-                    }
-                    _ = cancel_reader.cancelled() => {
-                        debug!("mux reader: [ID:{}] cancelled, exiting", transport_id_reader);
-                        break;
-                    }
-                }
-            }
-            debug!("mux reader task exits [ID:{}]", transport_id_reader);
+            cancel_reader.cancelled().await;
+            let mut channels = device_packets_tx.lock().unwrap();
+            channels.remove(&device_addr);
+            debug!(
+                "mux: [ID:{}] unregistered packet channel for device {:02X}:{:02X}...",
+                transport_id_cleanup, device_addr[0], device_addr[1]
+            );
         });
 
         PacketTransport {
@@ -979,16 +964,23 @@ impl VmDevice {
 
 use crate::packets::mux::{MuxMsg, SendTo, MAX_DEVICES};
 use heapless::Vec as HVec;
+use std::collections::HashMap;
 
 pub struct MuxTransport {
     writer: mpsc::Sender<MuxMsg>,
-    incoming_rx: mpsc::Receiver<MuxMsg>,
+    snapshots_rx: mpsc::Receiver<HVec<[u8; 6], MAX_DEVICES>>,
+    msg_rx: mpsc::Receiver<MuxMsg>,
+    device_packets_tx: Arc<Mutex<HashMap<[u8; 6], mpsc::Sender<Packet>>>>,
 }
 
 impl MuxTransport {
     pub fn usb(mut in_ep: EndpointRead<Bulk>, mut out_ep: EndpointWrite<Bulk>) -> Self {
         let (writer, mut writer_rx) = mpsc::channel::<MuxMsg>(64);
-        let (incoming_tx, incoming_rx) = mpsc::channel::<MuxMsg>(128);
+        let (snapshots_tx, snapshots_rx) = mpsc::channel::<HVec<[u8; 6], MAX_DEVICES>>(128);
+        let (msg_tx, msg_rx) = mpsc::channel::<MuxMsg>(128);
+        let device_packets_tx =
+            Arc::new(Mutex::new(HashMap::<[u8; 6], mpsc::Sender<Packet>>::new()));
+        let device_packets_tx_clone = Arc::clone(&device_packets_tx);
 
         // Writer task
         tokio::spawn(async move {
@@ -1011,7 +1003,7 @@ impl MuxTransport {
             info!("mux usb writer exits");
         });
 
-        // Reader task
+        // Reader task - routes messages by type
         tokio::spawn(async move {
             let mut reader = in_ep.until_short_packet();
             let mut io_errs = 0u8;
@@ -1046,10 +1038,34 @@ impl MuxTransport {
                     continue;
                 }
                 match postcard::from_bytes::<MuxMsg>(&buf) {
-                    Ok(msg) => {
-                        if incoming_tx.send(msg).await.is_err() {
-                            break;
+                    Ok(MuxMsg::DevicesSnapshot(devices)) => {
+                        debug!("mux reader: routing DevicesSnapshot");
+                        let _ = snapshots_tx.send(devices).await;
+                    }
+                    Ok(MuxMsg::DevicePacket(dev_pkt)) => {
+                        trace!(
+                            "mux reader: routing DevicePacket for {:02X}:{:02X}...",
+                            dev_pkt.dev[0],
+                            dev_pkt.dev[1]
+                        );
+                        // Clone the sender to avoid holding the lock across await
+                        let tx_opt = {
+                            let channels = device_packets_tx_clone.lock().unwrap();
+                            channels.get(&dev_pkt.dev).cloned()
+                        };
+                        if let Some(tx) = tx_opt {
+                            let _ = tx.send(dev_pkt.pkt).await;
+                        } else {
+                            trace!(
+                                "mux reader: no receiver registered for device {:02X}:{:02X}...",
+                                dev_pkt.dev[0],
+                                dev_pkt.dev[1]
+                            );
                         }
+                    }
+                    Ok(other) => {
+                        debug!("mux reader: routing control message");
+                        let _ = msg_tx.send(other).await;
                     }
                     Err(e) => error!("mux postcard decode failed: {e:?}"),
                 }
@@ -1059,23 +1075,41 @@ impl MuxTransport {
 
         MuxTransport {
             writer,
-            incoming_rx,
+            snapshots_rx,
+            msg_rx,
+            device_packets_tx,
         }
     }
 
-    pub fn split(self) -> (mpsc::Sender<MuxMsg>, ReceiverStream<MuxMsg>) {
+    pub fn split(
+        self,
+    ) -> (
+        mpsc::Sender<MuxMsg>,
+        ReceiverStream<HVec<[u8; 6], MAX_DEVICES>>,
+        ReceiverStream<MuxMsg>,
+        Arc<Mutex<HashMap<[u8; 6], mpsc::Sender<Packet>>>>,
+    ) {
         let MuxTransport {
             writer,
-            incoming_rx,
+            snapshots_rx,
+            msg_rx,
+            device_packets_tx,
         } = self;
-        (writer, ReceiverStream::new(incoming_rx))
+        (
+            writer,
+            ReceiverStream::new(snapshots_rx),
+            ReceiverStream::new(msg_rx),
+            device_packets_tx,
+        )
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct MuxDevice {
     writer: mpsc::Sender<MuxMsg>,
-    response_rx: Arc<tokio::sync::Mutex<ReceiverStream<MuxMsg>>>,
+    snapshots_rx: Arc<tokio::sync::Mutex<ReceiverStream<HVec<[u8; 6], MAX_DEVICES>>>>,
+    msg_rx: Arc<tokio::sync::Mutex<ReceiverStream<MuxMsg>>>,
+    device_packets_tx: Arc<Mutex<HashMap<[u8; 6], mpsc::Sender<Packet>>>>,
     dev: Device,
     ctrl_if: Interface,
 }
@@ -1161,11 +1195,13 @@ impl MuxDevice {
         postcard::from_bytes::<UsbMuxCtrlMsg>(&data).map_err(|e| anyhow!("ctrl decode failed: {e}"))
     }
     pub fn from_transport(transport: MuxTransport, dev: Device, ctrl_if: Interface) -> Self {
-        let (writer, incoming) = transport.split();
+        let (writer, snapshots, control, device_packets_tx) = transport.split();
 
         MuxDevice {
             writer,
-            response_rx: Arc::new(tokio::sync::Mutex::new(incoming)),
+            snapshots_rx: Arc::new(tokio::sync::Mutex::new(snapshots)),
+            msg_rx: Arc::new(tokio::sync::Mutex::new(control)),
+            device_packets_tx,
             dev,
             ctrl_if,
         }
@@ -1215,10 +1251,18 @@ impl MuxDevice {
 
     pub async fn receive_msg(&self) -> Result<MuxMsg> {
         use tokio_stream::StreamExt;
-        let mut rx = self.response_rx.lock().await;
+        let mut rx = self.msg_rx.lock().await;
         let msg = rx.next().await.ok_or_else(|| anyhow!("channel closed"))?;
-        debug!("MuxDevice::receive_msg got message");
+        debug!("MuxDevice::receive_msg got control message");
         Ok(msg)
+    }
+
+    pub async fn receive_snapshot(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
+        use tokio_stream::StreamExt;
+        let mut rx = self.snapshots_rx.lock().await;
+        let devices = rx.next().await.ok_or_else(|| anyhow!("channel closed"))?;
+        debug!("MuxDevice::receive_snapshot got device snapshot");
+        Ok(devices)
     }
 
     pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
@@ -1226,17 +1270,7 @@ impl MuxDevice {
 
         let total_timeout = tokio::time::Duration::from_secs(1);
 
-        let receive_until_snapshot = async {
-            loop {
-                match self.receive_msg().await {
-                    Ok(MuxMsg::DevicesSnapshot(devices)) => return Ok(devices),
-                    Ok(_other) => continue,
-                    Err(e) => return Err(anyhow!("receive_msg error: {e}")),
-                }
-            }
-        };
-
-        match tokio::time::timeout(total_timeout, receive_until_snapshot).await {
+        match tokio::time::timeout(total_timeout, self.receive_snapshot()).await {
             Ok(Ok(devices)) => Ok(devices),
             Ok(Err(e)) => Err(e),
             Err(_) => Err(anyhow!("timeout waiting for DevicesSnapshot")),
