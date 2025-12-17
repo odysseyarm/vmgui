@@ -25,6 +25,7 @@ ats_cv = { git = "https://github.com/odysseyarm/ats_cv.git", features = ["teleme
 ats_common = { git = "https://github.com/odysseyarm/ats_common.git", features = ["std"] }
 ats_playback = { path = "../ats_playback" }
 ats_usb = { path = "../ats_usb" }
+protodongers = { git = "https://github.com/odysseyarm/protodonge-rs.git" }
 tokio-stream = "0.1.14"
 pin-project = "1.1.4"
 tracing = "0.1.40"

@@ -2,6 +2,7 @@ use std::{process::ExitCode, time::UNIX_EPOCH};
 
 use ats_usb::device::VmDevice;
 use nusb::{DeviceInfo, MaybeFuture as _};
+use protodongers::control::device::TransportMode;
 use tokio::sync::mpsc::{self, Sender};
 use tokio_stream::StreamExt;
 #[allow(unused_imdevices)]
@@ -9,16 +10,37 @@ use tracing::Level;
 #[allow(unused_imdevices)]
 use tracing_subscriber::EnvFilter;
 
-fn get_devices() -> Vec<DeviceInfo> {
-    let devices = nusb::list_devices().wait();
-    let devices = devices
-        .unwrap()
-        .into_iter()
-        .filter(|info| {
-            info.vendor_id() == 0x1915 && info.product_id() == 0x520F || info.product_id() == 0x5210
-        })
-        .collect();
-    devices
+async fn get_devices() -> Vec<DeviceInfo> {
+    let devices = match nusb::list_devices().wait() {
+        Ok(devs) => devs,
+        Err(e) => {
+            eprintln!("Failed to list USB devices: {e}");
+            return vec![];
+        }
+    };
+
+    let mut filtered = Vec::new();
+    for info in devices.into_iter().filter(|info| {
+        info.vendor_id() == 0x1915
+            && (info.product_id() == 0x520F || info.product_id() == 0x5210)
+    }) {
+        match VmDevice::probe_transport_mode(&info).await {
+            Ok(TransportMode::Usb) => filtered.push(info),
+            Ok(mode) => eprintln!(
+                "Skipping {:04x}:{:04x} - transport mode {:?}",
+                info.vendor_id(),
+                info.product_id(),
+                mode
+            ),
+            Err(e) => eprintln!(
+                "Skipping {:04x}:{:04x} - failed to probe mode: {e}",
+                info.vendor_id(),
+                info.product_id()
+            ),
+        }
+    }
+
+    filtered
 }
 
 fn stdin_thread(sender: Sender<()>) {
@@ -44,16 +66,16 @@ async fn main() -> ExitCode {
     let port_arg = std::env::args().nth(2);
     let device_info = if port_arg.is_some() {
         eprintln!("Port argument is no longer supported, using first available device");
-        let devices = get_devices();
+        let devices = get_devices().await;
         if devices.is_empty() {
-            eprintln!("No device found, please connect one");
+            eprintln!("No device in USB mode found, please connect one");
             return ExitCode::FAILURE;
         }
         devices.into_iter().next().unwrap()
     } else {
-        let devices = get_devices();
+        let devices = get_devices().await;
         if devices.is_empty() {
-            eprintln!("No device found, please connect one");
+            eprintln!("No device in USB mode found, please connect one");
             return ExitCode::FAILURE;
         }
         if devices.len() > 1 {

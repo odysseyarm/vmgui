@@ -7,7 +7,7 @@ use crate::{mot_runner::MotRunner, CloneButShorter};
 use anyhow::Result;
 use ats_usb::{
     device::{MuxDevice, VmConnectionInfo, VmDevice},
-    packets::vm::{AccelConfig, ConfigKind, GeneralConfig, GyroConfig, Port, PropKind},
+    packets::vm::{AccelConfig, GeneralConfig, GyroConfig, Port, PropKind},
 };
 use iui::{
     controls::{Button, Form},
@@ -18,16 +18,17 @@ use leptos_reactive::{
     create_effect, create_rw_signal, ReadSignal, RwSignal, SignalGet, SignalGetUntracked,
     SignalSet, SignalWith, SignalWithUntracked,
 };
-use nusb::{DeviceInfo, MaybeFuture as _};
+use nusb::MaybeFuture as _;
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
+use protodongers::control::device::TransportMode;
 
 pub fn config_window(
     ui: &UI,
     simulator_addr: Option<String>,
     udp_addr: Option<String>,
     mot_runner: Arc<Mutex<MotRunner>>,
-    _tokio_handle: &tokio::runtime::Handle,
+    tokio_handle: &tokio::runtime::Handle,
 ) -> (
     Window,
     ReadSignal<Option<VmDevice>>,
@@ -35,6 +36,8 @@ pub fn config_window(
 ) {
     let ui_ctx = ui.async_context();
     let mut config_win = Window::new(&ui, "Config", 10, 10, WindowType::NoMenubar);
+    let tokio_handle = tokio_handle.clone();
+
     config_win.on_closing(&ui, {
         let ui = ui.c();
         move |win: &mut Window| {
@@ -265,32 +268,43 @@ pub fn config_window(
                 }
             }
             .into_iter()
-            .filter(|info| {
-                info.vendor_id() == 0x1915
-                    && (info.product_id() == 0x520F
-                        || info.product_id() == 0x5210
-                        || info.product_id() == 0x5211)
-            })
+            .filter(|info| info.vendor_id() == 0x1915)
             .collect();
 
-            eprintln!("Found {} USB devices", usb_devices.len());
-
-            // Build list of VmConnectionInfo entries
+            // Separate direct USB vision modules and mux devices, probing transport mode for vision modules
             let mut vm_connections: Vec<VmConnectionInfo> = Vec::new();
+            let mut hub_devices: Vec<_> = Vec::new();
 
-            // Add direct USB vision modules (0x520F and 0x5211)
-            for info in &usb_devices {
-                if info.product_id() == 0x520F || info.product_id() == 0x5211 {
-                    vm_connections.push(VmConnectionInfo::DirectUsb(info.clone()));
+            for info in usb_devices {
+                match info.product_id() {
+                    0x520F | 0x5210 | 0x5211 => {
+                        match tokio_handle.block_on(VmDevice::probe_transport_mode(&info)) {
+                            Ok(TransportMode::Usb) => {
+                                vm_connections.push(VmConnectionInfo::DirectUsb(info.clone()))
+                            }
+                            Ok(mode) => {
+                                eprintln!(
+                                    "Skipping {:04x}:{:04x} - transport mode {:?}",
+                                    info.vendor_id(),
+                                    info.product_id(),
+                                    mode
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "Skipping {:04x}:{:04x} - failed to probe mode: {e}",
+                                    info.vendor_id(),
+                                    info.product_id()
+                                );
+                            }
+                        }
+                    }
+                    0x5212 => hub_devices.push(info.clone()),
+                    _ => {}
                 }
             }
 
-            // Find mux devices (0x5210)
-            let hub_devices: Vec<_> = usb_devices
-                .iter()
-                .filter(|info| info.product_id() == 0x5210)
-                .cloned()
-                .collect();
+            eprintln!("Found {} USB-mode devices, {} mux devices", vm_connections.len(), hub_devices.len());
 
             eprintln!("Found {} mux devices", hub_devices.len());
             if !hub_devices.is_empty() {
