@@ -1,4 +1,4 @@
-use crate::{CloneButShorter, Marker, MotState, TestFrame};
+use crate::{CloneButShorter, Marker, TestFrame};
 use ahrs::Ahrs;
 use arrayvec::ArrayVec;
 use ats_common::MARKER_PATTERN_LEN;

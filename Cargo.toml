@@ -7,6 +7,7 @@ members = [
     "ats_playback",
     "ats_usb",
     "ats_usb/cli",
+    "cli",
     "vision-module-gui",
 ]
 

@@ -6,9 +6,11 @@ use nusb::{
     DeviceInfo, Interface,
 };
 use protodongers::{
+    control::device::TransportMode,
     control::usb_mux::{ClearBondsError, PairingError, UsbMuxCtrlMsg},
     PocMarkersReport, VendorData,
 };
+
 use std::{
     pin::Pin,
     sync::{
@@ -332,6 +334,7 @@ pub struct VmDevice {
     transport: PacketTransportTx,
     thread_state: Weak<State>,
     cancel: Arc<tokio_util::sync::CancellationToken>, // Signals dispatcher to exit when VmDevice drops
+    ctrl_if: Option<Interface>,
     transport_cancel: Arc<tokio_util::sync::CancellationToken>, // Signals mux reader to exit when VmDevice drops
 }
 
@@ -368,7 +371,7 @@ where
 }
 
 impl VmDevice {
-    pub fn from_transport(transport: PacketTransport) -> Self {
+    pub fn from_transport(transport: PacketTransport, ctrl_if: Option<Interface>) -> Self {
         let (tx_only, mut incoming, transport_cancel) = transport.split();
 
         let response_channels = std::array::from_fn(|_| ResponseChannel::None);
@@ -442,29 +445,72 @@ impl VmDevice {
             transport: tx_only,
             thread_state,
             cancel: Arc::new(cancel_token),
+            ctrl_if,
             transport_cancel,
         }
     }
 
     pub async fn connect_usb(info: DeviceInfo) -> Result<Self> {
-        let dev = info.open().await?;
-        let iface = dev.claim_interface(0).await?;
-
-        let in_ep = iface.endpoint::<Bulk, In>(0x81)?.reader(4096);
-        let out_ep = iface.endpoint::<Bulk, Out>(0x01)?.writer(4096);
-
-        let transport = PacketTransport::usb(in_ep, out_ep);
-        let device = Self::from_transport(transport);
-        let _ = device.clear_all_streams().await;
-        Ok(device)
+        Self::connect_usb_inner(info, true).await
     }
 
-    /// Create a VmDevice that communicates with a vision module through a mux/dongle
+    /// Connect over USB without requiring the device to be in USB data mode.
+    /// Useful for control-only operations (e.g., pairing) while running in BLE mode.
+    pub async fn connect_usb_any_mode(info: DeviceInfo) -> Result<Self> {
+        Self::connect_usb_inner(info, false).await
+    }
+
+    async fn connect_usb_inner(info: DeviceInfo, require_usb_mode: bool) -> Result<Self> {
+        let dev = info.open().await?;
+
+        // Find the vendor-specific interface (class 0xFF)
+        let vendor_iface_num = info
+            .interfaces()
+            .find(|iface| iface.class() == 0xFF)
+            .map(|iface| iface.interface_number())
+            .ok_or_else(|| anyhow!("No vendor interface (class 0xFF) found"))?;
+
+        eprintln!(
+            "Found vendor interface (class 0xFF) at index {}",
+            vendor_iface_num
+        );
+
+        let iface = dev
+            .claim_interface(vendor_iface_num)
+            .await
+            .map_err(|e| anyhow!("Failed to claim interface {}: {}", vendor_iface_num, e))?;
+        eprintln!("Successfully claimed interface {}", vendor_iface_num);
+
+        let in_ep = iface
+            .endpoint::<Bulk, In>(0x81)
+            .map_err(|e| anyhow!("Failed to get IN endpoint 0x81: {}", e))?
+            .reader(4096);
+
+        let out_ep = iface
+            .endpoint::<Bulk, Out>(0x01)
+            .map_err(|e| anyhow!("Failed to get OUT endpoint 0x01: {}", e))?
+            .writer(4096);
+
+        let transport = PacketTransport::usb(in_ep, out_ep);
+        let ctrl_if = iface.clone();
+
+        let device = Self::from_transport(transport, Some(ctrl_if));
+        if require_usb_mode {
+            let _ = device.clear_all_streams().await;
+            let mode = device.get_transport_mode().await?;
+            if !matches!(mode, TransportMode::Usb) {
+                return Err(anyhow!("device transport mode is {:?}, expected Usb", mode));
+            }
+        }
+        eprintln!("VmDevice connected successfully!");
+        Ok(device)
+    }
     pub async fn connect_via_mux(mux: MuxDevice, device_addr: [u8; 6]) -> Result<Self> {
         debug!("VmDevice::connect_via_mux() creating new device for {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             device_addr[0], device_addr[1], device_addr[2], device_addr[3], device_addr[4], device_addr[5]);
         let transport = PacketTransport::mux(mux, device_addr);
-        let device = Self::from_transport(transport);
+
+        let device = Self::from_transport(transport, None);
 
         // Send DisableAll command and wait for Ack
         // This ensures any lingering streams from a previous session are stopped
@@ -1114,6 +1160,7 @@ pub struct MuxDevice {
 }
 
 impl MuxDevice {
+    #[allow(dead_code)]
     async fn ctrl_recv_polling(&self, timeout: std::time::Duration) -> Result<UsbMuxCtrlMsg> {
         let idx = self.ctrl_if.interface_number() as u16;
         let start = std::time::Instant::now();
@@ -1151,7 +1198,61 @@ impl MuxDevice {
             }
         }
     }
-    // USB Mux control over EP0 (Interface recipient)
+
+    async fn ctrl_recv_filtered<F>(
+        &self,
+        timeout: std::time::Duration,
+        mut accept: F,
+    ) -> Result<UsbMuxCtrlMsg>
+    where
+        F: FnMut(&UsbMuxCtrlMsg) -> bool,
+    {
+        let idx = self.ctrl_if.interface_number() as u16;
+        let start = std::time::Instant::now();
+        loop {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow!("timeout waiting for ctrl event"));
+            }
+            let slice = (timeout - elapsed).min(std::time::Duration::from_millis(500));
+            let reply = match self
+                .ctrl_if
+                .control_in(
+                    ControlIn {
+                        control_type: ControlType::Vendor,
+                        recipient: Recipient::Interface,
+                        request: Self::USB_MUX_CTRL_REQ_RECV,
+                        value: 0,
+                        index: idx,
+                        length: 256,
+                    },
+                    slice,
+                )
+                .await
+            {
+                Ok(data) => data,
+                Err(_) => continue,
+            };
+
+            if reply.is_empty() {
+                continue;
+            }
+
+            let msg = match postcard::from_bytes::<UsbMuxCtrlMsg>(&reply) {
+                Ok(msg) => msg,
+                Err(e) => {
+                    if start.elapsed() < timeout {
+                        continue;
+                    }
+                    return Err(anyhow!("ctrl decode failed: {e}"));
+                }
+            };
+
+            if accept(&msg) {
+                return Ok(msg);
+            }
+        }
+    } // USB Mux control over EP0 (Interface recipient)
     const USB_MUX_CTRL_REQ_SEND: u8 = 0x30; // vendor request to send ctrl msg
     const USB_MUX_CTRL_REQ_RECV: u8 = 0x31; // vendor request to receive ctrl msg
 
@@ -1284,15 +1385,23 @@ impl MuxDevice {
     }
 
     /// Start pairing mode on the dongle with a timeout (ms).
+    /// Start pairing mode on the dongle with a timeout (ms).
     pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
         use protodongers::control::usb_mux::StartPairing;
         self.ctrl_send(UsbMuxCtrlMsg::StartPairing(StartPairing { timeout_ms }))
             .await?;
         match self
-            .ctrl_recv_polling(std::time::Duration::from_secs(2))
+            .ctrl_recv_filtered(std::time::Duration::from_secs(2), |msg| {
+                matches!(msg, UsbMuxCtrlMsg::StartPairingResponse)
+                    || matches!(msg, UsbMuxCtrlMsg::PairingResult(_))
+            })
             .await?
         {
             UsbMuxCtrlMsg::StartPairingResponse => Ok(()),
+            UsbMuxCtrlMsg::PairingResult(Ok(_addr)) => {
+                // Pairing finished immediately; treat as success so the caller can proceed
+                Ok(())
+            }
             other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
@@ -1306,7 +1415,9 @@ impl MuxDevice {
     pub async fn wait_pairing_event(&self) -> Result<PairingEvent> {
         loop {
             match self
-                .ctrl_recv_polling(std::time::Duration::from_secs(120))
+                .ctrl_recv_filtered(std::time::Duration::from_secs(120), |msg| {
+                    matches!(msg, UsbMuxCtrlMsg::PairingResult(_))
+                })
                 .await?
             {
                 UsbMuxCtrlMsg::PairingResult(Ok(addr)) => return Ok(PairingEvent::Result(addr)),
@@ -1316,22 +1427,49 @@ impl MuxDevice {
                 UsbMuxCtrlMsg::PairingResult(Err(PairingError::Cancelled)) => {
                     return Ok(PairingEvent::Cancelled)
                 }
-                _ => { /* ignore unrelated ctrl msgs */ }
+                _ => { /* filtered */ }
             }
         }
     }
 
     pub async fn clear_bonds(&self) -> Result<()> {
+        use std::time::{Duration, Instant};
         self.ctrl_send(UsbMuxCtrlMsg::ClearBonds).await?;
-        match self
-            .ctrl_recv_polling(std::time::Duration::from_secs(2))
-            .await?
-        {
-            UsbMuxCtrlMsg::ClearBondsResponse(Ok(())) => Ok(()),
-            UsbMuxCtrlMsg::ClearBondsResponse(Err(ClearBondsError::Failed)) => {
-                Err(anyhow!("Failed to clear bonds"))
+        let start = Instant::now();
+        let max_wait = Duration::from_secs(10);
+        loop {
+            match self
+                .ctrl_recv_filtered(Duration::from_secs(2), |msg| {
+                    matches!(msg, UsbMuxCtrlMsg::ClearBondsResponse(_))
+                        || matches!(msg, UsbMuxCtrlMsg::PairingResult(_))
+                })
+                .await
+            {
+                Ok(msg) => match msg {
+                    UsbMuxCtrlMsg::ClearBondsResponse(Ok(())) => return Ok(()),
+                    UsbMuxCtrlMsg::ClearBondsResponse(Err(ClearBondsError::Failed)) => {
+                        return Err(anyhow!("Failed to clear bonds"))
+                    }
+                    // Ignore unrelated ctrl messages (e.g., pairing result racing with clear)
+                    _ if start.elapsed() < max_wait => continue,
+                    // No explicit response but we've waited long enough; assume success because the
+                    // dongle side clears synchronously and may drop the response when busy.
+                    _ => {
+                        eprintln!("Warning: no ClearBonds response received; assuming success");
+                        return Ok(());
+                    }
+                },
+                Err(e) => {
+                    // Treat timeouts as benign while waiting; after max_wait, assume success.
+                    if start.elapsed() < max_wait {
+                        continue;
+                    }
+                    eprintln!(
+                        "Warning: ClearBonds timeout waiting for ctrl event: {e}; assuming success"
+                    );
+                    return Ok(());
+                }
             }
-            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
 }
@@ -1385,6 +1523,299 @@ impl VmConnectionInfo {
                     device_addr[5]
                 )
             }
+        }
+    }
+}
+
+// VmDevice USB control endpoint methods
+impl VmDevice {
+    // USB Device control over EP0 (Interface recipient)
+    const USB_DEVICE_CTRL_REQ_SEND: u8 = 0x30;
+    const USB_DEVICE_CTRL_REQ_RECV: u8 = 0x31;
+
+    async fn send_ctrl_msg(&self, msg: protodongers::control::device::DeviceMsg) -> Result<()> {
+        let ctrl_if = self
+            .ctrl_if
+            .as_ref()
+            .ok_or_else(|| anyhow!("No control interface available"))?;
+        let data = postcard::to_allocvec(&msg).map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
+        ctrl_if
+            .control_out(
+                ControlOut {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Interface,
+                    request: Self::USB_DEVICE_CTRL_REQ_SEND,
+                    value: 0,
+                    index: ctrl_if.interface_number() as u16,
+                    data: &data,
+                },
+                Duration::from_millis(1000),
+            )
+            .await
+            .map_err(|e| anyhow!("ctrl send failed: {e}"))?;
+        Ok(())
+    }
+
+    async fn recv_ctrl_msg(
+        &self,
+        timeout: Duration,
+    ) -> Result<protodongers::control::device::DeviceMsg> {
+        let ctrl_if = self
+            .ctrl_if
+            .as_ref()
+            .ok_or_else(|| anyhow!("No control interface available"))?;
+        let idx = ctrl_if.interface_number() as u16;
+        let start = std::time::Instant::now();
+        loop {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow!("timeout waiting for ctrl event"));
+            }
+            let slice = (timeout - elapsed).min(Duration::from_millis(500));
+            match ctrl_if
+                .control_in(
+                    ControlIn {
+                        control_type: ControlType::Vendor,
+                        recipient: Recipient::Interface,
+                        request: Self::USB_DEVICE_CTRL_REQ_RECV,
+                        value: 0,
+                        index: idx,
+                        length: 256,
+                    },
+                    slice,
+                )
+                .await
+            {
+                Ok(data) => {
+                    if data.is_empty() {
+                        continue;
+                    }
+                    break postcard::from_bytes::<protodongers::control::device::DeviceMsg>(&data)
+                        .map_err(|e| anyhow!("ctrl decode failed: {e}"));
+                }
+                Err(_) => {
+                    continue;
+                }
+            }
+        }
+    }
+
+    async fn recv_ctrl_msg_filtered<F>(
+        &self,
+        timeout: Duration,
+        mut accept: F,
+    ) -> Result<protodongers::control::device::DeviceMsg>
+    where
+        F: FnMut(&protodongers::control::device::DeviceMsg) -> bool,
+    {
+        let ctrl_if = self
+            .ctrl_if
+            .as_ref()
+            .ok_or_else(|| anyhow!("No control interface available"))?;
+        let idx = ctrl_if.interface_number() as u16;
+        let start = std::time::Instant::now();
+        loop {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow!("timeout waiting for ctrl event"));
+            }
+            let slice = (timeout - elapsed).min(Duration::from_millis(500));
+            let reply = match ctrl_if
+                .control_in(
+                    ControlIn {
+                        control_type: ControlType::Vendor,
+                        recipient: Recipient::Interface,
+                        request: Self::USB_DEVICE_CTRL_REQ_RECV,
+                        value: 0,
+                        index: idx,
+                        length: 256,
+                    },
+                    slice,
+                )
+                .await
+            {
+                Ok(data) => data,
+                Err(_) => continue,
+            };
+
+            if reply.is_empty() {
+                continue;
+            }
+
+            let msg = match postcard::from_bytes::<protodongers::control::device::DeviceMsg>(&reply)
+            {
+                Ok(msg) => msg,
+                Err(e) => {
+                    if start.elapsed() < timeout {
+                        continue;
+                    }
+                    return Err(anyhow!("ctrl decode failed: {e}"));
+                }
+            };
+
+            if accept(&msg) {
+                return Ok(msg);
+            }
+        }
+    }
+
+    pub async fn read_version(&self) -> Result<protodongers::control::device::Version> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::ReadVersion()).await?;
+        match self.recv_ctrl_msg(Duration::from_secs(2)).await? {
+            DeviceMsg::ReadVersionResponse(version) => Ok(version),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Get the current transport mode of the device (USB vs BLE).
+    pub async fn get_transport_mode(&self) -> Result<TransportMode> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::GetTransportMode).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::TransportModeStatus(_))
+            })
+            .await?
+        {
+            DeviceMsg::TransportModeStatus(mode) => Ok(mode),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Probe the transport mode of a device by issuing a control request on the vendor interface.
+    /// This opens a temporary connection to query the device, then closes it.
+    pub async fn probe_transport_mode(info: &nusb::DeviceInfo) -> Result<TransportMode> {
+        use protodongers::control::device::DeviceMsg;
+        
+        // Open the device temporarily
+        let device = info.open().await?;
+        
+        // Find the vendor-specific interface (class 0xFF)
+        let vendor_iface_num = info
+            .interfaces()
+            .find(|iface| iface.class() == 0xFF)
+            .map(|iface| iface.interface_number())
+            .ok_or_else(|| anyhow!("No vendor interface (class 0xFF) found"))?;
+        
+        // Claim the control interface
+        let ctrl_if = device
+            .claim_interface(vendor_iface_num)
+            .await
+            .map_err(|e| anyhow!("Failed to claim control interface: {e}"))?;
+        
+        // Send GetTransportMode request
+        let msg = DeviceMsg::GetTransportMode;
+        let data = postcard::to_allocvec(&msg)
+            .map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
+        
+        ctrl_if
+            .control_out(
+                ControlOut {
+                    control_type: ControlType::Vendor,
+                    recipient: Recipient::Interface,
+                    request: Self::USB_DEVICE_CTRL_REQ_SEND,
+                    value: 0,
+                    index: ctrl_if.interface_number() as u16,
+                    data: &data,
+                },
+                Duration::from_millis(1000),
+            )
+            .await
+            .map_err(|e| anyhow!("ctrl send failed: {e}"))?;
+        
+        // Receive TransportModeStatus response
+        let idx = ctrl_if.interface_number() as u16;
+        let timeout = Duration::from_secs(2);
+        let start = std::time::Instant::now();
+        
+        loop {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow!("timeout waiting for transport mode response"));
+            }
+            let slice = (timeout - elapsed).min(Duration::from_millis(500));
+            
+            match ctrl_if
+                .control_in(
+                    ControlIn {
+                        control_type: ControlType::Vendor,
+                        recipient: Recipient::Interface,
+                        request: Self::USB_DEVICE_CTRL_REQ_RECV,
+                        value: 0,
+                        index: idx,
+                        length: 256,
+                    },
+                    slice,
+                )
+                .await
+            {
+                Ok(data) if !data.is_empty() => {
+                    match postcard::from_bytes::<DeviceMsg>(&data) {
+                        Ok(DeviceMsg::TransportModeStatus(mode)) => return Ok(mode),
+                        Ok(_) => continue, // Ignore other messages
+                        Err(e) => return Err(anyhow!("ctrl decode failed: {e}")),
+                    }
+                }
+                Ok(_) => continue, // Empty response, retry
+                Err(_) => continue, // Timeout on this poll, retry
+            }
+        }
+    }
+    pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
+        use protodongers::control::device::{DeviceMsg, StartPairing};
+        self.send_ctrl_msg(DeviceMsg::StartPairing(StartPairing { timeout_ms }))
+            .await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::StartPairingResponse)
+                    || matches!(msg, DeviceMsg::PairingResult(_))
+            })
+            .await?
+        {
+            DeviceMsg::StartPairingResponse => Ok(()),
+            DeviceMsg::PairingResult(Ok(_addr)) => {
+                // Pairing finished immediately; treat as success so the caller can proceed
+                Ok(())
+            }
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    pub async fn wait_pairing_event(&self) -> Result<[u8; 6]> {
+        use protodongers::control::device::{DeviceMsg, PairingError};
+        loop {
+            match self.recv_ctrl_msg(Duration::from_secs(120)).await? {
+                DeviceMsg::PairingResult(Ok(addr)) => return Ok(addr),
+                DeviceMsg::PairingResult(Err(PairingError::Timeout)) => {
+                    return Err(anyhow!("Pairing timeout"))
+                }
+                DeviceMsg::PairingResult(Err(PairingError::Cancelled)) => {
+                    return Err(anyhow!("Pairing cancelled"))
+                }
+                _ => { /* ignore unrelated ctrl msgs */ }
+            }
+        }
+    }
+
+    pub async fn cancel_pairing(&self) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::CancelPairing).await
+    }
+
+    pub async fn clear_bond(&self) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::ClearBond).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::ClearBondResponse(_))
+                    || matches!(msg, DeviceMsg::PairingResult(_))
+            })
+            .await?
+        {
+            DeviceMsg::ClearBondResponse(Ok(())) => Ok(()),
+            DeviceMsg::ClearBondResponse(Err(_)) => Err(anyhow!("Failed to clear bond")),
+            other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
 }
