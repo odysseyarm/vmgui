@@ -1347,8 +1347,22 @@ impl MuxDevice {
     }
 
     pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
+        // Drain any stale snapshots that may be in the channel
+        {
+            use tokio_stream::StreamExt;
+            let mut rx = self.snapshots_rx.lock().await;
+            while let Ok(Some(_)) = tokio::time::timeout(
+                tokio::time::Duration::from_millis(10),
+                rx.next()
+            ).await {
+                debug!("Drained stale snapshot");
+            }
+        }
+
+        // Send the request
         self.send_msg(MuxMsg::RequestDevices).await?;
 
+        // Wait for response with a 1-second timeout
         let total_timeout = tokio::time::Duration::from_secs(1);
 
         match tokio::time::timeout(total_timeout, self.receive_snapshot()).await {

@@ -234,6 +234,12 @@ pub fn config_window(
             device_combobox.clear(&ui);
             device_list.with(|device_list| {
                 for device in device_list {
+                    // Skip placeholder mux entries (used to keep connection alive when 0 devices)
+                    if let VmConnectionInfo::ViaMux { device_addr, .. } = device {
+                        if device_addr == &[0, 0, 0, 0, 0, 0] {
+                            continue; // Skip placeholder
+                        }
+                    }
                     device_combobox.append(&ui, &display_for_vm_connection(device));
                 }
             });
@@ -402,6 +408,14 @@ pub fn config_window(
                                     match hub.request_devices().await {
                                         Ok(devices) => {
                                             eprintln!("Mux query successful, found {} device(s)", devices.len());
+                                            // If no devices, add a placeholder to keep mux alive for next refresh
+                                            if devices.is_empty() {
+                                                eprintln!("No devices found, adding placeholder to keep mux connection alive");
+                                                all_connections.push(VmConnectionInfo::ViaMux {
+                                                    mux: hub.clone(),
+                                                    device_addr: [0, 0, 0, 0, 0, 0], // Placeholder
+                                                });
+                                            } else {
                                             for device_addr in devices {
                                                 eprintln!("  Device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                                                     device_addr[0], device_addr[1], device_addr[2],
@@ -410,6 +424,7 @@ pub fn config_window(
                                                     mux: hub.clone(),
                                                     device_addr,
                                                 });
+                                            }
                                             }
                                         }
                                         Err(e) => {
