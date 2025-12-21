@@ -262,8 +262,44 @@ async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
                 .xzy(),
         );
 
+        const CALIBRATING: bool = false;
+
         // Re-alignment logic
-        if runner.wfnf_realign {
+        if CALIBRATING {
+            if runner.wfnf_realign && nf_normalized.len() == 6 && wf_normalized.len() == 6 {
+                // Stereo calibration: match first 6 markers clockwise
+                let nf_ordered = nf_normalized
+                    .iter()
+                    .take(6)
+                    .map(|m| m.coords.push(1.0))
+                    .collect::<ArrayVec<_, 6>>();
+                let wf_ordered = wf_normalized
+                    .iter()
+                    .take(6)
+                    .map(|m| m.coords.push(1.0))
+                    .collect::<ArrayVec<_, 6>>();
+                if nf_ordered.len() == 6 && wf_ordered.len() == 6 {
+                    let nf_arr = [
+                        nf_ordered[0],
+                        nf_ordered[1],
+                        nf_ordered[2],
+                        nf_ordered[3],
+                        nf_ordered[4],
+                        nf_ordered[5],
+                    ];
+                    let wf_arr = [
+                        wf_ordered[0],
+                        wf_ordered[1],
+                        wf_ordered[2],
+                        wf_ordered[3],
+                        wf_ordered[4],
+                        wf_ordered[5],
+                    ];
+                    let q = calculate_rotational_offset(&wf_arr, &nf_arr);
+                    runner.general_config.stereo_iso.rotation *= q.cast();
+                }
+            }
+        } else if runner.wfnf_realign {
             if let Some((wf_match_ix, _, _)) = ats_cv::foveated::identify_markers(
                 &wf_normalized,
                 gravity_vec.cast(),
