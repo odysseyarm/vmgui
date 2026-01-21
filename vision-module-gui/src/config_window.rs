@@ -134,7 +134,7 @@ pub fn config_window(
             let sim_addr = sim_addr.c();
             let udp_addr = udp_addr.c();
             let general_settings = general_settings.c();
-            let device_signal = device.c();  // Clone the signal for the async task
+            let device_signal = device.c(); // Clone the signal for the async task
             let task = async move {
                 // Clean up old device if it exists, BEFORE connecting to new one
                 if let Some(old_device) = device_signal.get_untracked() {
@@ -142,10 +142,10 @@ pub fn config_window(
                     let _ = old_device.clear_all_streams().await;
                     eprintln!("Previous device cleaned up (slot reservation prevents conflicts)");
                 }
-                
+
                 // NOW set device to None after cleanup
                 device_signal.set(None);
-                
+
                 let usb_device = if let Some(_device) = _device {
                     eprintln!("Attempting to connect to device...");
                     _device.connect().await
@@ -165,7 +165,8 @@ pub fn config_window(
                         }
                         eprintln!("Streams disabled, loading general settings...");
 
-                        let product_id_result = general_settings.load_from_device(&usb_device, true).await;
+                        let product_id_result =
+                            general_settings.load_from_device(&usb_device, true).await;
                         if let Err(ref e) = product_id_result {
                             eprintln!("ERROR: Failed to load general settings: {:?}", e);
                             return Err(anyhow::anyhow!("{:?}", e));
@@ -310,7 +311,11 @@ pub fn config_window(
                 }
             }
 
-            eprintln!("Found {} USB-mode devices, {} mux devices", vm_connections.len(), hub_devices.len());
+            eprintln!(
+                "Found {} USB-mode devices, {} mux devices",
+                vm_connections.len(),
+                hub_devices.len()
+            );
 
             eprintln!("Found {} mux devices", hub_devices.len());
             if !hub_devices.is_empty() {
