@@ -470,16 +470,10 @@ impl VmDevice {
             .map(|iface| iface.interface_number())
             .ok_or_else(|| anyhow!("No vendor interface (class 0xFF) found"))?;
 
-        eprintln!(
-            "Found vendor interface (class 0xFF) at index {}",
-            vendor_iface_num
-        );
-
         let iface = dev
             .claim_interface(vendor_iface_num)
             .await
             .map_err(|e| anyhow!("Failed to claim interface {}: {}", vendor_iface_num, e))?;
-        eprintln!("Successfully claimed interface {}", vendor_iface_num);
 
         let in_ep = iface
             .endpoint::<Bulk, In>(0x81)
@@ -502,7 +496,6 @@ impl VmDevice {
                 return Err(anyhow!("device transport mode is {:?}, expected Usb", mode));
             }
         }
-        eprintln!("VmDevice connected successfully!");
         Ok(device)
     }
     pub async fn connect_via_mux(mux: MuxDevice, device_addr: [u8; 6]) -> Result<Self> {
@@ -1347,29 +1340,39 @@ impl MuxDevice {
     }
 
     pub async fn request_devices(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
-        // Drain any stale snapshots that may be in the channel
-        {
-            use tokio_stream::StreamExt;
-            let mut rx = self.snapshots_rx.lock().await;
-            while let Ok(Some(_)) = tokio::time::timeout(
-                tokio::time::Duration::from_millis(10),
-                rx.next()
-            ).await {
-                debug!("Drained stale snapshot");
+        let mut last_err = None;
+        for attempt in 0..3 {
+            if attempt > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+            }
+
+            // Drain any stale snapshots that may be in the channel
+            {
+                use tokio_stream::StreamExt;
+                let mut rx = self.snapshots_rx.lock().await;
+                while let Ok(Some(_)) =
+                    tokio::time::timeout(tokio::time::Duration::from_millis(10), rx.next()).await
+                {
+                    debug!("Drained stale snapshot");
+                }
+            }
+
+            // Send the request
+            if let Err(e) = self.send_msg(MuxMsg::RequestDevices).await {
+                last_err = Some(e);
+                continue;
+            }
+
+            // Wait for response with a 1-second timeout
+            let total_timeout = tokio::time::Duration::from_secs(1);
+
+            match tokio::time::timeout(total_timeout, self.receive_snapshot()).await {
+                Ok(Ok(devices)) => return Ok(devices),
+                Ok(Err(e)) => last_err = Some(e),
+                Err(_) => last_err = Some(anyhow!("timeout waiting for DevicesSnapshot")),
             }
         }
-
-        // Send the request
-        self.send_msg(MuxMsg::RequestDevices).await?;
-
-        // Wait for response with a 1-second timeout
-        let total_timeout = tokio::time::Duration::from_secs(1);
-
-        match tokio::time::timeout(total_timeout, self.receive_snapshot()).await {
-            Ok(Ok(devices)) => Ok(devices),
-            Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow!("timeout waiting for DevicesSnapshot")),
-        }
+        Err(last_err.unwrap_or_else(|| anyhow!("request_devices failed")))
     }
 
     /// Subscribe to device list changes. After calling this, the dongle will
@@ -1682,6 +1685,16 @@ impl VmDevice {
         }
     }
 
+    /// Read the UUID from the device via control endpoint.
+    pub async fn read_uuid(&self) -> Result<[u8; 6]> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::ReadUuid()).await?;
+        match self.recv_ctrl_msg(Duration::from_secs(2)).await? {
+            DeviceMsg::ReadUuidResponse(uuid) => Ok(uuid),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
     /// Get the current transport mode of the device (USB vs BLE).
     pub async fn get_transport_mode(&self) -> Result<TransportMode> {
         use protodongers::control::device::DeviceMsg;
@@ -1701,28 +1714,27 @@ impl VmDevice {
     /// This opens a temporary connection to query the device, then closes it.
     pub async fn probe_transport_mode(info: &nusb::DeviceInfo) -> Result<TransportMode> {
         use protodongers::control::device::DeviceMsg;
-        
+
         // Open the device temporarily
         let device = info.open().await?;
-        
+
         // Find the vendor-specific interface (class 0xFF)
         let vendor_iface_num = info
             .interfaces()
             .find(|iface| iface.class() == 0xFF)
             .map(|iface| iface.interface_number())
             .ok_or_else(|| anyhow!("No vendor interface (class 0xFF) found"))?;
-        
+
         // Claim the control interface
         let ctrl_if = device
             .claim_interface(vendor_iface_num)
             .await
             .map_err(|e| anyhow!("Failed to claim control interface: {e}"))?;
-        
+
         // Send GetTransportMode request
         let msg = DeviceMsg::GetTransportMode;
-        let data = postcard::to_allocvec(&msg)
-            .map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
-        
+        let data = postcard::to_allocvec(&msg).map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
+
         ctrl_if
             .control_out(
                 ControlOut {
@@ -1737,19 +1749,19 @@ impl VmDevice {
             )
             .await
             .map_err(|e| anyhow!("ctrl send failed: {e}"))?;
-        
+
         // Receive TransportModeStatus response
         let idx = ctrl_if.interface_number() as u16;
         let timeout = Duration::from_secs(2);
         let start = std::time::Instant::now();
-        
+
         loop {
             let elapsed = start.elapsed();
             if elapsed >= timeout {
                 return Err(anyhow!("timeout waiting for transport mode response"));
             }
             let slice = (timeout - elapsed).min(Duration::from_millis(500));
-            
+
             match ctrl_if
                 .control_in(
                     ControlIn {
@@ -1771,7 +1783,7 @@ impl VmDevice {
                         Err(e) => return Err(anyhow!("ctrl decode failed: {e}")),
                     }
                 }
-                Ok(_) => continue, // Empty response, retry
+                Ok(_) => continue,  // Empty response, retry
                 Err(_) => continue, // Timeout on this poll, retry
             }
         }

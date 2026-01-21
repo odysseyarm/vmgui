@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-argmin = "0.5.1"
-argmin-math = { version = "0.5.1", features = ["nalgebra_v0_34"] }
-argmin-observer-slog = { git = "https://github.com/argmin-rs/argmin", rev = "f5c3fd3953771ee41d1e6425b3421de2b8ed7b24" }
+argmin = "0.11"
+argmin-math = { version = "0.5", features = ["nalgebra_v0_34"] }
+argmin-observer-slog = "0.2"
 ats_usb = { version = "0.1.0", path = ".." }
 clap = { version = "4.5.11", features = ["derive"] }
 executors = "0.9.0"
