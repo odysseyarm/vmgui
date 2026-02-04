@@ -205,7 +205,10 @@ impl PacketTransport {
                                 io_errs = 0;
                                 continue;
                             }
-                            BrokenPipe | UnexpectedEof | ConnectionReset => break,
+                            BrokenPipe | UnexpectedEof | ConnectionReset => {
+                                error!("mux usb read fatal error: {e:?} (kind: {:?})", e.kind());
+                                break;
+                            }
                             _ => {
                                 if io_errs < 3 {
                                     warn!("usb read error (ignored): {e}");
@@ -1056,7 +1059,10 @@ impl MuxTransport {
                                 io_errs = 0;
                                 continue;
                             }
-                            BrokenPipe | UnexpectedEof | ConnectionReset => break,
+                            BrokenPipe | UnexpectedEof | ConnectionReset => {
+                                error!("mux usb read fatal error: {e:?} (kind: {:?})", e.kind());
+                                break;
+                            }
                             _ => {
                                 if io_errs < 3 {
                                     warn!("mux usb read error (ignored): {e}");
