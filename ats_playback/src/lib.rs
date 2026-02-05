@@ -3,6 +3,7 @@ use std::io::Error;
 use std::io::Read;
 use std::io::Seek;
 use std::path::PathBuf;
+use tracing::warn;
 
 pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>), Error> {
     let mut file = std::fs::File::open(path).unwrap();
@@ -28,7 +29,13 @@ pub fn read_file(path: &PathBuf) -> Result<(GeneralConfig, Vec<(u128, Packet)>),
                         if let ats_usb::packets::vm::Error::UnexpectedEof { packet_type: _ } = e {
                             panic!("Unexpected EOF");
                         } else {
-                            panic!("Error parsing packet: {:?}", e);
+                            // Skip unrecognized packets instead of panicking
+                            warn!("Skipping unrecognized packet: {:?}", e);
+                            // Try to find next valid packet by seeking forward
+                            file.seek(std::io::SeekFrom::Current(-(read as i64)))
+                                .unwrap();
+                            // Skip this timestamp entry and try next
+                            continue;
                         }
                     }
                 };

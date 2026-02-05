@@ -503,6 +503,7 @@ name = "ats_playback"
 version = "0.1.0"
 dependencies = [
  "ats_usb",
+ "tracing",
 ]
 
 [[package]]
@@ -5490,6 +5491,23 @@ checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "wep_simulator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ats_playback",
+ "ats_usb",
+ "crossbeam",
+ "iui",
+ "leptos_reactive",
+ "nalgebra 0.33.2",
+ "opencv-ros-camera 0.15.2",
+ "tracing",
+ "tracing-subscriber",
+ "vision-module-gui",
 ]
 
 [[package]]

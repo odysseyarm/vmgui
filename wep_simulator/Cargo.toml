@@ -1,0 +1,17 @@
+[package]
+name = "wep_simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ats_usb = { path = "../ats_usb" }
+ats_playback = { path = "../ats_playback" }
+vision-module-gui = { path = "../vision-module-gui" }
+crossbeam = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+iui = { path = "../libui-rs/iui" }
+leptos_reactive = { version = "0.6.4", features = ["serde"] }
+opencv-ros-camera = "0.15"
+nalgebra = { version = "0.33", features = ["serde-serialize"] }

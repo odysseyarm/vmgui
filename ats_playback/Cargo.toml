@@ -10,3 +10,4 @@ name = "ats_playback"
 
 [dependencies]
 ats_usb = { path = "../ats_usb" }
+tracing = "0.1"

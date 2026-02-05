@@ -9,6 +9,7 @@ members = [
     "ats_usb",
     "ats_usb/cli",
     "vision-module-gui",
+    "wep_simulator",
 ]
 
 # Enable optimizations for dependencies in dev profile
