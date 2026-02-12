@@ -10,6 +10,7 @@ use leptos_reactive::RwSignal;
 use nalgebra::{Matrix3, Point2, Rotation3, Scalar, Translation3, UnitVector3, Vector2, Vector3};
 use opencv_ros_camera::RosOpenCvIntrinsics;
 use parking_lot::Mutex;
+use protodongers::PocMarkersReport;
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 use tokio_stream::StreamExt;
@@ -207,6 +208,12 @@ fn my_raycast_update(runner: &mut MotRunner) {
     }
 }
 
+/// Wrapper to track whether markers came from POC or combined report
+enum MarkersReport {
+    Combined(CombinedMarkersReport),
+    Poc(PocMarkersReport),
+}
+
 async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
     let device = match runner.lock().device.as_ref() {
         Some(d) => d.c(),
@@ -227,17 +234,22 @@ async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
         }
     };
 
-    let mut markers_stream = combined_markers_stream.merge(poc_markers_stream.map(|x| x.into()));
+    let mut markers_stream = combined_markers_stream
+        .map(MarkersReport::Combined)
+        .merge(poc_markers_stream.map(MarkersReport::Poc));
 
     while let Some(report) = markers_stream.next().await {
-        let CombinedMarkersReport {
-            nf_points,
-            wf_points,
-        } = report;
+        let (is_poc, nf_points, wf_points) = match report {
+            MarkersReport::Poc(poc) => (true, poc.points, Default::default()),
+            MarkersReport::Combined(combined) => (false, combined.nf_points, combined.wf_points),
+        };
 
         let mut runner = runner.lock();
 
-        // Helper closure to process points
+        // Track whether this is a POC marker report
+        runner.state.is_poc_markers = is_poc;
+
+        // Helper closure to process points (applies camera model transforms)
         let process_points = |points, camera_model, stereo_iso| {
             let point_tuples = create_point_tuples(points);
             let points_raw: Vec<_> = point_tuples.iter().map(|&(_, p)| p).collect();
@@ -395,12 +407,22 @@ async fn markers_loop(runner: Arc<Mutex<MotRunner>>) {
 
         // Record packets if enabled
         if runner.record_packets {
+            let packet_data = if is_poc {
+                ats_usb::packets::vm::PacketData::PocMarkersReport(PocMarkersReport {
+                    points: nf_points,
+                })
+            } else {
+                ats_usb::packets::vm::PacketData::CombinedMarkersReport(CombinedMarkersReport {
+                    nf_points,
+                    wf_points,
+                })
+            };
             runner.packets.lock().push((
                 std::time::SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_millis(),
-                ats_usb::packets::vm::PacketData::CombinedMarkersReport(report),
+                packet_data,
             ));
         }
     }

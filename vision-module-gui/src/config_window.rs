@@ -1,5 +1,5 @@
+mod pag_sensor_settings;
 mod paj_sensor_settings;
-mod poc_sensor_settings;
 
 use std::{sync::Arc, time::Duration};
 
@@ -70,12 +70,12 @@ pub fn config_window(
         paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Wf);
     let (nf_form, nf_settings) =
         paj_sensor_settings::PajSensorSettingsForm::new(&ui, device.read_only(), Port::Nf);
-    let (poc_form, poc_settings) =
-        poc_sensor_settings::PocSensorSettingsForm::new(&ui, device.read_only());
+    let (pag_form, pag_settings) =
+        pag_sensor_settings::PagSensorSettingsForm::new(&ui, device.read_only());
     tab_group.append(&ui, "General", general_form);
     tab_group.append(&ui, "Wide field", wf_form.c());
     tab_group.append(&ui, "Near field", nf_form.c());
-    tab_group.append(&ui, "POC", poc_form.c());
+    tab_group.append(&ui, "PAG", pag_form.c());
     tab_group.set_margined(&ui, 0, true);
     tab_group.set_margined(&ui, 1, true);
     tab_group.set_margined(&ui, 2, true);
@@ -85,28 +85,28 @@ pub fn config_window(
         let ui = ui.c();
         let nf_form = nf_form.c();
         let wf_form = wf_form.c();
-        let poc_form = poc_form.c();
+        let pag_form = pag_form.c();
         move |_| {
             let mut nf_form = nf_form.c();
             let mut wf_form = wf_form.c();
-            let mut poc_form = poc_form.c();
+            let mut pag_form = pag_form.c();
             general_settings.device_pid.with(|pid| {
-                match num_traits::FromPrimitive::from_u16(*pid) {
-                    Some(ats_usb::device::ProductId::PajUsb)
-                    | Some(ats_usb::device::ProductId::PajAts) => {
+                match ats_usb::device::ProductId::from_u16(*pid) {
+                    Some(ats_usb::device::ProductId::AtsVm)
+                    | Some(ats_usb::device::ProductId::AtsLite) => {
                         nf_form.show(&ui);
                         wf_form.show(&ui);
-                        poc_form.hide(&ui);
+                        pag_form.hide(&ui);
                     }
-                    Some(ats_usb::device::ProductId::PocAts) => {
+                    Some(ats_usb::device::ProductId::AtsPro) => {
                         nf_form.hide(&ui);
                         wf_form.hide(&ui);
-                        poc_form.show(&ui);
+                        pag_form.show(&ui);
                     }
                     _ => {
                         nf_form.hide(&ui);
                         wf_form.hide(&ui);
-                        poc_form.hide(&ui);
+                        pag_form.hide(&ui);
                     }
                 }
             });
@@ -128,7 +128,7 @@ pub fn config_window(
             general_settings.clear();
             wf_settings.clear();
             nf_settings.clear();
-            poc_settings.clear();
+            pag_settings.clear();
             let Ok(i) = usize::try_from(i) else { return };
             let _device = device_list.with_untracked(|d| d.get(i).cloned());
             let sim_addr = sim_addr.c();
@@ -172,9 +172,9 @@ pub fn config_window(
                             return Err(anyhow::anyhow!("{:?}", e));
                         }
                         eprintln!("General settings loaded successfully");
-                        match num_traits::FromPrimitive::from_u16(product_id_result.unwrap()) {
-                            Some(ats_usb::device::ProductId::PajAts)
-                            | Some(ats_usb::device::ProductId::PajUsb) => {
+                        match ats_usb::device::ProductId::from_u16(product_id_result.unwrap()) {
+                            Some(ats_usb::device::ProductId::AtsLite)
+                            | Some(ats_usb::device::ProductId::AtsVm) => {
                                 eprintln!("Loading WF settings...");
                                 if let Err(e) = wf_settings.load_from_device(&usb_device).await {
                                     eprintln!("ERROR: Failed to load WF settings: {:?}", e);
@@ -187,15 +187,15 @@ pub fn config_window(
                                 }
                                 eprintln!("NF settings loaded successfully");
                             }
-                            Some(ats_usb::device::ProductId::PocAts) => {
-                                eprintln!("Loading POC settings...");
-                                if let Err(e) = poc_settings.load_from_device(&usb_device).await {
-                                    eprintln!("ERROR: Failed to load POC settings: {:?}", e);
+                            Some(ats_usb::device::ProductId::AtsPro) => {
+                                eprintln!("Loading PAG settings...");
+                                if let Err(e) = pag_settings.load_from_device(&usb_device).await {
+                                    eprintln!("ERROR: Failed to load PAG settings: {:?}", e);
                                     return Err(e);
                                 }
-                                eprintln!("POC settings loaded successfully");
+                                eprintln!("PAG settings loaded successfully");
                             }
-                            None => {}
+                            Some(ats_usb::device::ProductId::Mux) | None => {}
                         }
                         eprintln!("All settings loaded, setting device...");
                         device.set(Some(usb_device));
@@ -463,8 +463,6 @@ pub fn config_window(
         let ui = ui.c();
         let general_settings = general_settings.c();
         move |device: VmDevice| async move {
-            // Pause streams during Apply to avoid contention
-            let _ = device.clear_all_streams().await;
             let mut errors = vec![];
             general_settings.validate(&mut errors);
             if !errors.is_empty() {
@@ -479,9 +477,10 @@ pub fn config_window(
                 return false;
             }
 
-            match num_traits::FromPrimitive::from_u16(general_settings.device_pid.get_untracked()) {
-                Some(ats_usb::device::ProductId::PajUsb)
-                | Some(ats_usb::device::ProductId::PajAts) => {
+            match ats_usb::device::ProductId::from_u16(general_settings.device_pid.get_untracked())
+            {
+                Some(ats_usb::device::ProductId::AtsVm)
+                | Some(ats_usb::device::ProductId::AtsLite) => {
                     wf_settings.validate(&mut errors);
                     if !errors.is_empty() {
                         let mut message = String::new();
@@ -529,8 +528,8 @@ pub fn config_window(
                         return false;
                     };
                 }
-                Some(ats_usb::device::ProductId::PocAts) => {
-                    poc_settings.validate(&mut errors);
+                Some(ats_usb::device::ProductId::AtsPro) => {
+                    pag_settings.validate(&mut errors);
                     if !errors.is_empty() {
                         let mut message = String::new();
                         for msg in &errors {
@@ -542,7 +541,7 @@ pub fn config_window(
                             .await;
                         return false;
                     }
-                    if let Err(e) = poc_settings.apply(&device).await {
+                    if let Err(e) = pag_settings.apply(&device).await {
                         config_win
                             .modal_err_async(
                                 &ui,
@@ -624,7 +623,7 @@ pub fn config_window(
                 general_settings.load_defaults();
                 nf_settings.load_defaults();
                 wf_settings.load_defaults();
-                poc_settings.load_defaults();
+                pag_settings.load_defaults();
             }
         }
     });
@@ -638,7 +637,7 @@ pub fn config_window(
                     _ = general_settings.load_from_device(&device, false).await;
                     _ = nf_settings.load_from_device(&device).await;
                     _ = wf_settings.load_from_device(&device).await;
-                    _ = poc_settings.load_from_device(&device).await;
+                    _ = pag_settings.load_from_device(&device).await;
                 });
             }
         }
@@ -932,10 +931,30 @@ impl GeneralSettingsForm {
         self.suppress_ms.set(100);
         self.accel_config.set(AccelConfig::default());
         self.gyro_config.set(GyroConfig::default());
-        self.nf_intrinsics
-            .set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
-        self.wf_intrinsics
-            .set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+
+        // Set intrinsics based on device type
+        match ats_usb::device::ProductId::from_u16(self.device_pid.get_untracked()) {
+            Some(ats_usb::device::ProductId::AtsPro) => {
+                // PAG7665QN sensor defaults:
+                // 78° horizontal FOV, 62.7° vertical FOV, 320x240 resolution
+                // With 6-bit fractional: 20480x15360 max coordinate range
+                // fx = (20480/2) / tan(78°/2) ≈ 12645
+                // fy = (15360/2) / tan(62.7°/2) ≈ 12601
+                // cx = 20480/2 = 10240, cy = 15360/2 = 7680
+                self.nf_intrinsics.set(RosOpenCvIntrinsics::from_params(
+                    12645., 0., 12601., 10240., 7680.,
+                ));
+                self.wf_intrinsics
+                    .set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+            }
+            _ => {
+                // Default NF/WF intrinsics for AtsVm, AtsLite, etc.
+                self.nf_intrinsics
+                    .set(RosOpenCvIntrinsics::from_params(145., 0., 145., 45., 45.));
+                self.wf_intrinsics
+                    .set(RosOpenCvIntrinsics::from_params(34., 0., 34., 45., 45.));
+            }
+        }
         self.stereo_iso.set(nalgebra::Isometry3::identity());
     }
 }

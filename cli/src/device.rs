@@ -1,9 +1,9 @@
 //! Direct device (lite/vm) management commands
 
 use ats_usb::device::VmDevice;
-use protodongers::control::device::TransportMode;
 use clap::Subcommand;
 use nusb::MaybeFuture as _;
+use protodongers::control::device::TransportMode;
 
 #[derive(Subcommand)]
 pub enum DeviceCommands {
@@ -131,13 +131,48 @@ async fn connect_to_device(
 }
 
 async fn cmd_list_devices() -> Result<(), String> {
-    let devices = list_devices(false).await?;
+    // First, list all matching USB devices without transport mode probing
+    let all_usb_devices: Vec<_> = nusb::list_devices()
+        .wait()
+        .map_err(|e| format!("Failed to list USB devices: {e}"))?
+        .into_iter()
+        .filter(|info| {
+            info.vendor_id() == 0x1915
+                && (info.product_id() == 0x520F
+                    || info.product_id() == 0x5210
+                    || info.product_id() == 0x5211)
+        })
+        .collect();
 
-    if devices.is_empty() {
-        println!("No devices found");
+    if all_usb_devices.is_empty() {
+        println!("No devices found (VID:0x1915, PID:0x520F/0x5210/0x5211)");
+
+        // Show all Nordic devices for debugging
+        let nordic_devices: Vec<_> = nusb::list_devices()
+            .wait()
+            .map_err(|e| format!("Failed to list USB devices: {e}"))?
+            .into_iter()
+            .filter(|info| info.vendor_id() == 0x1915)
+            .collect();
+
+        if !nordic_devices.is_empty() {
+            println!("\nOther Nordic (VID:0x1915) devices found:");
+            for info in nordic_devices {
+                let product = info
+                    .product_string()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "Unknown".to_string());
+                println!(
+                    "  VID:0x{:04X} PID:0x{:04X} - {}",
+                    info.vendor_id(),
+                    info.product_id(),
+                    product
+                );
+            }
+        }
     } else {
-        println!("Available devices:");
-        for (i, info) in devices.iter().enumerate() {
+        println!("Found {} USB device(s):", all_usb_devices.len());
+        for (i, info) in all_usb_devices.iter().enumerate() {
             let product = info
                 .product_string()
                 .map(|s| s.to_string())
@@ -149,7 +184,18 @@ async fn cmd_list_devices() -> Result<(), String> {
                 info.product_id(),
                 product
             );
-            println!("      Bus: {:?}, Address: {}", info.bus_id(), info.device_address());
+            println!(
+                "      Bus: {:?}, Address: {}",
+                info.bus_id(),
+                info.device_address()
+            );
+
+            // Try to probe transport mode
+            match VmDevice::probe_transport_mode(&info).await {
+                Ok(mode) => println!("      Transport mode: {:?}", mode),
+                Err(e) => println!("      Transport mode: probe failed ({e})"),
+            }
+
             println!("      Interfaces:");
             for iface in info.interfaces() {
                 println!(
@@ -185,11 +231,11 @@ async fn cmd_version(device: &VmDevice) -> Result<(), String> {
 
 async fn cmd_pair(device: &VmDevice, timeout: u32) -> Result<(), String> {
     println!("Starting pairing mode (timeout: {}ms)...", timeout);
-    
+
     match device.start_pairing(timeout).await {
         Ok(()) => {
             println!("Pairing mode started, waiting for device...");
-            
+
             match device.wait_pairing_event().await {
                 Ok(addr) => {
                     println!("Successfully paired with device: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
