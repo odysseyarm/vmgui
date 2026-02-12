@@ -67,6 +67,26 @@ pub fn draw_square(ctx: &draw::DrawContext, path: &Path, transform: Transform2<f
     path.close_figure(ctx);
 }
 
+/// Draw a rectangle with specified half-widths centered at origin, transformed by `transform`.
+/// For a 4:3 aspect ratio POC box: half_width=0.5, half_height=0.375 (0.5 * 3/4)
+pub fn draw_rect(
+    ctx: &draw::DrawContext,
+    path: &Path,
+    half_width: f64,
+    half_height: f64,
+    transform: Transform2<f64>,
+) {
+    let p1 = transform * Point2::new(-half_width, -half_height);
+    let p2 = transform * Point2::new(half_width, -half_height);
+    let p3 = transform * Point2::new(half_width, half_height);
+    let p4 = transform * Point2::new(-half_width, half_height);
+    path.new_figure(ctx, p1.x, p1.y);
+    path.line_to(ctx, p2.x, p2.y);
+    path.line_to(ctx, p3.x, p3.y);
+    path.line_to(ctx, p4.x, p4.y);
+    path.close_figure(ctx);
+}
+
 /// Draws a crosshair and associated text at a given position.
 pub fn draw_marker(ctx: &draw::DrawContext, path: &Path, position: Point2<f64>, label: &str) {
     draw_crosshair(&ctx, path, position.x, position.y, 50.0);

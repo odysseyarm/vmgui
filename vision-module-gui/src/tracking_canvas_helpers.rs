@@ -1,5 +1,5 @@
 use crate::custom_shapes::{
-    self, draw_crosshair_rotated, draw_diamond, draw_square, draw_text, solid_brush,
+    self, draw_crosshair_rotated, draw_diamond, draw_rect, draw_square, draw_text, solid_brush,
 };
 use crate::mot_runner::MotRunner;
 use crate::MotState;
@@ -53,17 +53,20 @@ pub fn draw(
     let gravity_vec = state.orientation.inverse_transform_vector(&Vector3::z());
     let gravity_angle = f64::atan2(-gravity_vec.z as f64, -gravity_vec.x as f64) + PI / 2.;
 
-    // Border around the square drawing area
+    // Border around the drawing area
+    // For POC markers, use 4:3 aspect ratio (matching PAG7665QN 320x240 sensor)
     {
-        draw_square(
-            ctx,
-            &border_path,
-            Transform2::from_matrix_unchecked(
-                Translation2::new(awidth / 2., aheight / 2.).to_homogeneous()
-                    * Rotation2::new(-gravity_angle).to_homogeneous()
-                    * Scale2::new(draw_size, draw_size).to_homogeneous(),
-            ),
+        let border_transform = Transform2::from_matrix_unchecked(
+            Translation2::new(awidth / 2., aheight / 2.).to_homogeneous()
+                * Rotation2::new(-gravity_angle).to_homogeneous()
+                * Scale2::new(draw_size, draw_size).to_homogeneous(),
         );
+        if state.is_poc_markers {
+            // Draw 4:3 aspect ratio box for POC markers (matching 320x240 sensor)
+            draw_rect(ctx, &border_path, 0.5, 0.375, border_transform);
+        } else {
+            draw_square(ctx, &border_path, border_transform);
+        }
         border_path.end(ctx);
         ctx.stroke(
             &border_path,
@@ -334,7 +337,28 @@ fn draw_not_raw(
     wf_path.end(ctx);
     let fx = config.camera_model_nf.p.m11;
     let fy = config.camera_model_nf.p.m22;
-    let normalized_scale = Scale2::new(fx / 4095.0, fy / 4095.0);
+
+    // After to_normalized_image_coordinates, coords are in normalized image space.
+    // Scale to fit display box. The divisor matches the sensor's max coordinate range.
+    // For POC: box is 0.5 x 0.375 (4:3 aspect), sensor is 20479 x 15359
+    // For regular: box is 0.5 x 0.5 (square), sensor is 4095 x 4095
+    let normalized_scale = if state.is_poc_markers {
+        // POC: scale so edge of sensor maps to edge of box
+        Scale2::new(fx / 20479.0, fy / 15359.0)
+    } else {
+        // Regular: 4095x4095 max coordinate range, square box
+        Scale2::new(fx / 4095.0, fy / 4095.0)
+    };
+
+    if state.is_poc_markers {
+        tracing::debug!(
+            "POC scale: fx={}, fy={}, scale_x={}, scale_y={}",
+            fx,
+            fy,
+            fx / 20479.0,
+            fy / 15359.0
+        );
+    }
 
     // let nf_points = state.nf_points.clone().iter().map(|x| x.2).collect::<Vec<_>>();
     let thin = StrokeParams {
@@ -360,6 +384,18 @@ fn draw_not_raw(
 
     for marker in state.nf_markers2.iter() {
         let p = normalized_scale * marker.normalized;
+        // Debug: print raw and scaled values
+        if state.is_poc_markers {
+            tracing::debug!(
+                "POC marker: raw=({}, {}), scaled=({}, {}), fx={}, fy={}",
+                marker.normalized.x,
+                marker.normalized.y,
+                p.x,
+                p.y,
+                fx,
+                fy
+            );
+        }
         let p = gravity_rot * p.cast();
         let p = draw_tf * p;
 
@@ -368,7 +404,10 @@ fn draw_not_raw(
             ctx,
             &marker_path,
             p,
-            &format!("nf: x={} y={}", marker.normalized.x, marker.normalized.y),
+            &format!(
+                "nf: x={:.2} y={:.2}",
+                marker.normalized.x, marker.normalized.y
+            ),
         );
         marker_path.end(ctx);
         match marker.pattern_id {

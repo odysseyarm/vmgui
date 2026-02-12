@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use num_derive::{FromPrimitive, ToPrimitive};
+
 use nusb::{
     io::{EndpointRead, EndpointWrite},
     transfer::{Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient},
@@ -10,6 +10,8 @@ use protodongers::{
     control::usb_mux::{ClearBondsError, PairingError, UsbMuxCtrlMsg},
     PocMarkersReport, VendorData,
 };
+
+pub use protodongers::ProductId;
 
 use std::{
     pin::Pin,
@@ -89,13 +91,6 @@ enum ResponseChannel {
     None,
     Oneshot(oneshot::Sender<PacketData>),
     Stream(mpsc::Sender<PacketData>),
-}
-
-#[derive(PartialEq, Eq, FromPrimitive, ToPrimitive)]
-pub enum ProductId {
-    PajUsb = 0x520F,
-    PajAts = 0x5210,
-    PocAts = 0x5211,
 }
 
 struct State {
@@ -631,6 +626,7 @@ impl VmDevice {
     }
 
     pub async fn write_register(&self, port: Port, bank: u8, address: u8, data: u8) -> Result<()> {
+        info!("write_register: port={port:?} bank={bank} addr={address} data={data}");
         let data = PacketData::WriteRegister(WriteRegister {
             port,
             bank,
@@ -673,6 +669,7 @@ impl VmDevice {
     }
 
     pub async fn write_config(&self, config: GeneralConfig) -> Result<()> {
+        info!("write_config: {config:?}");
         let data = PacketData::WriteConfig(config);
         let pkt = Packet { id: 255, data };
         self.transport.writer.send(pkt).await?;
@@ -986,7 +983,7 @@ impl VmDevice {
     write_register_spec!(set_bank1_sync_updated: u8 = 0x01; [0x01]);
     write_register_spec!(set_bank0_sync_updated: u8 = 0x00; [0x01]);
 
-    // pag
+    // PAG7661QN registers
     read_register_spec!(pag_chip_id: u16 = 0x00; [0x00, 0x01]);
     read_register_spec!(pag_fps: u16 = 0x00; [0x13]);
     write_register_spec!(set_pag_fps: u8 = 0x00; [0x13]);
@@ -1000,6 +997,30 @@ impl VmDevice {
     write_register_spec!(set_pag_area_upper: u16 = 0x00; [0x6A, 0x6B]);
     read_register_spec!(pag_light_threshold: u8 = 0x00; [0x6C]);
     write_register_spec!(set_pag_light_threshold: u8 = 0x00; [0x6C]);
+
+    // PAG7665QN registers (different addresses from PAG7661QN)
+    read_register_spec!(pag7665_exposure: u8 = 0x00; [0x67]);
+    write_register_spec!(set_pag7665_exposure: u8 = 0x00; [0x67]);
+    read_register_spec!(pag7665_gain: u8 = 0x00; [0x68]);
+    write_register_spec!(set_pag7665_gain: u8 = 0x00; [0x68]);
+    read_register_spec!(pag7665_area_lower: u16 = 0x00; [0x6E, 0x6F]);
+    write_register_spec!(set_pag7665_area_lower: u16 = 0x00; [0x6E, 0x6F]);
+    read_register_spec!(pag7665_area_upper: u16 = 0x00; [0x70, 0x71]);
+    write_register_spec!(set_pag7665_area_upper: u16 = 0x00; [0x70, 0x71]);
+    read_register_spec!(pag7665_light_threshold: u8 = 0x00; [0x6D]);
+    write_register_spec!(set_pag7665_light_threshold: u8 = 0x00; [0x6D]);
+
+    // PAG7665QN circle detection parameters
+    // R ratio bounds (Bank 0x00, regs 0x23-0x24)
+    read_register_spec!(pag_circle_r_min: u8 = 0x00; [0x23]);
+    write_register_spec!(set_pag_circle_r_min: u8 = 0x00; [0x23]);
+    read_register_spec!(pag_circle_r_max: u8 = 0x00; [0x24]);
+    write_register_spec!(set_pag_circle_r_max: u8 = 0x00; [0x24]);
+    // K ratio bounds (Bank 0x00, regs 0x77-0x78)
+    read_register_spec!(pag_circle_k_min: u8 = 0x00; [0x77]);
+    write_register_spec!(set_pag_circle_k_min: u8 = 0x00; [0x77]);
+    read_register_spec!(pag_circle_k_max: u8 = 0x00; [0x78]);
+    write_register_spec!(set_pag_circle_k_max: u8 = 0x00; [0x78]);
 }
 
 // mux Device for dongle-fw

@@ -1,6 +1,6 @@
 use arrayvec::ArrayVec;
-use ats_cv::foveated::FoveatedAimpointState;
 use ats_common::MARKER_PATTERN_LEN;
+use ats_cv::foveated::FoveatedAimpointState;
 use ats_usb::packets::vm::MotData;
 use nalgebra::Isometry3;
 use nalgebra::{Matrix3, Matrix3x1, Point2, Rotation3};
@@ -81,6 +81,11 @@ pub struct MotState {
     pub nf_markers2: ArrayVec<Marker, 16>,
     pub wf_markers2: ArrayVec<Marker, 16>,
 
+    /// True if markers came from PocMarkersReport (PAG7665QN sensor)
+    /// POC markers have different coordinate range (320x240 with 6-bit fractional = max 20416x15296)
+    /// vs regular CombinedMarkersReport (4095x4095)
+    pub is_poc_markers: bool,
+
     pub screen_id: u8,
     pub orientation: Rotation3<f32>,
     pub madgwick: ahrs::Madgwick<f32>,
@@ -102,6 +107,7 @@ impl Default for MotState {
             distance: 0.0,
             nf_data: None,
             wf_data: None,
+            is_poc_markers: false,
             screen_id: 0,
             orientation: Rotation3::identity(),
             madgwick: ahrs::Madgwick::new(1. / 100., 0.04),
