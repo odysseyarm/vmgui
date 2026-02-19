@@ -1428,6 +1428,18 @@ impl MuxDevice {
         }
     }
 
+    pub async fn read_ctrl_version(&self) -> Result<protodongers::control::usb_mux::UsbMuxVersion> {
+        self.ctrl_send(UsbMuxCtrlMsg::ReadVersion()).await?;
+        match self
+            .ctrl_recv_filtered(std::time::Duration::from_secs(2), |msg| {
+                matches!(msg, UsbMuxCtrlMsg::ReadVersionResponse(_))
+            })
+            .await?
+        {
+            UsbMuxCtrlMsg::ReadVersionResponse(version) => Ok(version),
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
+        }
+    }
     /// Start pairing mode on the dongle with a timeout (ms).
     /// Start pairing mode on the dongle with a timeout (ms).
     pub async fn start_pairing(&self, timeout_ms: u32) -> Result<()> {
@@ -1514,6 +1526,19 @@ impl MuxDevice {
                     return Ok(());
                 }
             }
+        }
+    }
+
+    pub async fn list_bonds(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
+        self.ctrl_send(UsbMuxCtrlMsg::ListBonds).await?;
+        match self
+            .ctrl_recv_filtered(std::time::Duration::from_secs(2), |msg| {
+                matches!(msg, UsbMuxCtrlMsg::ListBondsResponse(_))
+            })
+            .await?
+        {
+            UsbMuxCtrlMsg::ListBondsResponse(bonds) => Ok(bonds),
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
 }
