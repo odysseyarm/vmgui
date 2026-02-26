@@ -1608,7 +1608,8 @@ impl VmDevice {
             .as_ref()
             .ok_or_else(|| anyhow!("No control interface available"))?;
         let data = postcard::to_allocvec(&msg).map_err(|e| anyhow!("ctrl encode failed: {e}"))?;
-        ctrl_if
+        tracing::info!("send_ctrl_msg: control_out iface={} len={}", ctrl_if.interface_number(), data.len());
+        let result = ctrl_if
             .control_out(
                 ControlOut {
                     control_type: ControlType::Vendor,
@@ -1621,8 +1622,9 @@ impl VmDevice {
                 Duration::from_millis(1000),
             )
             .await
-            .map_err(|e| anyhow!("ctrl send failed: {e}"))?;
-        Ok(())
+            .map_err(|e| anyhow!("ctrl send failed: {e}"));
+        tracing::info!("send_ctrl_msg: control_out returned {:?}", result.as_ref().map(|_| "ok").map_err(|e| e.to_string()));
+        result
     }
 
     async fn recv_ctrl_msg(
@@ -1893,6 +1895,133 @@ impl VmDevice {
         {
             DeviceMsg::ClearBondResponse(Ok(())) => Ok(()),
             DeviceMsg::ClearBondResponse(Err(_)) => Err(anyhow!("Failed to clear bond")),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Read a single config value from the device via control endpoint.
+    pub async fn read_config_ctrl(&self, kind: ConfigKind) -> Result<GeneralConfig> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::ReadConfig(kind)).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::ReadConfigResponse(_))
+            })
+            .await?
+        {
+            DeviceMsg::ReadConfigResponse(config) => Ok(config),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Write a single config value to the device via control endpoint.
+    pub async fn write_config_ctrl(&self, config: GeneralConfig) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::WriteConfig(config)).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::WriteConfigAck)
+            })
+            .await?
+        {
+            DeviceMsg::WriteConfigAck => Ok(()),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Flush settings to flash on the device via control endpoint.
+    pub async fn flash_settings_ctrl(&self) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::FlashSettings).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(5), |msg| {
+                matches!(msg, DeviceMsg::FlashSettingsAck)
+            })
+            .await?
+        {
+            DeviceMsg::FlashSettingsAck => Ok(()),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Request the device to reboot via control endpoint.
+    /// Sends Reboot, waits for RebootAck, then the device resets itself.
+    pub async fn reboot(&self) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::Reboot).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::RebootAck)
+            })
+            .await?
+        {
+            DeviceMsg::RebootAck => Ok(()),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    /// Read all config values via control endpoint (for devices that don't support bulk config).
+    pub async fn read_all_config_ctrl(&self) -> Result<GeneralSettings> {
+        let impact_threshold = self.read_config_ctrl(ConfigKind::ImpactThreshold).await?;
+        let suppress_ms = self.read_config_ctrl(ConfigKind::SuppressMs).await?;
+        let accel_config = self.read_config_ctrl(ConfigKind::AccelConfig).await?;
+        let gyro_config = self.read_config_ctrl(ConfigKind::GyroConfig).await?;
+        let camera_model_nf = self.read_config_ctrl(ConfigKind::CameraModelNf).await?;
+        let camera_model_wf = self.read_config_ctrl(ConfigKind::CameraModelWf).await?;
+        let stereo_iso = self.read_config_ctrl(ConfigKind::StereoIso).await?;
+
+        Ok(GeneralSettings {
+            impact_threshold: match impact_threshold {
+                GeneralConfig::ImpactThreshold(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for ImpactThreshold"),
+            },
+            suppress_ms: match suppress_ms {
+                GeneralConfig::SuppressMs(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for SuppressMs"),
+            },
+            accel_config: match accel_config {
+                GeneralConfig::AccelConfig(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for AccelConfig"),
+            },
+            gyro_config: match gyro_config {
+                GeneralConfig::GyroConfig(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for GyroConfig"),
+            },
+            camera_model_nf: match camera_model_nf {
+                GeneralConfig::CameraModelNf(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for CameraModelNf"),
+            },
+            camera_model_wf: match camera_model_wf {
+                GeneralConfig::CameraModelWf(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for CameraModelWf"),
+            },
+            stereo_iso: match stereo_iso {
+                GeneralConfig::StereoIso(val) => val,
+                _ => anyhow::bail!("Unexpected config variant for StereoIso"),
+            },
+        })
+    }
+
+    pub async fn set_transport_mode(&self, usb_mode: bool) -> Result<TransportMode> {
+        use protodongers::control::device::{DeviceMsg, TransportMode};
+        let mode = if usb_mode {
+            TransportMode::Usb
+        } else {
+            TransportMode::Ble
+        };
+        tracing::info!("set_transport_mode: ctrl_if present={}, sending {:?}", self.ctrl_if.is_some(), mode);
+        self.send_ctrl_msg(DeviceMsg::SetTransportMode(mode)).await?;
+        tracing::info!("set_transport_mode: send_ctrl_msg done, waiting for TransportModeStatus response");
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(2), |msg| {
+                matches!(msg, DeviceMsg::TransportModeStatus(_))
+            })
+            .await?
+        {
+            DeviceMsg::TransportModeStatus(confirmed) => {
+                tracing::info!("set_transport_mode: got TransportModeStatus({:?})", confirmed);
+                Ok(confirmed)
+            }
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
