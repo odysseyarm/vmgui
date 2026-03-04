@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 
 use nusb::{
     io::{EndpointRead, EndpointWrite},
-    transfer::{Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient},
+    transfer::{Bulk, ControlIn, ControlOut, ControlType, In, Out, Recipient, TransferError},
     DeviceInfo, Interface,
 };
 use protodongers::{
@@ -30,9 +30,9 @@ use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::packets::vm::{
-    AccelConfig, AccelReport, CombinedMarkersReport, ConfigKind, GeneralConfig, GyroConfig,
-    ImpactReport, MotData, ObjectReport, Packet, PacketData, PacketType, Port, Props, Register,
-    StreamUpdate, WriteRegister,
+    AccelConfig, AccelReport, BatteryReport, CombinedMarkersReport, ConfigKind, GeneralConfig,
+    GyroConfig, ImpactReport, MotData, ObjectReport, Packet, PacketData, PacketType, Port, Props,
+    Register, StreamUpdate, WriteRegister,
 };
 use nalgebra::Isometry3;
 use opencv_ros_camera::RosOpenCvIntrinsics;
@@ -810,6 +810,13 @@ impl VmDevice {
             .filter_map(|x| x.impact_report()))
     }
 
+    pub async fn stream_battery(&self) -> Result<impl Stream<Item = BatteryReport> + Send + Sync> {
+        Ok(self
+            .stream(PacketType::BatteryReport())
+            .await?
+            .filter_map(|x| x.battery_report()))
+    }
+
     pub async fn flash_settings(&self) -> Result<()> {
         self.transport
             .writer
@@ -1251,7 +1258,8 @@ impl MuxDevice {
                 .await
             {
                 Ok(data) => data,
-                Err(_) => continue,
+                Err(TransferError::Cancelled) => continue, // poll-slice timeout, retry
+                Err(e) => return Err(anyhow!("ctrl_recv control_in failed: {e:?}")),
             };
 
             if reply.is_empty() {
@@ -1664,9 +1672,8 @@ impl VmDevice {
                     break postcard::from_bytes::<protodongers::control::device::DeviceMsg>(&data)
                         .map_err(|e| anyhow!("ctrl decode failed: {e}"));
                 }
-                Err(_) => {
-                    continue;
-                }
+                Err(TransferError::Cancelled) => continue, // poll-slice timeout, retry
+                Err(e) => return Err(anyhow!("recv_ctrl_msg control_in failed: {e:?}")),
             }
         }
     }
@@ -1706,7 +1713,8 @@ impl VmDevice {
                 .await
             {
                 Ok(data) => data,
-                Err(_) => continue,
+                Err(TransferError::Cancelled) => continue, // poll-slice timeout, retry
+                Err(e) => return Err(anyhow!("recv_ctrl_msg_filtered control_in failed: {e:?}")),
             };
 
             if reply.is_empty() {
@@ -1837,8 +1845,9 @@ impl VmDevice {
                         Err(e) => return Err(anyhow!("ctrl decode failed: {e}")),
                     }
                 }
-                Ok(_) => continue,  // Empty response, retry
-                Err(_) => continue, // Timeout on this poll, retry
+                Ok(_) => continue,                          // Empty response, retry
+                Err(TransferError::Cancelled) => continue, // poll-slice timeout, retry
+                Err(e) => return Err(anyhow!("get_transport_mode control_in failed: {e:?}")),
             }
         }
     }
