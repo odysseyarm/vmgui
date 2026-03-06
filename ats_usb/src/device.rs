@@ -148,7 +148,7 @@ pub struct PacketTransport {
     cancel: Arc<tokio_util::sync::CancellationToken>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PacketTransportTx {
     writer: mpsc::Sender<Packet>,
 }
@@ -327,7 +327,7 @@ impl PacketTransport {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct VmDevice {
     transport: PacketTransportTx,
     thread_state: Weak<State>,
