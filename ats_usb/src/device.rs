@@ -1549,6 +1549,20 @@ impl MuxDevice {
             other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
     }
+
+    pub async fn add_bond(&self, entry: protodongers::control::BondEntry) -> Result<()> {
+        self.ctrl_send(UsbMuxCtrlMsg::AddBond(entry)).await?;
+        match self
+            .ctrl_recv_filtered(std::time::Duration::from_secs(5), |msg| {
+                matches!(msg, UsbMuxCtrlMsg::AddBondResponse(_))
+            })
+            .await?
+        {
+            UsbMuxCtrlMsg::AddBondResponse(Ok(())) => Ok(()),
+            UsbMuxCtrlMsg::AddBondResponse(Err(e)) => Err(anyhow!("AddBond failed: {e:?}")),
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1904,6 +1918,21 @@ impl VmDevice {
         {
             DeviceMsg::ClearBondResponse(Ok(())) => Ok(()),
             DeviceMsg::ClearBondResponse(Err(_)) => Err(anyhow!("Failed to clear bond")),
+            other => Err(anyhow!("unexpected response: {other:?}")),
+        }
+    }
+
+    pub async fn add_bond(&self, entry: protodongers::control::BondEntry) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        self.send_ctrl_msg(DeviceMsg::AddBond(entry)).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(5), |msg| {
+                matches!(msg, DeviceMsg::AddBondResponse(_))
+            })
+            .await?
+        {
+            DeviceMsg::AddBondResponse(Ok(())) => Ok(()),
+            DeviceMsg::AddBondResponse(Err(e)) => Err(anyhow!("AddBond failed: {e:?}")),
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }

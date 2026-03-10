@@ -7,6 +7,7 @@ use clap::{Parser, Subcommand};
 mod mux;
 mod device;
 mod calibration;
+mod bond;
 
 #[derive(Parser)]
 #[command(name = "ats-cli")]
@@ -36,6 +37,8 @@ enum Commands {
         #[command(subcommand)]
         command: device::DeviceCommands,
     },
+    /// Create a manual bond between a dongle and a device
+    Bond(bond::BondArgs),
 }
 
 #[tokio::main]
@@ -45,6 +48,7 @@ async fn main() -> ExitCode {
     let result = match cli.command {
         Commands::Mux { device, command } => mux::handle_command(device, command).await,
         Commands::Device { device, command } => device::handle_command(device, command).await,
+        Commands::Bond(args) => bond::handle_bond(args).await,
     };
 
     match result {
