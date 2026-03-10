@@ -572,7 +572,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ats_cli"
+name = "ats-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
