@@ -584,6 +584,7 @@ dependencies = [
  "nalgebra 0.34.1",
  "nusb",
  "protodongers",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "serialport",
@@ -6984,7 +6985,7 @@ checksum = "3eb8486b569e12e2c32ad3e204dbaba5e4b5b216e9367044f25f1dba42341773"
 [[package]]
 name = "protodongers"
 version = "0.1.1"
-source = "git+https://github.com/odysseyarm/protodonge-rs.git#af3317e04bf463ce7c8377504d01d7e24070d4f6"
+source = "git+https://github.com/odysseyarm/protodonge-rs.git#45d1adc20a3442fab9d5275fa5bc16d78df75840"
 dependencies = [
  "ats_common",
  "enumn",

@@ -21,3 +21,4 @@ serde_json = "1.0.121"
 serialport = { version = "4.3.0", features = ["usbportinfo-interface"] }
 tokio = { version = "1.38.0", features = ["signal", "io-std", "io-util", "macros", "rt-multi-thread"] }
 anyhow = "1.0.75"
+rand = "0.8"
