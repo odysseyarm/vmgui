@@ -1484,7 +1484,7 @@ impl MuxDevice {
                 })
                 .await?
             {
-                UsbMuxCtrlMsg::PairingResult(Ok(addr)) => return Ok(PairingEvent::Result(addr)),
+                UsbMuxCtrlMsg::PairingResult(Ok(device)) => return Ok(PairingEvent::Result(device)),
                 UsbMuxCtrlMsg::PairingResult(Err(PairingError::Timeout)) => {
                     return Ok(PairingEvent::Timeout)
                 }
@@ -1537,7 +1537,9 @@ impl MuxDevice {
         }
     }
 
-    pub async fn list_bonds(&self) -> Result<HVec<[u8; 6], MAX_DEVICES>> {
+    pub async fn list_bonds(
+        &self,
+    ) -> Result<HVec<protodongers::control::BondedDevice, MAX_DEVICES>> {
         self.ctrl_send(UsbMuxCtrlMsg::ListBonds).await?;
         match self
             .ctrl_recv_filtered(std::time::Duration::from_secs(2), |msg| {
@@ -1565,9 +1567,9 @@ impl MuxDevice {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum PairingEvent {
-    Result([u8; 6]),
+    Result(protodongers::control::BondedDevice),
     Timeout,
     Cancelled,
 }
@@ -1885,11 +1887,11 @@ impl VmDevice {
         }
     }
 
-    pub async fn wait_pairing_event(&self) -> Result<[u8; 6]> {
+    pub async fn wait_pairing_event(&self) -> Result<protodongers::control::BondedDevice> {
         use protodongers::control::device::{DeviceMsg, PairingError};
         loop {
             match self.recv_ctrl_msg(Duration::from_secs(120)).await? {
-                DeviceMsg::PairingResult(Ok(addr)) => return Ok(addr),
+                DeviceMsg::PairingResult(Ok(device)) => return Ok(device),
                 DeviceMsg::PairingResult(Err(PairingError::Timeout)) => {
                     return Err(anyhow!("Pairing timeout"))
                 }
