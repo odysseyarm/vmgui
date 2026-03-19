@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+﻿use anyhow::{anyhow, Context, Result};
 
 use nusb::{
     io::{EndpointRead, EndpointWrite},
@@ -1436,7 +1436,7 @@ impl MuxDevice {
         }
     }
 
-    pub async fn read_ctrl_version(&self) -> Result<protodongers::control::usb_mux::UsbMuxVersion> {
+    pub async fn read_ctrl_version(&self) -> Result<protodongers::Version> {
         self.ctrl_send(UsbMuxCtrlMsg::ReadVersion()).await?;
         match self
             .ctrl_recv_filtered(std::time::Duration::from_secs(2), |msg| {
@@ -1550,6 +1550,11 @@ impl MuxDevice {
             UsbMuxCtrlMsg::ListBondsResponse(bonds) => Ok(bonds),
             other => Err(anyhow!("unexpected ctrl response: {other:?}")),
         }
+    }
+
+    pub async fn update_bond_name(&self, uuid: [u8; 6], name: heapless::String<32>) -> Result<()> {
+        self.ctrl_send(UsbMuxCtrlMsg::UpdateBondName { uuid, name })
+            .await
     }
 
     pub async fn add_bond(&self, entry: protodongers::control::BondEntry) -> Result<()> {
@@ -1754,11 +1759,12 @@ impl VmDevice {
         }
     }
 
-    pub async fn read_version(&self) -> Result<protodongers::control::device::Version> {
+    pub async fn read_version(&self) -> Result<protodongers::Version> {
         use protodongers::control::device::DeviceMsg;
-        self.send_ctrl_msg(DeviceMsg::ReadVersion()).await?;
+        use protodongers::{PropKind, Props};
+        self.send_ctrl_msg(DeviceMsg::ReadProp(PropKind::Version)).await?;
         match self.recv_ctrl_msg(Duration::from_secs(2)).await? {
-            DeviceMsg::ReadVersionResponse(version) => Ok(version),
+            DeviceMsg::ReadPropResponse(Props::Version(version)) => Ok(version),
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
@@ -1766,9 +1772,10 @@ impl VmDevice {
     /// Read the UUID from the device via control endpoint.
     pub async fn read_uuid(&self) -> Result<[u8; 6]> {
         use protodongers::control::device::DeviceMsg;
-        self.send_ctrl_msg(DeviceMsg::ReadUuid()).await?;
+        use protodongers::{PropKind, Props};
+        self.send_ctrl_msg(DeviceMsg::ReadProp(PropKind::Uuid)).await?;
         match self.recv_ctrl_msg(Duration::from_secs(2)).await? {
-            DeviceMsg::ReadUuidResponse(uuid) => Ok(uuid),
+            DeviceMsg::ReadPropResponse(Props::Uuid(uuid)) => Ok(uuid),
             other => Err(anyhow!("unexpected response: {other:?}")),
         }
     }
@@ -2040,6 +2047,27 @@ impl VmDevice {
                 _ => anyhow::bail!("Unexpected config variant for StereoIso"),
             },
         })
+    }
+
+    pub async fn set_name(&self, name: &str) -> Result<()> {
+        use protodongers::control::device::DeviceMsg;
+        let mut hname: heapless::String<32> = heapless::String::new();
+        for c in name.chars().take(32) {
+            let _ = hname.push(c);
+        }
+        self.send_ctrl_msg(DeviceMsg::SetDeviceName(hname)).await?;
+        match self
+            .recv_ctrl_msg_filtered(Duration::from_secs(3), |msg| {
+                matches!(msg, DeviceMsg::SetDeviceNameResponse(_))
+            })
+            .await?
+        {
+            DeviceMsg::SetDeviceNameResponse(Ok(())) => Ok(()),
+            DeviceMsg::SetDeviceNameResponse(Err(())) => {
+                Err(anyhow!("set_device_name failed on device"))
+            }
+            other => Err(anyhow!("unexpected ctrl response: {other:?}")),
+        }
     }
 
     pub async fn set_transport_mode(&self, usb_mode: bool) -> Result<TransportMode> {
